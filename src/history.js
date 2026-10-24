@@ -11,7 +11,7 @@ export class EditHistory {
   entry(value) {
     const data = JSON.stringify(value);
     const settings = value?.settings;
-    const source = JSON.stringify(value, function (key, item) { return key === 'editScope' || key === 'active' && this === settings ? undefined : item; });
+    const source = JSON.stringify(value, function (key, item) { return key === 'editScope' || ['active', 'view', 'colorPanelVisible'].includes(key) && this === settings ? undefined : item; });
     let a = 2166136261, b = 5381;
     for (let i = 0; i < source.length; i++) { const code = source.charCodeAt(i); a = Math.imul(a ^ code, 16777619); b = Math.imul(b, 33) ^ code; }
     return { data, signature: `${source.length}:${a >>> 0}:${b >>> 0}` };

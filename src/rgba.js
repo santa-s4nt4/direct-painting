@@ -23,7 +23,7 @@ export class RGBAScene {
       if (!clip.enabled || !clip.targets.includes(side) || !gestureVisible(clip, phase, this.duration)) { gesture.releaseRaster(); continue; }
       if (effects) gesture.clip = { ...clip, samples: gesture.clip.samples };
       const time = gestureTime(clip, phase, this.duration), visual = gesture.render(time);
-      const opacity = (placementPreview && clip.mode === 'place' && time < 1 ? 1 : gestureOpacity(clip, time)) * (visual.opacity ?? 1);
+      const opacity = (placementPreview && clip.mode === 'place' && time < 1 ? 1 : gestureOpacity(clip, time)) * (visual.opacity ?? 1) * (clip.opacity ?? 1);
       if (visual.active === false) continue;
       let layer = null;
       if (effects) { this.layer ??= new Uint8ClampedArray(pixels.length); this.layer.fill(0); layer = this.layer; }
@@ -42,7 +42,7 @@ export class RGBAScene {
     }
     return pixels;
   }
-  compositeLayer(source, clip, time, opacity = 1) {
+  compositeLayer(source, clip, time, opacity = clip.opacity ?? 1) {
     this.effects ??= new CPULayerEffects();
     const image = this.effects.apply(source, CANVAS_WIDTH, CANVAS_HEIGHT, clip, time);
     const style = { ...clip, blendMode: 'analog' };

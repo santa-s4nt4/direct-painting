@@ -1,6 +1,7 @@
 import { createPaintingRenderer } from '../src/render/index.js';
 import { WebGLPaintingRenderer } from '../src/render/webgl.js';
 import { LoopScene } from '../src/scene.js';
+import { DEFAULT_VIEW } from '../src/view.js';
 import { DEFAULT_EFFECTS } from '../src/effects.js';
 import { RGBAScene } from '../src/rgba.js';
 const result = document.querySelector('#result'), button = document.querySelector('#run');
@@ -24,6 +25,7 @@ button.onclick = async () => {
       ['gradient', [clip('gradient', 'return', { colorEditMode: 'gradient', colorGradient: { to: '#ff8800', startMs: 0, endMs: 900 } })]],
       ['ring move', [clip('ring-move', 'move', { shape: 'ring', ringWidth: 7 })]],
       ['ring trail', [clip('ring-trail', 'trail', { shape: 'ring', ringWidth: 7 })]],
+      ['opacity', [clip('opacity', 'return', { opacity: .35 })]],
       ['black', [clip('black', 'return', { color: '#000000' })]],
       ['analog over black', [clip('black-base', 'return', { color: '#000000' }), clip('yellow-over-black', 'return', { color: '#fcd200', blendMode: 'analog' })]],
       ['analog', [clip('below', 'return', { color: '#002185' }), clip('above', 'return', { color: '#fcd200', blendMode: 'analog' })]],
@@ -50,16 +52,28 @@ button.onclick = async () => {
     if (gpuPixel(sharp, 590, 500)[3] !== 0 || gpuPixel(soft, 590, 500)[3] < 3) throw new Error('Default blur did not spread this layer');
     const restored = drawFX(off);
     if (restored.some((v, i) => v !== sharp[i]) || gpu.stats.masksCreated !== masks) throw new Error('Toggling effects changed or rebuilt the source geometry');
-    report.checks.push({ name: 'Blur defaults to 64px, toggles reversibly and reuses masks', passed: true });
-    const rgb = drawFX({ ...off, chromatic: true, chromaticAmount: 16 });
-    if (gpuPixel(rgb, 415, 500)[2] < 200 || gpuPixel(rgb, 415, 500)[0] > 5) throw new Error('Chromatic aberration did not separate RGB');
-    const glitched = drawFX({ ...off, glitch: true }, 0), later = drawFX({ ...off, glitch: true }, 270), rewound = drawFX({ ...off, glitch: true }, 0);
-    if (!glitched.some((v, i) => v !== sharp[i]) || !later.some((v, i) => v !== glitched[i]) || rewound.some((v, i) => v !== glitched[i])) throw new Error('Glitch is not deterministic');
-    report.checks.push({ name: 'Chromatic aberration separates channels; Glitch pauses and rewinds deterministically', passed: true });
+    report.checks.push({ name: 'Blur defaults to 16px, toggles reversibly and reuses masks', passed: true });
+    const retired = drawFX({ ...off, glitch: true, chromatic: true });
+    if (retired.some((v, i) => v !== sharp[i])) throw new Error('Retired effects still affect the painting');
+    const beforeViewMasks = gpu.stats.masksCreated;
+    gpu.setView({ scale: 2, x: -500, y: -500 }); gpu.draw(0, 50);
+    const zoomed = gpu.readPixels({ presented: true });
+    if (gpuPixel(zoomed, 610, 500)[2] < 200 || gpuPixel(sharp, 610, 500)[3] !== 0) throw new Error('Zoom did not transform the final painting');
+    gpu.setView({ scale: .5, x: 480, y: 270 }); gpu.draw(0, 50);
+    if (gpuPixel(gpu.readPixels({ presented: true }), 730, 520)[2] < 200) throw new Error('Zoom out has the wrong anchor');
+    gpu.setView(DEFAULT_VIEW); gpu.draw(0, 50);
+    if (gpu.readPixels().some((v, i) => v !== sharp[i]) || beforeViewMasks !== gpu.stats.masksCreated) throw new Error('View changes rebuilt or mutated the painting');
+    report.checks.push({ name: 'Zoom in/out and reset transform presentation without rebuilding source geometry', passed: true });
     const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
-    gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS, glitch: true, chromatic: true } }, untouched])); gpu.draw(0, 50);
+    gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS } }, untouched])); gpu.draw(0, 50);
     if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
     report.checks.push({ name: 'Effects are isolated per layer', passed: true });
+    for (const mode of ['trail', 'return', 'move']) {
+      const large = clip('large-' + mode, mode, { samples: [{ x: 960, y: 540, size: 3000, t: 0 }, { x: 960, y: 540, size: 3000, t: 200 }] });
+      gpu.setProject(project([large])); gpu.draw(0, 100);
+      if (gpuPixel(gpu.readPixels(), 10, 10)[2] !== 255 || gpuPixel(gpu.readPixels(), 1910, 1070)[2] !== 255) throw new Error('A 3000px brush was clamped in ' + mode);
+    }
+    report.checks.push({ name: '3000px brushes render across the Full HD canvas in every motion mode', passed: true });
     const clips = Array.from({ length: 10 }, (_, layer) => clip(`bench-${layer}`, 'trail', {
       color: ['#0d99ff', '#ff7331', '#83dc92'][layer % 3], duration: 1800,
       samples: Array.from({ length: 109 }, (_, i) => ({ x: 180 + i * 13, y: 170 + layer * 68 + Math.sin(i / 11) * 55, size: 60 + (i % 30), t: i * 1000 / 60 })),
@@ -83,13 +97,13 @@ button.onclick = async () => {
     gpu.setProject({ ...p, clips: p.clips.map((c, i) => i === 0 ? { ...c, color: '#ff00ff' } : c) }); gpu.draw(0, 1100); gpu.finish();
     report.checks.push({ name: 'color edits reuse existing geometry and masks', passed: before === gpu.stats.masksCreated });
     if (before !== gpu.stats.masksCreated) throw new Error('Color edit invalidated raster geometry');
-    const effectProject = { ...p, clips: p.clips.map(c => ({ ...c, effects: { ...DEFAULT_EFFECTS, glitch: true, chromatic: true } })) };
+    const effectProject = { ...p, clips: p.clips.map(c => ({ ...c, effects: { ...DEFAULT_EFFECTS } })) };
     gpu.setProject(effectProject); gpu.draw(0, 900); gpu.finish();
     const effectTimes = [];
     for (let i = 0; i < 30; i++) { effectTimes.push(measure(() => { gpu.draw(0, 900 + i * 1000 / 60); gpu.finish(); })); await pause(); }
-    report.benchmark.gpu10LayersAllEffects = summary(effectTimes);
+    report.benchmark.gpu10LayersBlur = summary(effectTimes);
     const effectLive = { ...live, id: 'effect-live', effects: DEFAULT_EFFECTS, started: performance.now() };
-    report.benchmark.gpuFirstPointWith10EffectLayersMs = +measure(() => { gpu.setLiveStroke(effectLive, effectLive.started); gpu.draw(0, 1100, { now: effectLive.started }); gpu.finish(); }).toFixed(2);
+    report.benchmark.gpuFirstPointWith10BlurLayersMs = +measure(() => { gpu.setLiveStroke(effectLive, effectLive.started); gpu.draw(0, 1100, { now: effectLive.started }); gpu.finish(); }).toFixed(2);
     gpu.setLiveStroke(null);
     // Late packets must extend the path from the last received source sample,
     // even when the locally predicted head has already advanced in time.

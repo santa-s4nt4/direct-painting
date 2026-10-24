@@ -54,7 +54,7 @@ export class LiveStroke {
   constructor() { this.clear(); }
   setLocal(stroke, now, move) {
     if (!stroke) { this.clear(); return; }
-    Object.assign(this, { id: stroke.id, mode: stroke.mode, color: stroke.color, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, samples: stroke.samples, count: stroke.samples.length, head: stroke.last, move, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), received: now });
+    Object.assign(this, { id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, samples: stroke.samples, count: stroke.samples.length, head: stroke.last, move, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), received: now });
   }
   update(frame, now) {
     if (!frame) { this.clear(); return; }
@@ -63,7 +63,7 @@ export class LiveStroke {
     if (frame.from !== this.count) return;
     for (const sample of frame.samples) this.samples.push(sample);
     this.count += frame.samples.length;
-    Object.assign(this, { mode: frame.mode, color: frame.color, targets: frame.targets, head: frame.head, move: frame.move, elapsed: frame.elapsed, received: now, effects: frame.effects, ringWidth: frame.ringWidth });
+    Object.assign(this, { mode: frame.mode, color: frame.color, opacity: frame.opacity, targets: frame.targets, head: frame.head, move: frame.move, elapsed: frame.elapsed, received: now, effects: frame.effects, ringWidth: frame.ringWidth });
   }
   time(now) { return this.elapsed + Math.max(0, now - this.received); }
 }

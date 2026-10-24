@@ -25,4 +25,3 @@ test('320px artwork produces exactly 32 by 32 LED pixels with no blur halo', () 
   assert.deepEqual(Array.from(leds.slice((10 * 32 + 10) * 4, (10 * 32 + 10) * 4 + 4)), [255, 0, 0, 255]);
   assert.equal(leds[(10 * 32 + 9) * 4], 0);
 });
-

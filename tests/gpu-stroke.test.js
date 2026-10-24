@@ -8,7 +8,7 @@ const clip = { mode: 'trail', shape: 'circle', duration: 200, samples };
 
 test('GPU geometry cache survives color, fade, timing and visibility edits, but detects actual shape changes', () => {
   assert.ok(sameGeometry(clip, { ...clip, color: '#ff0000', fadeMs: 800, start: 100, enabled: false }));
-  assert.ok(sameGeometry(clip, { ...clip, effects: { blur: false, glitch: true, chromatic: true } }));
+  assert.ok(sameGeometry(clip, { ...clip, effects: { blur: false, blurRadius: 16 } }));
   assert.ok(sameGeometry(clip, structuredClone(clip)), 'A new relay JSON object can reuse unchanged GPU geometry');
   assert.equal(sameGeometry(clip, { ...clip, ringWidth: 10 }), false);
   assert.equal(sameGeometry(clip, { ...clip, shape: 'rect' }), false);

@@ -10,12 +10,14 @@ export function canvasPoint(event, rect) {
   return { x: (event.clientX - rect.left) * CANVAS_WIDTH / rect.width, y: (event.clientY - rect.top) * CANVAS_HEIGHT / rect.height };
 }
 
-// Sample at one pixel or less, including pressure changes at a stationary point.
+// Keep small strokes dense; large footprints need fewer overlapping stamps.
 export function strokePoints(from, to) {
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
   const rect = to.shape === 'rect';
   const rotation = rect ? angleDelta(from.angle ?? 0, to.angle ?? 0) : 0;
-  const steps = Math.ceil(Math.max(distance, Math.abs(to.size - from.size), rect ? Math.abs((to.width ?? to.size) - (from.width ?? from.size)) : 0, rect ? Math.abs((to.height ?? to.size) - (from.height ?? from.size)) : 0, rect ? Math.abs(rotation) * Math.max(to.width ?? to.size, to.height ?? to.size) * Math.PI / 180 : 0));
+  const diameter = Math.min(from.size, to.size, ...(rect ? [from.width ?? from.size, from.height ?? from.size, to.width ?? to.size, to.height ?? to.size] : []));
+  const spacing = Math.max(1, Math.min(diameter > 320 ? diameter / 100 : 1, to.shape === 'ring' ? (to.ringWidth ?? DEFAULT_RING_WIDTH) / 2 : Infinity));
+  const steps = Math.ceil(Math.max(distance, Math.abs(to.size - from.size), rect ? Math.abs((to.width ?? to.size) - (from.width ?? from.size)) : 0, rect ? Math.abs((to.height ?? to.size) - (from.height ?? from.size)) : 0, rect ? Math.abs(rotation) * Math.max(to.width ?? to.size, to.height ?? to.size) * Math.PI / 180 : 0) / spacing);
   if (!steps) return [];
   return Array.from({ length: steps }, (_, i) => {
     const t = (i + 1) / steps;
@@ -35,6 +37,7 @@ export function visitDisk(point, writeRow) {
       const halfWidth = Math.sqrt(radius * radius - dy * dy);
       return [Math.max(0, Math.ceil(radius - halfWidth - 0.5)), Math.min(size, Math.floor(radius + halfWidth - 0.5) + 1)];
     });
+    if (diskCache.size >= 64) diskCache.delete(diskCache.keys().next().value);
     diskCache.set(size, rows);
   }
   const left = Math.floor(point.x) - Math.floor(size / 2);
@@ -95,4 +98,3 @@ export function timestamp(date = new Date()) {
   const pad = value => String(value).padStart(2, '0');
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
-

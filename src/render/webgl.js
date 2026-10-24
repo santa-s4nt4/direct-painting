@@ -1,10 +1,11 @@
+import { canvasView } from '../view.js';
 import {
   WebGLRenderer, WebGLRenderTarget, Scene, OrthographicCamera, Mesh, PlaneGeometry,
   RawShaderMaterial, InstancedBufferGeometry, InstancedBufferAttribute, DynamicDrawUsage,
   Vector2, Vector4, Vector3, GLSL3, NoBlending, CustomBlending, OneFactor,
   OneMinusSrcAlphaFactor, AddEquation, DoubleSide, NearestFilter, LinearFilter, NoColorSpace,
 } from 'three';
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, MAX_BRUSH_SIZE } from '../canvas.js';
 import { DEFAULT_RING_WIDTH, layerEffects, paintingStyle } from '../effects.js';
 import { prepareShapeClip } from '../geometry.js';
 import { CachedGesture, gestureTime, gestureVisible, gestureOpacity } from '../loop.js';
@@ -25,7 +26,7 @@ function material(vertexShader, fragmentShader, uniforms, blending = NoBlending)
 function color(vector, hex) { const value = Number.parseInt(hex.slice(1), 16); vector.set((value >> 16) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255); }
 
 export class WebGLPaintingRenderer {
-  backend = 'webgl2'; items = []; duration = 10000; live = new LiveStroke(); frame = 0;
+  backend = 'webgl2'; items = []; duration = 10000; live = new LiveStroke(); frame = 0; view = canvasView();
   stats = { backend: 'webgl2', frames: 0, stamps: 0, maskPasses: 0, masksCreated: 0, maskBytes: 0, drawCalls: 0, cpuPixelUploads: 0 };
   constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024 } = {}) {
     this.canvas = canvas; this.onBackendChange = onBackendChange; this.cacheBytes = cacheBytes;
@@ -47,7 +48,7 @@ export class WebGLPaintingRenderer {
     this.stampScene = new Scene(); this.stampScene.add(this.stampMesh);
     this.normalMaterial = this.layerMaterial(normalFragment, CustomBlending);
     this.copyMaterial = material(screenVertex, copyFragment, { image: { value: null } });
-    this.presentMaterial = material(presentVertex, presentFragment, { image: { value: this.accumulator.texture } });
+    this.presentMaterial = material(presentVertex, presentFragment, { image: { value: this.accumulator.texture }, resolution: { value: new Vector2(W, H) }, view: { value: new Vector3(1, 0, 0) } });
     // The final painting is a normal Three.js scene object. Camera, scene and
     // texture are separate from input/history and available for future 3D use.
     this.scene = new Scene(); this.painting = new Mesh(new PlaneGeometry(W, H), this.presentMaterial); this.painting.position.set(W / 2, H / 2, 0); this.painting.renderOrder = -1000; this.scene.add(this.painting);
@@ -74,10 +75,12 @@ export class WebGLPaintingRenderer {
       fillColor: { value: new Vector3(1, 1, 1) },
       sourceTime: { value: 0 }, layerOpacity: { value: 1 }, trail: { value: 0 },
       directShape: { value: 0 }, directBrush: { value: new Vector4() }, directAngle: { value: 0 }, edgeSize: { value: 5 },
-      image: { value: null }, glitchAmount: { value: 0 }, chromaticAmount: { value: 0 }, belowTexture: { value: null }, mixAmount: { value: .5 },
+      image: { value: null }, belowTexture: { value: null }, mixAmount: { value: .5 },
     }, blending);
   }
+  setView(view) { this.view = canvasView(view); this.presentMaterial.uniforms.view.value.set(this.view.scale, this.view.x, this.view.y); }
   setProject(project) {
+    if (project.settings?.view) this.setView(project.settings.view);
     this.duration = project.duration;
     const old = new Map(this.items.map(item => [item.clip.id, item]));
     this.items = project.clips.flatMap(layerVariants).map(paintingStyle).map(source => {
@@ -120,8 +123,8 @@ export class WebGLPaintingRenderer {
       this.stats.stamps += count; this.stats.maskPasses++; count = 0;
     };
     const add = (point, time) => {
-      const rect = point.shape === 'rect', size = Math.max(1, Math.min(320, Math.round(point.size)));
-      this.brushData.set([point.x, point.y, rect ? Math.max(1, Math.min(320, point.width ?? size)) : size, rect ? Math.max(1, Math.min(320, point.height ?? size)) : size], count * 4);
+      const rect = point.shape === 'rect', size = Math.max(1, Math.min(MAX_BRUSH_SIZE, Math.round(point.size)));
+      this.brushData.set([point.x, point.y, rect ? Math.max(1, Math.min(MAX_BRUSH_SIZE, point.width ?? size)) : size, rect ? Math.max(1, Math.min(MAX_BRUSH_SIZE, point.height ?? size)) : size], count * 4);
       this.appearanceData.set([(point.angle ?? 0) * Math.PI / 180, rect ? 1 : point.shape === 'ring' ? 2 : 0, time], count * 3);
       if (++count === CAPACITY) flush();
     };
@@ -142,7 +145,7 @@ export class WebGLPaintingRenderer {
       u.directAngle.value = (visual.angle ?? 0) * Math.PI / 180;
     } else u.directShape.value = 0;
     u.bounds.value.set(b.x, b.y, b.width, b.height); u.maskTexture.value = item.target?.texture ?? this.liveTarget.texture;
-    u.sourceTime.value = time; u.layerOpacity.value = opacity; u.trail.value = clip.mode === 'trail' ? 1 : 0;
+    u.sourceTime.value = time; u.layerOpacity.value = opacity * (clip.opacity ?? 1); u.trail.value = clip.mode === 'trail' ? 1 : 0;
     u.edgeSize.value = clip.ringWidth ?? DEFAULT_RING_WIDTH;
     color(u.fillColor.value, colorAtTime(clip, time, visual));
     return b;
@@ -159,7 +162,7 @@ export class WebGLPaintingRenderer {
   }
   compose(item, time, opacity, visual) {
     const clip = item.clip, effects = layerEffects(clip);
-    const processed = effects.blur && effects.blurRadius > 0 || effects.glitch && effects.glitchAmount > 0 || effects.chromatic && effects.chromaticAmount > 0;
+    const processed = effects.blur && effects.blurRadius > 0;
     let shader, b;
     if (processed) {
       this.prepareEffects();
@@ -174,10 +177,9 @@ export class WebGLPaintingRenderer {
         image = this.blurA.texture;
       }
       shader = this.effectMaterial;
-      const u = shader.uniforms, pad = (effects.blur ? effects.blurRadius + 8 : 0) + (effects.glitch ? effects.glitchAmount : 0) + (effects.chromatic ? effects.chromaticAmount : 0);
+      const u = shader.uniforms, pad = effects.blurRadius + 8;
       u.bounds.value.set(b.x - pad, b.y - pad, b.width + pad * 2, b.height + pad * 2);
-      u.image.value = image; u.sourceTime.value = time;
-      u.glitchAmount.value = effects.glitch ? effects.glitchAmount : 0; u.chromaticAmount.value = effects.chromatic ? effects.chromaticAmount : 0;
+      u.image.value = image;
     } else {
       this.analogMaterial ??= this.layerMaterial(analogFragment, NoBlending);
       shader = this.analogMaterial; this.prepareLayer(shader, item, time, opacity, visual);
@@ -208,7 +210,7 @@ export class WebGLPaintingRenderer {
     const live = this.live;
     if (live.id && live.targets?.includes(side)) {
       if (!this.liveItem || this.liveItem.clip.id !== live.id) {
-        const clip = { id: live.id, mode: live.mode, samples: live.samples, color: live.color, effects: live.effects, ringWidth: live.ringWidth };
+        const clip = { id: live.id, mode: live.mode, samples: live.samples, color: live.color, opacity: live.opacity, effects: live.effects, ringWidth: live.ringWidth };
         this.liveItem = { clip, bounds: FULL, target: this.liveTarget, cursor: new StampCursor(live.samples), initialized: false };
       }
       const item = this.liveItem; item.clip.samples = live.samples; item.cursor.samples = live.samples;
@@ -229,7 +231,7 @@ export class WebGLPaintingRenderer {
     }
   }
   // Explicit diagnostics only. Never called during interactive rendering.
-  readPixels() { const pixels = new Uint8Array(W * H * 4); this.renderer.readRenderTargetPixels(this.current, 0, 0, W, H, pixels); return pixels; }
+  readPixels({ presented = false } = {}) { const pixels = new Uint8Array(W * H * 4); if (presented) { const gl = this.renderer.getContext(); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, pixels); } else this.renderer.readRenderTargetPixels(this.current, 0, 0, W, H, pixels); return pixels; }
   finish() { this.renderer.getContext().finish(); }
   dispose() {
     for (const item of this.items) this.release(item);

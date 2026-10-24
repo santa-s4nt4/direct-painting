@@ -1,12 +1,13 @@
+import { DEFAULT_VIEW, canvasView, validateView } from './view.js';
 import { resolveLayer } from './layers.js';
-import { CANVAS_SPEC } from './canvas.js';
+import { CANVAS_SPEC, MAX_BRUSH_SIZE } from './canvas.js';
 import { validateProject } from './loop.js';
-import { DEFAULT_RING_WIDTH, paintingStyle } from './effects.js';
+import { DEFAULT_RING_WIDTH, MAX_RING_WIDTH, DEFAULT_EFFECTS, validateEffects, layerEffects, paintingStyle } from './effects.js';
 import { DEFAULT_P5_CODE, MAX_SNIPPET_LENGTH, MAX_P5_DURATION_MS, P5_PRESETS, upgradeP5Code } from './p5-motion.js';
 import { validateLEDOptions } from './p5-led.js';
 
 export const MAX_PROJECT_BYTES = 16 * 1024 * 1024;
-export const DEFAULT_SETTINGS = Object.freeze({ mode: 'trail', shape: 'circle', color: '#ffffff', minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
+export const DEFAULT_SETTINGS = Object.freeze({ mode: 'trail', shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
 
 export function normalizeProject(value) {
   if (value?.duration !== undefined && (!Number.isFinite(value.duration) || value.duration <= 0)) throw new Error('Invalid loop length');
@@ -17,7 +18,7 @@ export function normalizeProject(value) {
   for (const [key, allowed] of Object.entries(choices)) {
     if (supplied[key] !== undefined) { if (!allowed.includes(supplied[key])) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
-  for (const key of ['pressure', 'touch', 'sync', 'followDirection', 'p5AutoSeed']) {
+  for (const key of ['pressure', 'touch', 'sync', 'followDirection', 'p5AutoSeed', 'colorPanelVisible']) {
     if (supplied[key] !== undefined) { if (typeof supplied[key] !== 'boolean') throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
   if (supplied.color !== undefined) { if (!/^#[0-9a-f]{6}$/i.test(supplied.color)) throw new Error('Invalid color'); settings.color = supplied.color; }
@@ -30,9 +31,12 @@ export function normalizeProject(value) {
     settings.p5Code = upgradeP5Code(supplied.p5Code);
   }
   if (supplied.p5Preset === undefined) settings.p5Preset = Object.keys(P5_PRESETS).find(key => P5_PRESETS[key] === settings.p5Code) ?? 'custom';
-  for (const [key, min, max] of [['p5Seed', 0, 4294967295], ['p5DurationMs', 100, MAX_P5_DURATION_MS], ['p5SingleRatio', 0, 1000], ['p5ClimaxRatio', 0, 1000], ['p5Variation', 0, 100], ['p5RainColorHoldMs', 0, 600000], ['minSize', 1, 320], ['maxSize', 1, 320], ['widthMin', 1, 320], ['widthMax', 1, 320], ['heightMin', 1, 320], ['heightMax', 1, 320], ['angle', -180, 180], ['ringWidth', 1, 160], ['fadeMs', 100, 10000], ['fadeInMs', 0, 10000], ['holdMs', 100, 600000], ['fadeOutMs', 0, 10000]]) {
+  for (const [key, min, max] of [['p5Seed', 0, 4294967295], ['p5DurationMs', 100, MAX_P5_DURATION_MS], ['p5SingleRatio', 0, 1000], ['p5ClimaxRatio', 0, 1000], ['p5Variation', 0, 100], ['p5RainColorHoldMs', 0, 600000], ['minSize', 1, MAX_BRUSH_SIZE], ['maxSize', 1, MAX_BRUSH_SIZE], ['widthMin', 1, MAX_BRUSH_SIZE], ['widthMax', 1, MAX_BRUSH_SIZE], ['heightMin', 1, MAX_BRUSH_SIZE], ['heightMax', 1, MAX_BRUSH_SIZE], ['angle', -180, 180], ['ringWidth', 1, MAX_RING_WIDTH], ['fadeMs', 100, 10000], ['fadeInMs', 0, 10000], ['holdMs', 100, 600000], ['fadeOutMs', 0, 10000]]) {
     if (supplied[key] !== undefined) { if (!Number.isInteger(supplied[key]) || supplied[key] < min || supplied[key] > max) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
+  validateEffects(supplied.effects); settings.effects = layerEffects({ effects: supplied.effects });
+  validateView(supplied.view); settings.view = canvasView(supplied.view);
+  if (supplied.opacity !== undefined) { if (!Number.isFinite(supplied.opacity) || supplied.opacity < 0 || supplied.opacity > 1) throw new Error('Invalid opacity'); settings.opacity = supplied.opacity; }
   validateLEDOptions({ single: settings.p5SingleRatio, climax: settings.p5ClimaxRatio, variation: settings.p5Variation });
   settings.followDirection = false; // Accept legacy JSON but always use the UI angle.
   if (settings.minSize > settings.maxSize) throw new Error('Minimum diameter exceeds maximum');

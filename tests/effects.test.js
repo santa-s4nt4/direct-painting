@@ -18,7 +18,7 @@ test('layer effects, ring geometry and Analog-only mixing migrate and round-trip
   assert.deepEqual(p.clips[0].effects, DEFAULT_EFFECTS); assert.equal(p.clips[0].blendMode, 'analog');
   assert.equal(p.clips[0].edgeColor, undefined); assert.equal(p.clips[0].edgeWidth, undefined);
   for (const key of ['blurRadius', 'showBlurPreview', 'exportFormat']) assert.equal(p.settings[key], undefined);
-  const edited = { ...p, clips: [{ ...p.clips[0], effects: { ...off, glitch: true, chromatic: true, blurRadius: 93 } }] };
+  const edited = { ...p, clips: [{ ...p.clips[0], effects: { ...off, blurRadius: 93 } }] };
   assert.deepEqual(parseProject(serializeProject(edited, { playing: false, phase: 500 })).project, edited);
   const history = new EditHistory(); history.reset(p); history.record(edited);
   assert.deepEqual(history.undo(), p); assert.deepEqual(history.redo(), edited);
@@ -26,11 +26,11 @@ test('layer effects, ring geometry and Analog-only mixing migrate and round-trip
 });
 
 test('invalid imported and relayed effects fail before changing a project', () => {
-  for (const effects of [null, [], { blur: 1 }, { glitch: 'on' }, { chromatic: {} }, { blurRadius: -1 }, { blurRadius: 193 }, { glitchAmount: Infinity }, { chromaticAmount: .1 }, { unknown: true }]) {
+  for (const effects of [null, [], { blur: 1 }, { blurRadius: -1 }, { blurRadius: 193 }, { unknown: true }]) {
     assert.throws(() => normalizeProject(project({ ...clip, effects })));
     assert.throws(() => validateSnapshot({ project: project({ ...clip, effects }), playback: { playing: false, phase: 0 } }, 1000));
   }
-  for (const ringWidth of [0, 161, 2.5, '5']) assert.throws(() => normalizeProject(project({ ...clip, ringWidth })));
+  for (const ringWidth of [0, 1501, 2.5, '5']) assert.throws(() => normalizeProject(project({ ...clip, ringWidth })));
   assert.deepEqual(paintingStyle({ effects: { blur: false } }).effects, off);
 });
 
@@ -61,18 +61,18 @@ test('rings leave the center untouched through all motion modes, interpolation a
   assert.ok(stamps.length > 1); assert.ok(stamps.every(p => p.shape === 'ring' && p.ringWidth === 5));
 });
 
-test('CPU effects blur alpha, preserve paint color, split RGB and reproduce deterministic glitch', () => {
+test('CPU effects blur alpha and preserve paint color without modifying the source', () => {
   const width = 160, height = 96, input = new Uint8ClampedArray(width * height * 4);
   for (let y = 24; y < 72; y++) for (let x = 50; x < 110; x++) input.set([255, 255, 255, 255], (y * width + x) * 4);
   const fx = new CPULayerEffects(), pixel = (data, x, y = 48) => [...data.slice((y * width + x) * 4, (y * width + x) * 4 + 4)];
   assert.equal(fx.apply(input, width, height, { effects: off }, 0), input);
   const blurred = fx.apply(input, width, height, { effects: { ...off, blur: true, blurRadius: 16 } }, 0).slice();
   assert.ok(pixel(blurred, 45)[3] > 0); assert.deepEqual(pixel(blurred, 45).slice(0, 3), [255, 255, 255]);
-  const chromatic = fx.apply(input, width, height, { effects: { ...off, chromatic: true, chromaticAmount: 8 } }, 0).slice();
-  assert.deepEqual(pixel(chromatic, 45), [0, 0, 255, 255]); assert.deepEqual(pixel(chromatic, 115), [255, 0, 0, 255]);
-  const style = { effects: { ...off, glitch: true, glitchAmount: 24 } };
-  const first = fx.apply(input, width, height, style, 90).slice();
-  assert.notDeepEqual(first, input); assert.notDeepEqual(fx.apply(input, width, height, style, 360), first);
-  assert.deepEqual(fx.apply(input, width, height, style, 90), first);
   assert.deepEqual(pixel(input, 80), [255, 255, 255, 255], 'Effects never alter source pixels');
+});
+
+test('retired effects are ignored when loading old projects', () => {
+  const p = normalizeProject(project({ ...clip, effects: { blur: false, blurRadius: 64, glitch: true, glitchAmount: 90, chromatic: true, chromaticAmount: 30 } }));
+  assert.deepEqual(p.clips[0].effects, { blur: false, blurRadius: 64 });
+  assert.deepEqual(p.settings.effects, { blur: true, blurRadius: 16 });
 });

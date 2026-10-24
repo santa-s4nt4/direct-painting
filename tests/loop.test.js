@@ -36,7 +36,7 @@ test('old size-only caches preserve relative diameters and fixed circles change 
   assert.ok(resizeGesture(fixed, 'max', 90).samples.every(sample => sample.size === 90));
   assert.deepEqual(layerSizeRange(resizeGesture(fixed, 'max', 90)), { min: 90, max: 90 });
   assert.deepEqual(layerSizeRange(resizeGesture(fixed, 'min', 15)), { min: 15, max: 15 });
-  assert.deepEqual(resizeGesture(changed, 'min', 999).diameterRange, { min: 320, max: 320 });
+  assert.deepEqual(resizeGesture(changed, 'min', 9999).diameterRange, { min: 3000, max: 3000 });
   assert.deepEqual(resizeGesture(changed, 'max', -10).diameterRange, { min: 1, max: 1 });
 });
 
@@ -55,7 +55,7 @@ test('actual recorded circle extrema are independent of brush bounds and partial
 
 test('layer size metadata and normalized pressure reject malformed stored values', () => {
   const project = changed => ({ version: 1, duration: 6000, clips: [{ ...clip('return'), ...changed }] });
-  for (const range of [{ min: 0, max: 30 }, { min: 30, max: 10 }, { min: 10, max: 321 }, { min: 1.5, max: 30 }]) {
+  for (const range of [{ min: 0, max: 30 }, { min: 30, max: 10 }, { min: 10, max: 3001 }, { min: 1.5, max: 30 }]) {
     for (const key of ['sizeRange', 'diameterRange']) assert.throws(() => validateProject(project({ [key]: range })));
   }
   for (const value of [-.1, 1.1, NaN]) {
@@ -116,7 +116,7 @@ test('local projects round-trip source gestures and reject corrupt samples', () 
   assert.deepEqual(validateProject(structuredClone(project)), project);
   assert.equal(validateProject({ ...project, duration: 1000 }).duration, 3000);
   assert.throws(() => validateProject({ ...project, clips: [{ ...clip('trail'), color: '<svg>' }] }));
-  assert.throws(() => validateProject({ ...project, clips: [{ ...clip('trail'), samples: [{ x: 10, y: 10, size: 400, t: 0 }] }] }));
+  assert.throws(() => validateProject({ ...project, clips: [{ ...clip('trail'), samples: [{ x: 10, y: 10, size: 3001, t: 0 }] }] }));
 });
 
 test('scheduled layers begin at their recorded loop phase instead of time zero', () => {

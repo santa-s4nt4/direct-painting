@@ -160,3 +160,32 @@ input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }input[type=color]
 
 
 @media (pointer: coarse) { .effect-switch { min-height: 36px; }.effect-amount > input { height: 32px; } }
+
+/* A compact paint palette stays within reach without covering the inspector. */
+.floating-color { position: absolute; z-index: 10; top: 12px; right: 12px; width: 210px; pointer-events: auto; }
+.color-panel-toggle { display: flex; align-items: center; gap: 8px; margin-left: auto; min-height: 34px; padding: 5px 10px; border: 1px solid #505050; border-radius: 5px; background: #292929ee; font-size: 11px; box-shadow: 0 3px 12px #0004; }
+.current-color-swatch { width: 18px; height: 18px; border: 1px solid #ffffff50; border-radius: 50%; background: var(--current-color, white); }
+#floating-color-panel { margin-top: 7px; padding: 12px; background: #292929f5; border: 1px solid #4c4c4c; border-radius: 7px; box-shadow: 0 8px 24px #0006; display: flex; flex-direction: column; gap: 8px; }
+#floating-color-panel header { display: flex; align-items: center; gap: 6px; height: 18px; margin-bottom: 3px; font-size: 11px; }
+#floating-color-panel header strong { font-weight: 600; }#color-context { font-size: 9px; color: #999; margin-left: auto; }
+#close-color-panel { width: 22px; min-height: 24px; padding: 0; font-size: 18px; }
+.color-wheel-wrap { position: relative; width: 180px; height: 180px; margin: 2px auto 6px; }
+canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: crosshair; outline: 1px solid #0006; }
+.color-wheel-marker { position: absolute; width: 13px; height: 13px; border: 1.5px solid #222; border-radius: 50%; box-shadow: 0 0 0 1px #ffffffb0; transform: translate(-50%, -50%); pointer-events: none; }
+.color-wheel-marker::before, .color-wheel-marker::after { content: ''; position: absolute; background: #222; }.color-wheel-marker::before { left: 4px; top: -4px; width: 1px; height: 18px; }.color-wheel-marker::after { left: -4px; top: 4px; width: 18px; height: 1px; }
+.color-brightness-row, .color-opacity-row, .color-hex-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #b5b5b5; }
+.color-brightness-row output { margin-left: auto; font-size: 9px; }
+#floating-color-panel input[type=range] { appearance: none; -webkit-appearance: none; height: 12px; border-radius: 3px; border: 1px solid #555; margin: 2px 0 5px; }
+#floating-color-panel input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 13px; height: 19px; background: #eee; border: 1px solid #777; border-radius: 3px; box-shadow: 0 2px 4px #0005; }
+#floating-color-panel input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: #eee; border: 1px solid #777; border-radius: 3px; }
+#floating-color-hex { margin-left: auto; width: 94px; padding: 4px 7px; min-height: 28px; border: 1px solid #454545; border-radius: 3px; background: #363636; font-size: 11px; font-variant-numeric: tabular-nums; }
+#floating-opacity { margin-left: auto; width: 49px; }
+#floating-opacity-range { background: linear-gradient(to right, transparent, var(--current-color)), repeating-conic-gradient(#888 0 25%, #444 0 50%) 0 / 8px 8px; }
+.view-tools { display: flex; justify-content: flex-end; align-items: center; gap: 12px; min-width: 0; }
+.zoom-controls { display: flex; align-items: center; border: 1px solid #444; border-radius: 4px; }
+.zoom-controls button { background: transparent; border: 0; min-width: 24px; min-height: 32px; padding: 2px 5px; color: #bbb; font-size: 13px; }
+.zoom-controls button:hover { background: #3a3a3a; color: white; }#reset-view { min-width: 48px; font-size: 10px; }
+.canvas-frame { overflow: hidden; }
+@media (max-width: 1100px) { .view-tools { gap: 5px; }.view-tools .fps-label { display: none; } }
+@media (max-width: 600px) { .canvas-tools button { min-width: 32px; padding: 0 6px; }.canvas-tools button span { display: none; }.canvas-tools { gap: 0; }.floating-color { width: 196px; top: 8px; right: 8px; }#floating-color-panel { padding: 8px; } }
+@media (pointer: coarse) { .color-panel-toggle, .zoom-controls button { min-height: 38px; }#floating-color-panel input[type=range] { margin-top: 8px; margin-bottom: 10px; } }

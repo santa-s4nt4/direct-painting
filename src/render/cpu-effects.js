@@ -1,11 +1,11 @@
-import { layerEffects, glitchShift } from '../effects.js';
+import { layerEffects } from '../effects.js';
 
 // Compatibility path without Canvas2D.filter (also works on older iPads).
 // Blur premultiplied RGBA, including alpha; transparent pixels never turn black.
 export class CPULayerEffects {
   apply(input, width, height, clip, time) {
     const fx = layerEffects(clip), blur = fx.blur && fx.blurRadius > 0;
-    if (!blur && !fx.glitch && !fx.chromatic) return input;
+    if (!blur) return input;
     const scale = blur ? 4 : 1, w = Math.ceil(width / scale), h = Math.ceil(height / scale);
     const length = w * h * 4;
     if (this.source?.length !== length) { this.source = new Float32Array(length); this.scratch = new Float32Array(length); this.filtered = new Float32Array(length); }
@@ -20,7 +20,7 @@ export class CPULayerEffects {
       for (let i = 0; i < 3; i++) { box(image, this.scratch, w, h, radius, true); box(this.scratch, this.filtered, w, h, radius, false); image = this.filtered; }
     }
     if (this.output?.length !== input.length) this.output = new Uint8ClampedArray(input.length);
-    const output = this.output, chromatic = fx.chromatic ? fx.chromaticAmount : 0;
+    const output = this.output;
     const read = (x, y, channel) => {
       if (x < 0 || x >= width || y < 0 || y >= height) return 0;
       const px = Math.max(0, Math.min(w - 1, (x + .5) / scale - .5)), py = Math.max(0, Math.min(h - 1, (y + .5) / scale - .5));
@@ -30,13 +30,12 @@ export class CPULayerEffects {
       return a * (1 - ty) + b * ty;
     };
     for (let y = 0; y < height; y++) {
-      const shift = fx.glitch ? glitchShift(y + .5, time, fx.glitchAmount) : 0;
       for (let x = 0; x < width; x++) {
-        const p = (y * width + x) * 4, sx = x - shift;
-        const alpha = Math.max(read(sx, y, 3), read(sx - chromatic, y, 3), read(sx + chromatic, y, 3));
-        output[p] = alpha ? read(sx - chromatic, y, 0) * 255 / alpha : 0;
+        const p = (y * width + x) * 4, sx = x;
+        const alpha = read(sx, y, 3);
+        output[p] = alpha ? read(sx, y, 0) * 255 / alpha : 0;
         output[p + 1] = alpha ? read(sx, y, 1) * 255 / alpha : 0;
-        output[p + 2] = alpha ? read(sx + chromatic, y, 2) * 255 / alpha : 0; output[p + 3] = alpha;
+        output[p + 2] = alpha ? read(sx, y, 2) * 255 / alpha : 0; output[p + 3] = alpha;
       }
     }
     return output;

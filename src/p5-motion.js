@@ -1,3 +1,4 @@
+import { MAX_BRUSH_SIZE } from './canvas.js';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './canvas.js';
 import { brushSize } from './drawing.js';
 import { LED_RAIN_CODE } from './p5-rain.js';
@@ -78,7 +79,7 @@ export function motionSamples(motion, p, durationMs, times) {
       if (typeof result.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(result.color)) throw new Error(`Frame ${frame}: color must be a #RRGGBB string`);
       sample.color = result.color.toLowerCase();
     }
-    for (const [key, min, max] of [['pressure', 0, 1], ['size', 1, 320], ['width', 1, 320], ['height', 1, 320], ['opacity', 0, 1], ['colorProgress', 0, 1]]) {
+    for (const [key, min, max] of [['pressure', 0, 1], ['size', 1, MAX_BRUSH_SIZE], ['width', 1, MAX_BRUSH_SIZE], ['height', 1, MAX_BRUSH_SIZE], ['opacity', 0, 1], ['colorProgress', 0, 1]]) {
       if (result[key] !== undefined) {
         if (!Number.isFinite(result[key])) throw new Error(`Frame ${frame}: ${key} must be a finite number`);
         sample[key] = clamp(result[key], min, max);

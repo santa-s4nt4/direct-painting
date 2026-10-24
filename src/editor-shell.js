@@ -2,7 +2,7 @@ import { FPS } from './timing.js';
 
 const $ = selector => document.querySelector(selector);
 
-export function setupEditorShell({ icon, modes, modeHints, onMode, onShape }) {
+export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTab = () => {} }) {
   const main = $('main'), studio = $('.studio'), toolbar = $('.toolbar'), workspace = $('.workspace');
   const layers = $('.layers-panel'), history = $('.history-actions');
   const clear = $('#clear'), save = $('#save-project'), importButton = $('#import-project'), importFile = $('#import-file');
@@ -27,7 +27,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape }) {
       $(`#tab-${name}`).setAttribute('aria-selected', String(name === tab));
       $(`#tab-${name}`).tabIndex = name === tab ? 0 : -1;
     }
-    scroll.scrollTop = 0;
+    scroll.scrollTop = 0; onTab(tab);
   };
   const tabNames = Object.keys(panels);
   for (const [index, name] of tabNames.entries()) {
@@ -47,11 +47,11 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape }) {
     details.append(summary, content); toolbar.append(details); return details;
   };
   const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls')]);
-  const color = section('Fill', [$('.color-picker')]);
+  const blur = section('Blur', [$('#draw-blur-controls')], true, 'Applied to new strokes. Edit existing strokes in Layer.');
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
   $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option>';
-  toolbar.replaceChildren(shape, color, input, fades);
+  toolbar.replaceChildren(shape, blur, input, fades);
   for (const label of toolbar.querySelectorAll('label > span')) {
     const names = { PRESSURE: 'Apple Pencil pressure', TOUCH: 'Draw with touch' };
     if (names[label.textContent]) label.textContent = names[label.textContent];
@@ -88,7 +88,9 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape }) {
   for (const button of floating.querySelectorAll('button')) button.addEventListener('click', () => onMode(button.dataset.paintMode));
   const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Draw an outline circle'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(ring.getAttribute('aria-pressed') === 'true' ? 'circle' : 'ring')); floating.append(ring);
   const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = `${FPS} fps`;
-  controls.append(floating, fps);
+  const view = document.createElement('div'); view.className = 'view-tools';
+  view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
+  view.append(fps); controls.append(floating, view);
   const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove(); timeline.querySelector('.loop-duration label').textContent = 'Duration';
   workspace.replaceChildren(stage, controls, timeline);
   studio.replaceChildren(sidebar, workspace);

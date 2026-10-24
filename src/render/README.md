@@ -18,13 +18,15 @@ interactive rendering never reads GPU pixels back into CPU memory.
    port and two alternating accumulation targets. Transparent pixels are not
    treated as black pigment. There is no independent edge color.
 3. Enabled effects render the isolated layer into a shared premultiplied RGBA
-   target. Blur uses quarter-resolution separable Gaussian passes; glitch and
-   chromatic channel offsets run in the final compositor. Scratch targets are
+   target. Blur uses quarter-resolution separable Gaussian passes. Scratch targets are
    warmed once and reused across layers. Effects do not invalidate stroke masks.
-4. Effect animation uses source time, so pause, seek and remote output agree.
-   Blur defaults to 64px ON; glitch and chromatic aberration default OFF. CPU
+4. Blur is the only effect and defaults to 16px ON. Retired glitch and chromatic
+   parameters are ignored on import. CPU
    fallback has an alpha-aware three-box approximation without Canvas2D.filter.
 5. The composited painting texture is presented by an ordinary Three.js plane.
+   Its presentation shader applies the shared scale/translation; masks and source
+   coordinates remain unchanged. Small /api/view messages synchronize pinches
+   through SSE without resending the project every animation frame.
 
 The live mask is allocated/warmed once on startup. Existing cached masks stay on
 GPU across strokes, loops, color/timing/visibility changes and layer reordering.

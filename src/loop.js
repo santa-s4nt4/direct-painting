@@ -1,3 +1,4 @@
+import { MAX_BRUSH_SIZE } from './canvas.js';
 import { validateEffects, validateRingWidth } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
 import { TrailField, PersistentField, SmoothedCircle, TRAIL_LIFETIME } from './motion.js';
@@ -20,7 +21,7 @@ export class LoopClock {
 
 export const DEFAULT_FADE_MS = 2000;
 export function layerSizeRange(clip) {
-  return clip.samples.reduce((range, sample) => ({ min: Math.min(range.min, sample.size), max: Math.max(range.max, sample.size) }), { min: 320, max: 1 });
+  return clip.samples.reduce((range, sample) => ({ min: Math.min(range.min, sample.size), max: Math.max(range.max, sample.size) }), { min: MAX_BRUSH_SIZE, max: 1 });
 }
 
 // Normalize the circles actually recorded, independently of the input brush range.
@@ -29,7 +30,7 @@ export function resizeGesture(clip, bound, value) {
   const original = layerSizeRange(clip), diameterRange = { ...original };
   const positions = clip.samples.map(sample => sample.diameterPosition ?? (original.max > original.min ? (sample.size - original.min) / (original.max - original.min) : 1));
   const positionRange = positions.reduce((range, position) => ({ min: Math.min(range.min, position), max: Math.max(range.max, position) }), { min: 1, max: 0 });
-  const diameter = Math.max(1, Math.min(320, Math.round(value)));
+  const diameter = Math.max(1, Math.min(MAX_BRUSH_SIZE, Math.round(value)));
   if (positionRange.min === positionRange.max) diameterRange.min = diameterRange.max = diameter;
   else {
     diameterRange[bound] = diameter;
@@ -194,6 +195,7 @@ export function validateProject(project) {
       validateP5Source(clip.procedural);
       if (clip.mode === 'place') throw new Error('p5 motion cannot be a placed shape');
     }
+    if (clip.opacity !== undefined && (!Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) throw new Error('Invalid layer opacity');
     validateEffects(clip.effects); validateRingWidth(clip.ringWidth);
     const start = clip.start ?? 0;
     if (clip.shape !== undefined && !['circle', 'rect', 'ring'].includes(clip.shape)) throw new Error('Invalid shape');
@@ -216,7 +218,7 @@ export function validateProject(project) {
     }
     if (clip.colorEditMode === 'gradient' && !clip.colorGradient) throw new Error('Missing color gradient');
     for (const range of [clip.sizeRange, clip.diameterRange, clip.widthRange, clip.heightRange]) {
-      if (range !== undefined && (!range || !Number.isInteger(range.min) || !Number.isInteger(range.max) || range.min < 1 || range.max > 320 || range.min > range.max)) throw new Error('Invalid layer size range');
+      if (range !== undefined && (!range || !Number.isInteger(range.min) || !Number.isInteger(range.max) || range.min < 1 || range.max > MAX_BRUSH_SIZE || range.min > range.max)) throw new Error('Invalid layer size range');
     }
     if (!Number.isFinite(start) || start < 0) throw new Error('Invalid gesture start time');
     if (clip.fadeMs !== undefined && (!Number.isFinite(clip.fadeMs) || clip.fadeMs < 100 || clip.fadeMs > 10000)) throw new Error('Invalid fade duration');
@@ -227,13 +229,13 @@ export function validateProject(project) {
     ids.add(clip.id);
     let previous = -1;
     for (const sample of clip.samples) {
-      if (!sample || !['x', 'y', 'size', 't'].every(key => Number.isFinite(sample[key])) || sample.size < 1 || sample.size > 320 || sample.t < previous || sample.t < 0 || sample.t > clip.duration) throw new Error('Invalid gesture samples');
+      if (!sample || !['x', 'y', 'size', 't'].every(key => Number.isFinite(sample[key])) || sample.size < 1 || sample.size > MAX_BRUSH_SIZE || sample.t < previous || sample.t < 0 || sample.t > clip.duration) throw new Error('Invalid gesture samples');
       for (const key of ['active', 'step']) if (sample[key] !== undefined && (typeof sample[key] !== 'boolean' || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       for (const key of ['opacity', 'colorProgress']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1 || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       if (sample.color !== undefined && (typeof sample.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(sample.color) || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error('Invalid sample color');
       if (sample.shape !== undefined && !['circle', 'rect', 'ring'].includes(sample.shape)) throw new Error('Invalid sample shape');
       validateRingWidth(sample.ringWidth);
-      for (const key of ['width', 'height']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 1 || sample[key] > 320)) throw new Error('Invalid rectangle dimensions');
+      for (const key of ['width', 'height']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 1 || sample[key] > MAX_BRUSH_SIZE)) throw new Error('Invalid rectangle dimensions');
       for (const key of ['angle', 'heading']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || Math.abs(sample[key]) > 720)) throw new Error('Invalid sample angle');
       for (const key of ['pressure', 'diameterPosition', 'widthPosition', 'heightPosition']) {
         if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1)) throw new Error(`Invalid sample ${key}`);

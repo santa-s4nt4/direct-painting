@@ -34,6 +34,10 @@ if (typeof EventSource === 'function') {
   const events = new EventSource('/api/stream');
   events.onopen = () => { connectedStream = true; version = -1; liveVersion = -1; };
   events.addEventListener('state', event => apply(JSON.parse(event.data), performance.now()));
+  events.addEventListener('view', event => {
+    const update = JSON.parse(event.data);
+    if (snapshot && update.version >= version) { snapshot.project.settings = { ...snapshot.project.settings, view: update.view }; version = update.version; scene.setView(update.view); renderedAt = -Infinity; }
+  });
   events.addEventListener('live', event => apply(JSON.parse(event.data), performance.now()));
   events.onerror = () => { connectedStream = false; clearTimeout(pollTimer); void poll(); };
   window.addEventListener('pagehide', () => events.close(), { once: true });

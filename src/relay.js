@@ -43,3 +43,19 @@ export function createLivePublisher(getFrame, onStatus) {
       }).catch(() => onStatus(false)).finally(() => { running = false; });
   } };
 }
+
+// Pinches send only a small view transform; never resend every stroke at 60Hz.
+export function createViewPublisher(getView, onStatus) {
+  let running = false, pending = false;
+  const send = async () => {
+    if (running) { pending = true; return; }
+    running = true;
+    try {
+      const response = await fetch('/api/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getView()) });
+      if (!response.ok) throw new Error('View sync unavailable');
+      onStatus(true);
+    } catch { onStatus(false); }
+    finally { running = false; if (pending) { pending = false; void send(); } }
+  };
+  return { publish: send };
+}

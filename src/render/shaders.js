@@ -116,24 +116,11 @@ precision highp float;
 in vec2 pixel;
 uniform vec2 resolution;
 uniform sampler2D image;
-uniform float sourceTime;
-uniform float glitchAmount;
-uniform float chromaticAmount;
 out vec4 result;
-vec4 readPaint(vec2 p) {
-  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,resolution))) return vec4(0.);
-  return texture(image,vec2(p.x/resolution.x,1.-p.y/resolution.y));
-}
 vec4 layerColor() {
-  float band=floor(pixel.y/24.), tick=floor(max(0.,sourceTime)/90.);
-  float hash=mod((band+1.)*37.+(tick+1.)*17.,101.);
-  float shift=hash<27. ? floor((hash/13.-1.)*glitchAmount+.5) : 0.;
-  vec2 p=pixel-vec2(shift,0.);
-  vec4 center=readPaint(p);
-  vec4 red=readPaint(p-vec2(chromaticAmount,0.));
-  vec4 blue=readPaint(p+vec2(chromaticAmount,0.));
-  float alpha=max(center.a,max(red.a,blue.a));
-  return alpha>0. ? vec4(vec3(red.r,center.g,blue.b)/alpha,alpha) : vec4(0.);
+  vec2 uv=vec2(pixel.x/resolution.x,1.-pixel.y/resolution.y);
+  vec4 paint=texture(image,uv);
+  return paint.a>0. ? vec4(paint.rgb/paint.a,paint.a) : vec4(0.);
 }
 ` + analogComposite;
 export const screenVertex = `
@@ -164,7 +151,13 @@ precision highp float;
 in vec2 texCoord;
 uniform sampler2D image;
 out vec4 result;
-void main() { result=vec4(texture(image,texCoord).rgb,1.); }
+uniform vec2 resolution;
+uniform vec3 view; // scale, native x/y translation
+void main() {
+  vec2 p=(vec2(texCoord.x,1.-texCoord.y)*resolution-view.yz)/view.x;
+  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,resolution))) { result=vec4(0.,0.,0.,1.); return; }
+  result=vec4(texture(image,vec2(p.x/resolution.x,1.-p.y/resolution.y)).rgb,1.);
+}
 `;
 export const blurFragment = `
 precision highp float;

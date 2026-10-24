@@ -24,7 +24,7 @@ test('official p5 math supports angles, seeded noise/random and vector motion wi
 });
 test('motion output is bounded before rasterization and invalid frames fail without producing a clip', () => {
   const samples = motionSamples(() => ({x:1e9,y:-1e9,pressure:10,size:900,width:0,height:200}), new MotionP5(1), 100);
-  assert.deepEqual(samples[0], {x:1920,y:0,pressure:1,size:320,width:1,height:200,t:0});
+  assert.deepEqual(samples[0], {x:1920,y:0,pressure:1,size:900,width:1,height:200,t:0});
   for (const result of [null, {}, {x:Infinity,y:1}, {x:1,y:2,size:NaN}, {x:1,y:2,pressure:'1'}]) assert.throws(() => motionSamples(() => result, new MotionP5(1), 100));
   for (const patch of [{code:''},{code:'a'.repeat(32769)},{seed:-1},{durationMs:0},{kind:'other'}]) assert.throws(() => validateP5Source({...source(), ...patch}));
 });

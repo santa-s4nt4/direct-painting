@@ -1,3 +1,5 @@
+import { setupColorPanel } from './color-panel.js';
+import { DEFAULT_VIEW, canvasView, screenToWorld, worldToScreen, zoomAt, PinchGesture } from './view.js';
 import './style.css';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
 import { FPS, FRAME_MS, frameNumber } from './timing.js';
@@ -5,9 +7,9 @@ import { setupEditorShell } from './editor-shell.js';
 import { brushSize, canvasPoint, timestamp } from './drawing.js';
 import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
-import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
+import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, MAX_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
 import { LoopClock, DEFAULT_LOOP_MS, minimumLoop, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
-import { createPublisher, createLivePublisher, playbackSnapshot } from './relay.js';
+import { createPublisher, createLivePublisher, createViewPublisher, playbackSnapshot } from './relay.js';
 import { loadProject, saveProject } from './cache.js';
 import { DEFAULT_SETTINGS, MAX_PROJECT_BYTES, normalizeProject, singleCanvasProject, serializeProject, parseProject } from './project.js';
 import { colorHSL, editLayerLightness, pickLayerColor, hasColorGradient, hasFireworkColor, hasSampleColor } from './color.js';
@@ -47,17 +49,18 @@ document.querySelector('#app').innerHTML = `
           <span class="section-label">SHAPE</span>
           <select id="shape" aria-label="Drawing shape"><option value="circle">CIRCLE</option><option value="rect">RECTANGLE</option></select>
         </div>
-        <div class="control-section">
-          <span class="section-label">COLOR</span>
-          <label class="color-picker"><input id="color" type="color" value="#ffffff" aria-label="Stroke color picker"><span id="color-value">#FFFFFF</span></label>
+        <div id="draw-blur-controls" class="control-section">
+          <label class="checkbox-control"><input id="draw-blur" type="checkbox" checked><span>Blur</span></label>
+          <div class="effect-value"><label for="draw-blur-radius">Radius</label><input id="draw-blur-radius" type="number" min="0" max="192" step="1" value="16" aria-label="Brush blur radius in pixels"><span>px</span></div>
+          <input id="draw-blur-range" type="range" min="0" max="192" step="1" value="16" aria-label="Brush blur radius">
         </div>
         <div class="control-section size-controls" id="circle-controls">
           <span class="section-label">SIZE RANGE</span>
-          ${['min', 'max'].map((bound, i) => `<div class="size-bound"><label for="size-${bound}">${bound.toUpperCase()}</label><input id="size-${bound}" type="number" min="1" max="320" step="1" inputmode="numeric" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter in pixels"><span>px</span><input id="range-${bound}" type="range" min="1" max="320" step="1" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter slider"></div>`).join('')}
+          ${['min', 'max'].map((bound, i) => `<div class="size-bound"><label for="size-${bound}">${bound.toUpperCase()}</label><input id="size-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" inputmode="numeric" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter in pixels"><span>px</span><input id="range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter slider"></div>`).join('')}
         </div>
-        <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="160" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
+        <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="${MAX_RING_WIDTH}" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
         <div class="control-section" id="rectangle-controls" hidden>
-          ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="320" step="1" value="${i ? 100 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="320" step="1" value="${i ? 100 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
+          ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
           <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div>
         </div>
         <div class="input-controls">
@@ -96,14 +99,16 @@ document.querySelector('#app').innerHTML = `
 `;
 
 const $ = selector => document.querySelector(selector);
-const shell = setupEditorShell({ icon, modes, modeHints, onMode: mode => setMode(mode), onShape: shape => setShape(shape) });
+const shell = setupEditorShell({ icon, modes, modeHints, onMode: mode => setMode(mode), onShape: shape => setShape(shape), onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
 const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => {
   const label = document.querySelector('.fps-label');
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
 } });
 const canvases = [painting.canvas];
 const layers = [{ circle: null, lastFrame: -Infinity }];
-const state = { ...DEFAULT_SETTINGS };
+const state = { ...DEFAULT_SETTINGS, effects: { ...DEFAULT_EFFECTS }, view: { ...DEFAULT_VIEW } };
+let colorContext = { id: null, field: 'fill' }, refreshSelectedLayer = () => {};
+const colorPanel = setupColorPanel($('.canvas-stage'), { onChange: editFloatingColor, onVisibility: visible => { state.colorPanelVisible = visible; queueSave(); } });
 let stroke = null, trimDrag = null, toastTimer, dirty = false, selectedLayerId = null;
 const layerDisclosure = new Map();
 const clock = new LoopClock(performance.now());
@@ -112,17 +117,21 @@ const history = new EditHistory();
 let clips = [], ready = false, cacheTimer, saveQueue = Promise.resolve(), revision = 0;
 let cacheFailed = false;
 const liveSession = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-let liveRevision = 0;
+let liveRevision = 0, viewRevision = 0;
+const pinch = new PinchGesture();
+let zoomSaveTimer, viewDirty = false;
 $('.sidebar-scroll').inert = true; $('.loop-controls').inert = true;
 const outputStatus = connected => { $('#output-status').textContent = connected ? 'Live output connected' : 'Output offline'; $('#output-status').dataset.connected = String(connected); };
-const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, clips, duration: clock.duration, settings: state }, playback: playbackSnapshot(clock, performance.now()), liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
+const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, clips, duration: clock.duration, settings: state }, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
 const livePublisher = createLivePublisher(from => {
   if (!stroke) return null;
   const elapsed = Math.max(performance.now() - stroke.started, stroke.samples.at(-1).t);
   const circle = layers[stroke.targets[0]].circle;
   if (circle) circle.update(performance.now());
-  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
+  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
 }, outputStatus);
+
+const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view }), outputStatus);
 
 function fitLoop() {
   const required = Math.ceil(minimumLoop(clips) / 500) * 500;
@@ -165,6 +174,8 @@ function rebuildCache() {
   scene.setProject({ clips, duration: clock.duration });
   $('#layer-count').textContent = String(clips.length);
   if (!clips.some(clip => clip.id === selectedLayerId)) selectedLayerId = null;
+  refreshSelectedLayer = () => {};
+  if ($('#tab-layer').getAttribute('aria-selected') === 'true' && selectedLayerId !== colorContext.id) colorContext = { id: selectedLayerId, field: 'fill' };
   shell.clearSelectionProperties();
   $('#layer-empty').hidden = clips.length > 0;
   $('.canvas-empty').hidden = clips.length > 0 || Boolean(stroke);
@@ -316,6 +327,7 @@ function rebuildCache() {
       }
     });
     const color = document.createElement('input'); color.className = 'layer-color'; color.type = 'color'; color.setAttribute('aria-label', `Layer ${index + 1} color`);
+    color.addEventListener('click', event => { event.preventDefault(); colorContext = { id: clip.id, field: 'fill' }; syncFloatingColor(); colorPanel.open(); });
     color.addEventListener('input', () => update(item => pickLayerColor(hasSampleColor(item) ? { ...item, colorEditMode: 'color' } : item, color.value)));
     const remove = document.createElement('button'); remove.className = 'layer-remove'; remove.innerHTML = icon('trash'); remove.setAttribute('aria-label', `Delete layer ${index + 1} `);
     remove.addEventListener('click', () => {
@@ -362,6 +374,7 @@ function rebuildCache() {
       const range = trimRange(item), startMs = Math.round(range.in), endMs = Math.max(startMs + 1, Math.round(range.out));
       return { ...item, colorEditMode: colorMode.value, ...(colorMode.value === 'firework' && !item.fireworkColorTo ? { fireworkColorTo: item.color } : {}), ...(colorMode.value === 'gradient' && !item.colorGradient ? { colorGradient: { to: item.color.toLowerCase() === '#ffffff' ? '#4898ff' : '#ffffff', startMs, endMs } } : {}) };
     }));
+    colorB.addEventListener('click', event => { event.preventDefault(); colorContext = { id: clip.id, field: 'second' }; syncFloatingColor(); colorPanel.open(); });
     colorB.addEventListener('input', () => update(item => hasFireworkColor(item) ? { ...item, fireworkColorTo: colorB.value } : { ...item, colorGradient: { ...item.colorGradient, to: colorB.value } }));
     lightness.addEventListener('input', () => update(item => editLayerLightness(item, Number(lightness.value))));
     const gradientTiming = section('COLOR TRANSITION'); gradientTiming.classList.add('layer-gradient-timing');
@@ -390,10 +403,10 @@ function rebuildCache() {
     shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => ({ ...item, shape: shape.value }), true)); geometry.append(shape);
     const sizes = section(shape.value === 'rect' ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
     if (shape.value === 'rect') {
-      for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, 320, 1, (item, value) => resizeDimension(item, axis, bound, value));
+      for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeDimension(item, axis, bound, value));
       number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => ({ ...item, angle: value, followDirection: false }), '°');
-    } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, 320, 1, (item, value) => resizeGesture(item, bound, value));
-    if (shape.value === 'ring') number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, 160, 1, (item, value) => ({ ...item, ringWidth: value }));
+    } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeGesture(item, bound, value));
+    if (shape.value === 'ring') number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
@@ -411,7 +424,7 @@ function rebuildCache() {
     blending.append(blendLabel, ratioLabel);
     const effectsPanel = document.createElement('section'); effectsPanel.className = 'layer-effects';
     const effectsHeading = document.createElement('h3'); effectsHeading.textContent = 'Effects'; effectsPanel.append(effectsHeading);
-    for (const [key, title, amountKey] of [['blur', 'Blur', 'blurRadius'], ['glitch', 'Glitch', 'glitchAmount'], ['chromatic', 'Chromatic aberration', 'chromaticAmount']]) {
+    for (const [key, title, amountKey] of [['blur', 'Blur', 'blurRadius']]) {
       const effect = document.createElement('div'); effect.className = 'layer-effect';
       const label = document.createElement('label'); label.className = 'effect-switch';
       const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.setAttribute('aria-label', `Layer ${index + 1} ${title}`);
@@ -440,8 +453,10 @@ function rebuildCache() {
     body.hidden = false;
     $('#layer-list').prepend(row);
     if (clip.id === selectedLayerId) shell.showLayer(clip.id, body, false);
-    sync.forEach(fn => fn()); trimTrackObserver?.observe(track);
+    refreshSelectedLayer = () => sync.forEach(fn => fn());
+    refreshSelectedLayer(); trimTrackObserver?.observe(track);
   });
+  syncFloatingColor();
   $('#layer-list').scrollTop = listScrollTop;
   historyUI();
   syncLayerDisclosure();
@@ -456,7 +471,7 @@ function restoreHistory(direction) {
   const project = history[direction]();
   if (!project) return;
   const playback = playbackSnapshot(clock, performance.now());
-  applyProject(project, playback); liveRevision++;
+  applyProject({ ...project, settings: { ...project.settings, view: state.view, colorPanelVisible: state.colorPanelVisible } }, playback); liveRevision++;
   queueSave(true, false); historyUI(); publisher.publish(true);
 }
 $('#undo').addEventListener('click', () => restoreHistory('undo'));
@@ -515,7 +530,7 @@ function flushSave() {
 function cacheStroke(current, now) {
   const duration = Math.max(now - current.started, current.samples.at(-1).t);
   if (current.samples.at(-1).t < duration) current.samples.push({ ...current.last, t: duration });
-  clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, angle: current.angle, followDirection: false, color: current.color, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
+  clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, angle: current.angle, followDirection: false, color: current.color, opacity: current.opacity, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
   const required = Math.ceil(minimumLoop(clips) / 1000) * 1000;
   if (clock.duration < required) {
     clock.resize(required, now);
@@ -552,6 +567,7 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
+  painting.setView(state.view);
   painting.draw(index, phase, { now, placementPreview: !clock.playing });
 }
 function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
@@ -561,6 +577,7 @@ function animate(now) {
   if (frame !== animationFrame) {
     animationFrame = frame;
     if (stroke) livePublisher.publish(now);
+    if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
     for (let i = 0; i < canvases.length; i++) if ((clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
     timelineUI(now);
   }
@@ -570,7 +587,7 @@ renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas) {
   const pressure = state.pressure && event.pointerType === 'pen' ? (Number.isFinite(event.pressure) ? Math.max(0, Math.min(1, event.pressure)) : 0.5) : 1;
   const geometry = state.shape === 'rect' ? { shape: 'rect', width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
-  return { ...canvasPoint(event, canvas.getBoundingClientRect()), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
+  return { ...screenToWorld(canvasPoint(event, canvas.getBoundingClientRect()), state.view), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
 }
 function drawPoint(pointValue) {
   if (stroke.mode === 'move') layers[0].circle.setTarget(pointValue);
@@ -584,20 +601,44 @@ function samplePoint(next) {
 }
 function endStroke(event) {
   if (!stroke || (event && event.pointerId !== stroke.pointerId)) return;
-  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...canvasPoint(event, stroke.canvas.getBoundingClientRect()) });
+  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...screenToWorld(canvasPoint(event, stroke.canvas.getBoundingClientRect()), state.view) });
   const current = stroke; stroke = null; liveRevision++;
   if (current.canvas.hasPointerCapture(current.pointerId)) current.canvas.releasePointerCapture(current.pointerId);
   const now = performance.now(); cacheStroke(current, now);
   publisher.publish();
   renderTargets([0], now, true);
 }
+function syncViewUI() {
+  const percent = `${Math.round(state.view.scale * 100)}%`;
+  $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset zoom and position`;
+  painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
+}
+function changeView(view) {
+  state.view = canvasView(view); viewRevision++; syncViewUI(); viewDirty = true;
+}
+function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
+function cancelTouchStroke() {
+  if (!stroke || stroke.pointerType !== 'touch') { endStroke(null); return; }
+  const current = stroke; stroke = null; liveRevision++;
+  current.targets.forEach(index => layers[index].circle = null);
+  if (!current.wasPlaying) { clock.seek(current.start, performance.now()); clock.pause(performance.now()); playbackUI(); }
+  $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now(), true);
+}
+$('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
+for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(state.view, state.view.scale * factor, { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 })); finishView(); });
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
-    if (event.pointerType === 'touch' && !state.touch) { if (!stroke) selectCanvas(index); return; }
+    if (event.pointerType === 'touch') {
+      if (!ready || trimDrag) return;
+      event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+      const started = pinch.down(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()), state.view);
+      if (started) cancelTouchStroke();
+      if (pinch.blocked || !state.touch) return;
+    }
     if (!ready || stroke || trimDrag || event.button !== 0) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, canvas, targets: state.sync ? [0] : [index], color: state.color, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...DEFAULT_EFFECTS }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: point(event, canvas), started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: point(event, canvas), started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
     history.endGroup(); historyUI();
     if (stroke.mode === 'move') {
@@ -607,10 +648,16 @@ canvases.forEach((canvas, index) => {
     $('.canvas-empty').hidden = true; drawPoint(stroke.last); renderTargets(stroke.targets, now, true); if (!wasPlaying) publisher.publish(); livePublisher.publish();
   });
   canvas.addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch') {
+      const view = pinch.move(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()));
+      if (view) changeView(view);
+      if (pinch.blocked || !state.touch) { event.preventDefault(); return; }
+    }
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
-    const scale = canvas.getBoundingClientRect().width / CANVAS_WIDTH;
-    cursor.style.left = `${cursorPoint.x / CANVAS_WIDTH * 100}%`; cursor.style.top = `${cursorPoint.y / CANVAS_HEIGHT * 100}%`;
+    const scale = canvas.getBoundingClientRect().width / CANVAS_WIDTH * state.view.scale;
+    const cursorScreen = worldToScreen(cursorPoint, state.view);
+    cursor.style.left = `${cursorScreen.x / CANVAS_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / CANVAS_HEIGHT * 100}%`;
     cursor.style.width = `${Math.max(3, (cursorPoint.width ?? cursorPoint.size) * scale)}px`;
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
     cursor.style.borderRadius = state.shape === 'rect' ? '0' : '50%';
@@ -621,7 +668,17 @@ canvases.forEach((canvas, index) => {
     for (const sample of coalesced.length ? coalesced : [event]) samplePoint(point(sample, canvas));
     renderTargets(stroke.targets);
   });
-  canvas.addEventListener('pointerup', endStroke); canvas.addEventListener('pointercancel', endStroke); canvas.addEventListener('lostpointercapture', endStroke);
+  const finishPointer = event => {
+    if (event.pointerType === 'touch' && pinch.up(event.pointerId)) { if (!pinch.points.size) finishView(); return; }
+    endStroke(event);
+  };
+  canvas.addEventListener('pointerup', finishPointer); canvas.addEventListener('pointercancel', finishPointer); canvas.addEventListener('lostpointercapture', finishPointer);
+  canvas.addEventListener('wheel', event => {
+    if (!event.ctrlKey || !ready || trimDrag) return;
+    event.preventDefault(); endStroke(null);
+    changeView(zoomAt(state.view, state.view.scale * Math.exp(-event.deltaY * .01), canvasPoint(event, canvas.getBoundingClientRect())));
+    clearTimeout(zoomSaveTimer); zoomSaveTimer = setTimeout(finishView, 150);
+  }, { passive: false });
   canvas.addEventListener('contextmenu', event => event.preventDefault()); canvas.addEventListener('focus', () => selectCanvas(index));
 });
 $('#pressure').addEventListener('change', event => { state.pressure = event.target.checked; queueSave(); });
@@ -649,11 +706,11 @@ function syncShapeUI() {
 }
 function setShape(shape) { if (!ready || trimDrag) return; endStroke(null); state.shape = shape; syncShapeUI(); queueSave(); }
 $('#shape').addEventListener('change', event => setShape(event.target.value));
-$('#ring-width').addEventListener('input', event => { if (!event.target.value) return; state.ringWidth = Math.max(1, Math.min(160, Math.round(Number(event.target.value)))); syncShapeUI(); queueSave(); });
+$('#ring-width').addEventListener('input', event => { if (!event.target.value) return; state.ringWidth = Math.max(1, Math.min(MAX_RING_WIDTH, Math.round(Number(event.target.value)))); syncShapeUI(); queueSave(); });
 for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) {
   const update = raw => {
     if (raw === '' || !Number.isFinite(Number(raw))) return;
-    const value = Math.max(1, Math.min(320, Math.round(Number(raw)))); state[`${axis}${bound}`] = value;
+    const value = Math.max(1, Math.min(MAX_BRUSH_SIZE, Math.round(Number(raw)))); state[`${axis}${bound}`] = value;
     if (state[`${axis}Min`] > state[`${axis}Max`]) state[`${axis}${bound === 'Min' ? 'Max' : 'Min'}`] = value;
     syncShapeUI(); queueSave();
   };
@@ -664,10 +721,28 @@ $('#shape-angle').addEventListener('input', event => {
   if (event.target.value === '' || !Number.isFinite(Number(event.target.value))) return;
   state.angle = Math.max(-180, Math.min(180, Math.round(Number(event.target.value)))); syncShapeUI(); queueSave();
 });
-function setColor(color) {
-  state.color = color; $('#color').value = color; $('#color-value').textContent = color.toUpperCase(); queueSave();
+function syncFloatingColor() {
+  const clip = clips.find(item => item.id === colorContext.id);
+  if (!clip) colorContext = { id: null, field: 'fill' };
+  const second = clip && colorContext.field === 'second';
+  colorPanel.setColor(clip ? (second ? (hasFireworkColor(clip) ? clip.fireworkColorTo : clip.colorGradient?.to) ?? clip.color : clip.color) : state.color, clip ? clip.opacity ?? 1 : state.opacity, clip ? `Layer ${String(clips.indexOf(clip) + 1).padStart(2, '0')}${second ? ' · B' : ''}` : 'Brush');
 }
-$('#color').addEventListener('input', event => setColor(event.target.value));
+function editFloatingColor(color, opacity) {
+  if (!ready || stroke || trimDrag) { syncFloatingColor(); return; }
+  const clip = clips.find(item => item.id === colorContext.id);
+  if (!clip) { state.color = color; state.opacity = opacity; }
+  else {
+    clips = clips.map(item => item.id !== clip.id ? item : editLayer(item, 'all', value => {
+      let next = { ...value, opacity };
+      if (colorContext.field === 'second') next = hasFireworkColor(value) ? { ...next, fireworkColorTo: color } : { ...next, colorGradient: { ...value.colorGradient, to: color } };
+      else if (color !== value.color) next = pickLayerColor(hasSampleColor(value) ? { ...next, colorEditMode: 'color' } : next, color);
+      return next;
+    }));
+    scene.setProject({ clips, duration: clock.duration }); refreshSelectedLayer(); renderTargets([0], performance.now(), true);
+  }
+  syncFloatingColor(); queueSave();
+}
+function setColor(color) { state.color = color; syncFloatingColor(); queueSave(); }
 $('#play').addEventListener('click', () => {
   endStroke(null); const now = performance.now();
   if (clock.playing) clock.pause(now); else clock.play(now);
@@ -693,7 +768,14 @@ $('#loop-duration').addEventListener('change', event => {
   clock.resize(Math.max(minimum, seconds * 1000), performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
   if (seconds * 1000 < minimum) toast(`These layers need at least ${minimum / 1000}s to finish their motion.`);
 });
-function syncEffectsUI() { $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000; }
+function syncEffectsUI() {
+  $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
+  $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
+  $('#draw-blur-radius').disabled = $('#draw-blur-range').disabled = !state.effects.blur;
+}
+$('#draw-blur').addEventListener('change', event => { state.effects = { ...state.effects, blur: event.target.checked }; syncEffectsUI(); queueSave(); });
+const setBrushBlur = event => { if (event.target.value === '') return; state.effects = { ...state.effects, blurRadius: Math.max(0, Math.min(192, Math.round(Number(event.target.value)))) }; syncEffectsUI(); queueSave(); };
+$('#draw-blur-radius').addEventListener('input', setBrushBlur); $('#draw-blur-range').addEventListener('input', setBrushBlur);
 function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
@@ -763,6 +845,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
+    viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);
     syncSizeUI(); syncShapeUI(); syncEffectsUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
     const now = performance.now(); clock.resize(project.duration, now); clock.seek(playback.phase, now);
