@@ -1,6 +1,6 @@
 // A shared layer keeps one stack position. Eye overrides contain only differences
 // from the shared settings, so BOTH edits can preserve unrelated eye adjustments.
-export const EYE_FIELDS = ['mode', 'procedural', 'blendMode', 'mixAmount', 'trimIn', 'trimOut', 'edgeColor', 'edgeWidth', 'color', 'colorBase', 'colorLightness', 'colorEditMode', 'colorGradient', 'fireworkColorTo', 'enabled', 'samples', 'duration', 'start', 'fadeMs', 'fadeInMs', 'holdMs', 'fadeOutMs', 'shape', 'angle', 'followDirection', 'sizeRange', 'diameterRange', 'widthRange', 'heightRange'];
+export const EYE_FIELDS = ['mode', 'procedural', 'blendMode', 'mixAmount', 'trimIn', 'trimOut', 'edgeColor', 'edgeWidth', 'color', 'colorBase', 'colorLightness', 'colorEditMode', 'colorGradient', 'fireworkColorTo', 'enabled', 'samples', 'duration', 'start', 'fadeMs', 'fadeInMs', 'holdMs', 'fadeOutMs', 'shape', 'ringWidth', 'effects', 'angle', 'followDirection', 'sizeRange', 'diameterRange', 'widthRange', 'heightRange'];
 function baseLayer(clip) { const { eyeOverrides, editScope, ...base } = clip; return base; }
 export function resolveLayer(clip, side) { return { ...baseLayer(clip), ...(clip.eyeOverrides?.[side] ?? {}), targets: [side] }; }
 export function layerVariants(clip) {

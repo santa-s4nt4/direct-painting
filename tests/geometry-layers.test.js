@@ -6,7 +6,7 @@ import { dimensionRange, resizeDimension, prepareShapeClip } from '../src/geomet
 import { editLayer, resolveLayer, layerVariants, moveLayer, removeLayerSides } from '../src/layers.js';
 import { CachedGesture, gestureLength, gestureOpacity, minimumLoop, validateProject } from '../src/loop.js';
 import { RGBAScene } from '../src/rgba.js';
-import { serializeProject, parseProject } from '../src/project.js';
+import { normalizeProject, serializeProject, parseProject } from '../src/project.js';
 import { validateLive } from '../server/loop-relay.js';
 import { LiveDrawing } from '../src/live.js';
 
@@ -85,7 +85,7 @@ test('visibility, stack order, eye overrides and geometry survive editable JSON 
   layers = moveLayer(layers, 'one', 1); renderer = new RGBAScene(project(layers));
   assert.deepEqual(pixel(renderer.draw(0, 0)), [255, 0, 0, 255]); assert.equal(moveLayer(layers, 'one', 1), layers);
   const restored = parseProject(serializeProject(project(layers), { playing: false, phase: 1234 }));
-  assert.deepEqual(restored.project.clips, layers); assert.equal(restored.playback.phase, 1234);
+  assert.deepEqual(restored.project.clips, normalizeProject(project(layers)).clips); assert.equal(restored.playback.phase, 1234);
   assert.deepEqual(pixel(new RGBAScene(restored.project).draw(1, 0)), [255, 0, 0, 255]);
 });
 
@@ -103,7 +103,7 @@ test('new geometry, placement, settings and scoped edits are validated before im
   const good = clip({ mode: 'place', duration: 0, shape: 'rect', samples: [{ x: 100, y: 100, size: 20, width: 50, height: 10, t: 0 }] });
   assert.equal(validateProject(project([good])).clips[0].mode, 'place');
   for (const patch of [{ duration: 100 }, { enabled: 'yes' }, { targets: [0, 0] }, { targets: [0], editScope: '1' }, { eyeOverrides: { 1: { enabled: 'no' } } }, { holdMs: -1 }, { fadeInMs: -1 }, { angle: Infinity }, { shape: 'triangle' }, { eyeOverrides: { 2: { color: '#ffffff' } } }, { eyeOverrides: { 0: { samples: [] } } }, { eyeOverrides: { 1: { color: 'invalid' } } }]) assert.throws(() => validateProject(project([{ ...good, ...patch }])));
-  for (const settings of [{ widthMin: 120, widthMax: 20 }, { heightMin: 0 }, { followDirection: 'yes' }, { showBlurPreview: 1 }, { shape: 'oval' }, { fadeOutMs: -1 }]) assert.throws(() => parseProject(JSON.stringify({ ...project([good]), settings })));
+  for (const settings of [{ widthMin: 120, widthMax: 20 }, { heightMin: 0 }, { followDirection: 'yes' }, { ringWidth: 0 }, { shape: 'oval' }, { fadeOutMs: -1 }]) assert.throws(() => parseProject(JSON.stringify({ ...project([good]), settings })));
 });
 
 test('live PLACE and rectangle streams keep shape geometry and draw without a moving path', () => {

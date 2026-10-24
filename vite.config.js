@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import { createServer, request as proxyRequest } from 'node:http';
 import { resolve } from 'node:path';
 import { createLoopRelay } from './server/loop-relay.js';
-import { createRGBAExports } from './server/rgba-export.js';
 import { connectionInfo } from './server/network.js';
 
 const editorPort = Number(process.env.DIRECT_PAINTING_EDITOR_PORT || 5180);
@@ -10,12 +9,13 @@ const outputPort = Number(process.env.DIRECT_PAINTING_OUTPUT_PORT || 5181);
 
 function outputs() {
   async function attach(server) {
-    const exports = createRGBAExports();
-    server.middlewares.use((request, response, next) => { exports.middleware(request, response, next).catch(next); });
-    server.httpServer.once('close', () => { void exports.dispose(); });
     const relay = await createLoopRelay(process.env.DIRECT_PAINTING_CACHE_FILE || resolve(server.config.root, '.direct-painting/loop.json'));
     server.httpServer.once('close', () => relay.dispose());
     server.middlewares.use((request, response, next) => { relay(request, response, next).catch(next); });
+    server.middlewares.use((request, response, next) => {
+      if (!request.url?.startsWith('/api/')) return next();
+      response.writeHead(404, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: 'API not found' }));
+    });
     const mirror = createServer((request, response) => {
       const port = server.httpServer.address()?.port;
       if (!port) { response.writeHead(503); response.end(); return; }

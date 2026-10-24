@@ -85,7 +85,7 @@ test('arbitrary lengths scale the same colored rain keyframes without exceeding 
   }
 });
 
-test('per-drop colors render as exact LED cells, survive trim and permit fixed fill and edge overrides', () => {
+test('per-drop colors render as exact LED cells, survive trim and permit fixed fill overrides', () => {
   const clip = base.clips.find(clip => sampleAt(clip.samples, 400).active), project = value => ({ version: 1, duration: 10000, clips: [value] });
   assert.equal(clip.colorEditMode, 'sample');
   const scene = new RGBAScene(project(clip));
@@ -100,7 +100,7 @@ test('per-drop colors render as exact LED cells, survive trim and permit fixed f
   }
   const point = sampleAt(clip.samples, 400);
   const edge = new RGBAScene(project({ ...clip, edgeColor: '#ffffff', edgeWidth: 2 })).draw(0, 400);
-  assert.deepEqual(pixel(edge, point.x - 5, point.y), [255, 255, 255, 255]);
+  assert.deepEqual(pixel(edge, point.x - 5, point.y), [...rgb(point.color), 255]);
   assert.deepEqual(pixel(edge, point.x, point.y), [...rgb(point.color), 255]);
   assert.equal(colorAtTime({ ...clip, colorEditMode: 'color', color: '#123456' }, 0, point), '#123456');
   const trimmed = new RGBAScene(project(trimGesture(clip, 'in', 200, 10000)));
@@ -158,7 +158,7 @@ test('the untouched previous color-rain snippet upgrades without replacing its c
   const clips = p5Clips({ tracks }, { source, settings: DEFAULT_SETTINGS, id: 'legacy-rain', targets: [0, 1], mode: 'move' });
   const restored = normalizeProject({ version: 1, duration: 10000, clips, settings: { p5Preset: 'colorRain', p5Code: source.code } });
   assert.equal(restored.settings.p5Code, P5_PRESETS.colorRain);
-  assert.equal(hash(restored.clips), hash(clips));
+  assert.equal(hash(restored.clips.map(({ blendMode, effects, ...clip }) => clip)), hash(clips));
   const custom = LEGACY_COLOR_RAIN_CODE + '\n// custom';
   assert.equal(upgradeP5Code(custom), custom);
 });

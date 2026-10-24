@@ -10,7 +10,7 @@ out vec2 localPoint;
 flat out vec2 brushSize;
 flat out vec3 info;
 void main() {
-  bool rect = appearance.y > .5;
+  bool rect = appearance.y > .5 && appearance.y < 1.5;
   vec2 center = floor(brush.xy) + (rect ? vec2(0.) : mod(brush.zw, 2.) * .5);
   vec2 extent = rect ? vec2(length(brush.zw) * .5 + 1.) : brush.zw * .5;
   localPoint = position.xy * extent * 2.;
@@ -34,14 +34,14 @@ uniform float edgeSize;
 out vec4 result;
 ${footprint}
 void main() {
-  bool rect = info.y > .5;
+  bool rect = info.y > .5 && info.y < 1.5;
   float c = cos(info.x), s = sin(info.x);
   vec2 p = rect ? vec2(c*localPoint.x+s*localPoint.y, -s*localPoint.x+c*localPoint.y) : localPoint;
   if (footprint(p,brushSize,rect) < .5) discard;
-  float paint = footprint(p, brushSize - edgeSize*2., rect) > .5 ? 1. : .5;
+  if (info.y > 1.5 && footprint(p, brushSize - edgeSize*2., false) > .5) discard;
   float time = min(16777215., floor(max(0.,info.z)*4.+.5)+1.);
   vec3 encoded = vec3(floor(time/65536.), floor(mod(time,65536.)/256.), mod(time,256.));
-  result = vec4(encoded/255., paint);
+  result = vec4(encoded/255., 1.);
 }`;
 export const layerVertex = `
 precision highp float;
@@ -61,7 +61,6 @@ uniform vec2 resolution;
 uniform vec4 bounds;
 uniform sampler2D maskTexture;
 uniform vec3 fillColor;
-uniform vec3 edgeColor;
 uniform float sourceTime;
 uniform float layerOpacity;
 uniform int trail;
@@ -72,7 +71,7 @@ uniform float edgeSize;
 out vec4 result;
 ${footprint}
 vec4 layerColor() {
-  float alpha = layerOpacity, paint;
+  float alpha = layerOpacity;
   if (directShape > 0) {
     bool rect = directShape == 2;
     vec2 center = floor(directBrush.xy) + (rect ? vec2(0.) : mod(directBrush.zw,2.)*.5);
@@ -80,24 +79,23 @@ vec4 layerColor() {
     float c = cos(directAngle), s = sin(directAngle);
     if (rect) p = vec2(c*p.x+s*p.y,-s*p.x+c*p.y);
     if (footprint(p,directBrush.zw,rect) < .5) return vec4(0.);
-    paint = footprint(p,directBrush.zw-edgeSize*2.,rect) > .5 ? 1. : .5;
+    if (directShape == 3 && footprint(p,directBrush.zw-edgeSize*2.,false) > .5) return vec4(0.);
   } else {
     vec2 uv = (pixel-bounds.xy)/bounds.zw; uv.y=1.-uv.y;
     vec4 mask = texture(maskTexture,uv);
     if (mask.a < .1) return vec4(0.);
-    paint = mask.a;
     if (trail == 1) {
       float time = (dot(round(mask.rgb*255.),vec3(65536.,256.,1.))-1.)*.25;
       float fade = max(0.,1.-max(0.,sourceTime-time)/1800.);
       alpha *= floor(fade*fade*255.+.5)/255.;
     }
   }
-  return vec4(paint>.75 ? fillColor : edgeColor,alpha);
+  return vec4(fillColor,alpha);
 }`;
 export const normalFragment = `${layerSource}
 void main() { vec4 paint=layerColor(); result=vec4(paint.rgb*paint.a,paint.a); }
 `;
-export const analogFragment = `${layerSource}
+const analogComposite = `
 uniform sampler2D belowTexture;
 uniform float mixAmount;
 ${spectral}
@@ -112,6 +110,32 @@ void main() {
   }
   result=vec4(paint.rgb*paint.a+below.rgb*(1.-paint.a),paint.a+below.a*(1.-paint.a));
 }`;
+export const analogFragment = layerSource + analogComposite;
+export const effectFragment = `
+precision highp float;
+in vec2 pixel;
+uniform vec2 resolution;
+uniform sampler2D image;
+uniform float sourceTime;
+uniform float glitchAmount;
+uniform float chromaticAmount;
+out vec4 result;
+vec4 readPaint(vec2 p) {
+  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,resolution))) return vec4(0.);
+  return texture(image,vec2(p.x/resolution.x,1.-p.y/resolution.y));
+}
+vec4 layerColor() {
+  float band=floor(pixel.y/24.), tick=floor(max(0.,sourceTime)/90.);
+  float hash=mod((band+1.)*37.+(tick+1.)*17.,101.);
+  float shift=hash<27. ? floor((hash/13.-1.)*glitchAmount+.5) : 0.;
+  vec2 p=pixel-vec2(shift,0.);
+  vec4 center=readPaint(p);
+  vec4 red=readPaint(p-vec2(chromaticAmount,0.));
+  vec4 blue=readPaint(p+vec2(chromaticAmount,0.));
+  float alpha=max(center.a,max(red.a,blue.a));
+  return alpha>0. ? vec4(vec3(red.r,center.g,blue.b)/alpha,alpha) : vec4(0.);
+}
+` + analogComposite;
 export const screenVertex = `
 precision highp float;
 in vec3 position;
@@ -150,6 +174,11 @@ uniform vec2 direction;
 out vec4 result;
 void main() {
   vec4 sum=vec4(0.); float total=0.;
-  for (int i=-4;i<=4;i++) { float weight=exp(-float(i*i)/8.); sum+=texture(image,texCoord+direction*float(i))*weight; total+=weight; }
+  for (int i=-16;i<=16;i++) {
+    float weight=exp(-float(i*i)/128.);
+    vec2 uv=texCoord+direction*float(i);
+    if (all(greaterThanEqual(uv,vec2(0.))) && all(lessThanEqual(uv,vec2(1.)))) sum+=texture(image,uv)*weight;
+    total+=weight;
+  }
   result=sum/total;
 }`;

@@ -1,5 +1,5 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './canvas.js';
-import { brushSize, DEFAULT_EDGE_WIDTH } from './drawing.js';
+import { brushSize } from './drawing.js';
 import { LED_RAIN_CODE } from './p5-rain.js';
 import { LED_COLOR_RAIN_CODE } from './p5-color-rain.js';
 import { LEGACY_COLOR_RAIN_CODE } from './p5-color-rain-legacy.js';
@@ -104,7 +104,7 @@ export function p5Clip(samples, { source, settings, id, targets, start = 0, mode
   return {
     id, targets, mode, start, enabled: true, color: fireworks ? settings.p5FireworkColorA ?? settings.color : sampleColor ?? settings.color, shape: settings.shape, angle: settings.angle, followDirection: false,
     ...(fireworks ? { colorEditMode: 'firework', fireworkColorTo: settings.p5FireworkColorB ?? settings.color } : sampleColor ? { colorEditMode: 'sample' } : {}),
-    edgeWidth: DEFAULT_EDGE_WIDTH, fadeMs: settings.fadeMs, sizeRange: { min: settings.minSize, max: settings.maxSize },
+    fadeMs: settings.fadeMs, sizeRange: { min: settings.minSize, max: settings.maxSize },
     duration: source.durationMs, trimIn: 0, trimOut: source.durationMs, procedural: { ...source },
     samples: samples.map(sample => ({ ...sample, size: Math.round(sample.size ?? brushSize(settings.minSize, settings.maxSize, sample.pressure, 'pen', true)), ...(settings.shape === 'rect' ? { shape: 'rect', width: Math.round(sample.width ?? brushSize(settings.widthMin, settings.widthMax, sample.pressure, 'pen', true)), height: Math.round(sample.height ?? brushSize(settings.heightMin, settings.heightMax, sample.pressure, 'pen', true)), angle: settings.angle, heading: 0 } : {}) })),
   };

@@ -48,7 +48,7 @@ test('sequence regeneration is seeded and individual tracks reproduce the full s
 test('rain stays editable through JSON, diameter/dimension edits and silent loop boundaries', () => {
  const p=normalizeProject({version:1,duration:10000,clips,settings:{motionSource:'p5',p5Code:source.code}});
  const file=serializeProject(p,{playing:false,phase:8500});assert.ok(Buffer.byteLength(file)<MAX_PROJECT_BYTES);const restored=parseProject(file).project;
- assert.equal(hash(restored.clips),hash(clips));assert.equal(restored.clips[17].procedural.trackIndex,17);assert.equal(restored.clips[17].procedural.label,'RAIN R 02');
+ assert.equal(hash(restored.clips),hash(p.clips));assert.equal(restored.clips[17].procedural.trackIndex,17);assert.equal(restored.clips[17].procedural.label,'RAIN R 02');
  const resized=resizeDimension(resizeGesture(clips[0],'max',12),'width','max',12);assert.equal(resized.samples[0].width,12);assert.equal(resized.samples[0].size,12);assert.equal(resized.samples[0].step,true);
  assert.throws(()=>normalizeProject({...p,clips:[{...clips[0],samples:clips[0].samples.map(s=>({...s,active:'yes'}))}]}));
  assert.throws(()=>sequenceTracks(sequence,new MotionP5(7),{...source,trackIndex:63}));

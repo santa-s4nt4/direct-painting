@@ -5,27 +5,30 @@
 
 The default backend is Three.js `WebGLRenderer` (WebGL2). `CPUPaintingRenderer`
 keeps the previous rendering path for devices without a working WebGL2 context.
-Server video export continues using the deterministic `RGBAScene` reference;
+The deterministic `RGBAScene` remains a test reference;
 interactive rendering never reads GPU pixels back into CPU memory.
 
 ## GPU passes
 
 1. `StampCursor` advances through new source samples only. Instanced quads stamp
-   shape coverage, fill/edge identity and relative visit time into a cropped RGBA8
+   shape coverage and relative visit time into a cropped RGBA8
    render target. Each texel records the latest visit, so overlapping marks do
    not build up alpha and held Trail heads stay bright.
-2. Normal layers use premultiplied-alpha GPU blending. Trail fading, Return
-   opacity, gradients and independent edge colors are shader/uniform operations.
-3. Analog layers use the official Spectral.js GLSL port and two render targets.
-   Transparent background pixels are not treated as black pigment.
-4. Blur preview runs as downsampled separable GPU passes. Export/output stays
-   sharp. The GPU Gaussian approximation can differ slightly from the CPU's
-   three-box preview near boundaries.
+2. Every layer uses Analog pigment mixing with the official Spectral.js GLSL
+   port and two alternating accumulation targets. Transparent pixels are not
+   treated as black pigment. There is no independent edge color.
+3. Enabled effects render the isolated layer into a shared premultiplied RGBA
+   target. Blur uses quarter-resolution separable Gaussian passes; glitch and
+   chromatic channel offsets run in the final compositor. Scratch targets are
+   warmed once and reused across layers. Effects do not invalidate stroke masks.
+4. Effect animation uses source time, so pause, seek and remote output agree.
+   Blur defaults to 64px ON; glitch and chromatic aberration default OFF. CPU
+   fallback has an alpha-aware three-box approximation without Canvas2D.filter.
 5. The composited painting texture is presented by an ordinary Three.js plane.
 
 The live mask is allocated/warmed once on startup. Existing cached masks stay on
 GPU across strokes, loops, color/timing/visibility changes and layer reordering.
-Only source geometry or edge-width changes invalidate a layer mask. Unused
+Only source geometry or ring-width changes invalidate a layer mask. Unused
 masks are evicted above a 96 MiB cache budget; currently active masks are retained
 so a dense visible scene cannot cause repeated eviction/reallocation each frame.
 GPU context restoration rebuilds masks from original samples.

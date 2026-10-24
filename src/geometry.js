@@ -12,9 +12,9 @@ export function resizeDimension(clip, axis, bound, value) {
   return { ...clip, [`${axis}Range`]: range, samples: clip.samples.map((sample, index) => ({ ...sample, [key]: positions[index], [axis]: Math.round(range.min + (range.max - range.min) * positions[index]) })) };
 }
 export function prepareShapeClip(clip) {
-  if (clip.shape !== 'rect' && !clip.samples.some(sample => sample.shape === 'rect')) return clip;
-  return { ...clip, samples: clip.samples.map(sample => clip.shape === 'rect' ? { ...sample, shape: 'rect', width: sample.width ?? sample.size, height: sample.height ?? sample.size, angle: clip.angle ?? 0 } : { ...sample, shape: 'circle' }) };
+  if (!clip.shape) return clip;
+  return { ...clip, samples: clip.samples.map(sample => ({ ...sample, shape: clip.shape, ...(clip.shape === 'rect' ? { width: sample.width ?? sample.size, height: sample.height ?? sample.size, angle: clip.angle ?? 0 } : clip.shape === 'ring' ? { ringWidth: clip.ringWidth ?? 5 } : {}) })) };
 }
 export function renderSignature(clip) {
-  return JSON.stringify([clip.mode, clip.procedural?.kind, clip.shape, clip.color, clip.edgeColor, clip.edgeWidth, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
+  return JSON.stringify([clip.mode, clip.procedural?.kind, clip.shape, clip.ringWidth, clip.color, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
 }

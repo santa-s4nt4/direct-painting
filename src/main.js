@@ -2,28 +2,27 @@ import './style.css';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
 import { FPS, FRAME_MS, frameNumber } from './timing.js';
 import { setupEditorShell } from './editor-shell.js';
-import { DEFAULT_EDGE_WIDTH, edgeWidth, brushSize, canvasPoint, timestamp } from './drawing.js';
+import { brushSize, canvasPoint, timestamp } from './drawing.js';
 import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
-import { BLUR_RADIUS, MAX_BLUR_RADIUS } from './visuals.js';
+import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
 import { LoopClock, DEFAULT_LOOP_MS, minimumLoop, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
 import { createPublisher, createLivePublisher, playbackSnapshot } from './relay.js';
 import { loadProject, saveProject } from './cache.js';
 import { DEFAULT_SETTINGS, MAX_PROJECT_BYTES, normalizeProject, singleCanvasProject, serializeProject, parseProject } from './project.js';
 import { colorHSL, editLayerLightness, pickLayerColor, hasColorGradient, hasFireworkColor, hasSampleColor } from './color.js';
 import { dimensionRange, resizeDimension } from './geometry.js';
-import { resolveLayer, layerVariants, editLayer, removeLayerSides, moveLayer } from './layers.js';
+import { editLayer, removeLayerSides, moveLayer } from './layers.js';
 import { EditHistory } from './history.js';
-import { createImportPicker } from './import-picker.js';
 
 const icons = {
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
   eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>',
-  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
   undo: '<path d="m8 4-5 5 5 5M3 9h11a7 7 0 0 1 0 14"/>',
   redo: '<path d="m16 4 5 5-5 5M21 9H10a7 7 0 0 0 0 14"/>',
   trail: '<path d="M3 17c4 0 3-10 8-10h6"/><circle cx="19" cy="7" r="3"/>',
   return: '<path d="M5 8h10a6 6 0 0 1 0 12h-3M8 4 4 8l4 4"/>',
+  ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="5"/>',
   move: '<circle cx="12" cy="12" r="5"/>',
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
@@ -34,20 +33,12 @@ document.querySelector('#app').innerHTML = `
   <main>
     <section class="studio" data-mode="trail" aria-label="Motion canvases">
       <aside class="toolbar" aria-label="Drawing and loop controls">
-          <button id="export-loop" class="secondary-button">${icon('download')}<span id="export-label">EXPORT LOOP</span></button>
-          <label class="export-format-label" for="export-format">VIDEO FORMAT</label>
-          <select id="export-format" aria-label="Video export format"><option value="rgba">RGBA · PRORES MOV</option><option value="rgb">RGB · H.264 MP4</option></select>
           <button id="save-project" class="secondary-button">SAVE JSON</button>
           <button id="import-project" class="secondary-button">IMPORT JSON</button>
           <input id="import-file" type="file" accept=".json,application/json" hidden>
-          <span id="export-status" role="status"></span>
         <span id="output-status" role="status">CONNECTING OUTPUTS…</span>
         <button class="clear-button" id="clear" aria-label="Clear canvas">${icon('trash')}<span>CLEAR</span></button>
         <div class="control-section effect-controls">
-          <span class="section-label">BLUR PREVIEW</span>
-          <label class="checkbox-control"><input id="show-blur-preview" type="checkbox" checked><span>SHOW PREVIEW</span></label>
-          <div class="effect-value"><label for="blur-radius">RADIUS</label><output id="blur-value">${BLUR_RADIUS} px</output></div>
-          <input id="blur-radius" type="range" min="0" max="${MAX_BLUR_RADIUS}" step="1" value="${BLUR_RADIUS}" aria-label="Blur radius in pixels">
           <span class="section-label">RELEASE FADE</span>
           <div class="effect-value"><label for="fade-seconds">TIME</label><input id="fade-seconds" type="number" min="0.1" max="10" step="0.1" value="2" inputmode="decimal" aria-label="RETURN and MOVE fade time in seconds"><span>s</span></div>
           <input id="fade-range" type="range" min="0.1" max="10" step="0.1" value="2" aria-label="Release fade duration slider">
@@ -64,6 +55,7 @@ document.querySelector('#app').innerHTML = `
           <span class="section-label">SIZE RANGE</span>
           ${['min', 'max'].map((bound, i) => `<div class="size-bound"><label for="size-${bound}">${bound.toUpperCase()}</label><input id="size-${bound}" type="number" min="1" max="320" step="1" inputmode="numeric" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter in pixels"><span>px</span><input id="range-${bound}" type="range" min="1" max="320" step="1" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter slider"></div>`).join('')}
         </div>
+        <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="160" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
         <div class="control-section" id="rectangle-controls" hidden>
           ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="320" step="1" value="${i ? 100 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="320" step="1" value="${i ? 100 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
           <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div>
@@ -94,7 +86,7 @@ document.querySelector('#app').innerHTML = `
       </div>
       </div>
     </section>
-    <section id="recordings" class="recordings" hidden aria-label="Shared video exports"><div class="export-heading"><span class="section-label">EXPORTS</span><span id="shared-export-status" role="status"></span></div><div id="recording-list"></div></section>
+
   </main>
   <div class="history-actions" role="group" aria-label="Edit history">
     <button id="undo" class="secondary-button" disabled aria-label="Undo last edit" title="Undo (⌘/Ctrl Z)">${icon('undo')}<span>UNDO</span></button>
@@ -104,7 +96,7 @@ document.querySelector('#app').innerHTML = `
 `;
 
 const $ = selector => document.querySelector(selector);
-const shell = setupEditorShell({ icon, modes, modeHints, onMode: mode => setMode(mode) });
+const shell = setupEditorShell({ icon, modes, modeHints, onMode: mode => setMode(mode), onShape: shape => setShape(shape) });
 const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => {
   const label = document.querySelector('.fps-label');
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
@@ -114,9 +106,6 @@ const layers = [{ circle: null, lastFrame: -Infinity }];
 const state = { ...DEFAULT_SETTINGS };
 let stroke = null, trimDrag = null, toastTimer, dirty = false, selectedLayerId = null;
 const layerDisclosure = new Map();
-let session = null, finishing = false;
-const exportGroups = new Map();
-let exportLibraryTimer, libraryLoading = false, libraryGeneration = 0, libraryClosed = false;
 const clock = new LoopClock(performance.now());
 const scene = painting;
 const history = new EditHistory();
@@ -132,10 +121,9 @@ const livePublisher = createLivePublisher(from => {
   const elapsed = Math.max(performance.now() - stroke.started, stroke.samples.at(-1).t);
   const circle = layers[stroke.targets[0]].circle;
   if (circle) circle.update(performance.now());
-  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
+  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
 }, outputStatus);
 
-function hasVisibleLayers() { return clips.flatMap(layerVariants).some(clip => clip.enabled); }
 function fitLoop() {
   const required = Math.ceil(minimumLoop(clips) / 500) * 500;
   if (clock.duration < required) clock.resize(required, performance.now());
@@ -163,7 +151,7 @@ function layerFold(id, key, title, children) {
 function syncLayerDisclosure() {
   const cards = [...document.querySelectorAll('.layer-card')];
   $('#fold-layers').textContent = !cards.length || cards.some(card => !card.open) ? 'EXPAND ALL' : 'COLLAPSE ALL';
-  $('#fold-layers').disabled = !cards.length || Boolean(session) || finishing;
+  $('#fold-layers').disabled = !cards.length;
 }
 $('#fold-layers').addEventListener('click', () => {
   const cards = [...document.querySelectorAll('.layer-card')], open = cards.some(card => !card.open);
@@ -190,7 +178,7 @@ function rebuildCache() {
       const visibility = document.createElement('button'); visibility.className = 'layer-toggle'; visibility.innerHTML = icon('eye');
       visibility.setAttribute('aria-label', `Layer ${index + 1}: toggle visibility`); visibility.setAttribute('aria-pressed', String(clip.enabled));
       visibility.addEventListener('click', event => {
-        event.preventDefault(); event.stopPropagation(); if (session || finishing || stroke || trimDrag) return;
+        event.preventDefault(); event.stopPropagation(); if (stroke || trimDrag) return;
         clips = clips.map(item => item.id === clip.id ? editLayer(item, 'all', value => ({ ...value, enabled: !clip.enabled })) : item);
         rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
       });
@@ -199,12 +187,12 @@ function rebuildCache() {
       const timing = document.createElement('span'); timing.className = 'layer-timing'; timing.textContent = `AT ${((clip.start ?? 0) / 1000).toFixed(2)}s`; identity.append(name, timing);
       const remove = document.createElement('button'); remove.className = 'layer-remove'; remove.innerHTML = icon('trash'); remove.setAttribute('aria-label', `Delete layer ${index + 1}`);
       remove.addEventListener('click', event => {
-        event.preventDefault(); event.stopPropagation(); if (session || finishing || stroke || trimDrag) return;
+        event.preventDefault(); event.stopPropagation(); if (stroke || trimDrag) return;
         clips = clips.filter(item => item.id !== clip.id); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
       });
       const card = layerFold(clip.id, 'card', [visibility, identity, remove], []); card.open = false;
       card.querySelector('summary').addEventListener('click', event => {
-        event.preventDefault(); if (event.target.closest('button') || session || finishing || stroke || trimDrag) return;
+        event.preventDefault(); if (event.target.closest('button') || stroke || trimDrag) return;
         selectedLayerId = clip.id; rebuildCache();
       });
       row.append(card); $('#layer-list').prepend(row); return;
@@ -216,7 +204,7 @@ function rebuildCache() {
     const sync = [];
     sync.push(() => { row.style.setProperty('--layer-accent', current().color); row.style.setProperty('--layer-tint', `${current().color}18`); row.classList.toggle('layer-muted', !current().enabled); });
     const update = (edit, rebuild = false, dragging = false) => {
-      if (session || finishing || stroke || trimDrag && !dragging) return;
+      if (stroke || trimDrag && !dragging) return;
       clips = clips.map(item => item.id === clip.id ? editLayer(item, scope(), value => fitGestureTrim(edit(value), clock.duration)) : item);
       fitLoop();
       if (rebuild) rebuildCache();
@@ -263,7 +251,7 @@ function rebuildCache() {
       handle.setAttribute('role', 'slider'); handle.setAttribute('aria-orientation', 'horizontal'); handle.setAttribute('aria-label', `Layer ${index + 1} trim ${bound === 'in' ? 'start' : 'end'}`);
       handle.title = `Trim ${bound === 'in' ? 'start' : 'end'} · drag to cut or restore`;
       handle.addEventListener('pointerdown', event => {
-        if (!ready || session || finishing || stroke || trimDrag || event.button !== 0) return;
+        if (!ready || stroke || trimDrag || event.button !== 0) return;
         event.preventDefault(); handle.focus(); history.endGroup();
         const initial = trimRange(current()), x = event.clientX, duration = clock.duration, width = track.getBoundingClientRect().width;
         let publishedAt = -Infinity;
@@ -289,7 +277,7 @@ function rebuildCache() {
         handle.onpointercancel = handle.onlostpointercapture = finish;
       });
       handle.addEventListener('keydown', event => {
-        if (trimDrag || session || finishing || stroke) return;
+        if (trimDrag || stroke) return;
         const range = trimRange(current()), step = event.shiftKey ? 100 : 10;
         let value;
         if (event.key === 'ArrowLeft') value = range[bound] - step;
@@ -331,7 +319,7 @@ function rebuildCache() {
     color.addEventListener('input', () => update(item => pickLayerColor(hasSampleColor(item) ? { ...item, colorEditMode: 'color' } : item, color.value)));
     const remove = document.createElement('button'); remove.className = 'layer-remove'; remove.innerHTML = icon('trash'); remove.setAttribute('aria-label', `Delete layer ${index + 1} `);
     remove.addEventListener('click', () => {
-      if (session || finishing || stroke) return;
+      if (stroke) return;
       const selected = scope();
       clips = selected === 'all' ? clips.filter(item => item.id !== clip.id) : clips.map(item => item.id === clip.id ? removeLayerSides(item, [Number(selected)]) : item).filter(item => item.targets.length);
       rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
@@ -345,7 +333,7 @@ function rebuildCache() {
       button.dataset.edge = String(direction === 1 ? index === clips.length - 1 : index === 0); button.disabled = button.dataset.edge === 'true';
       button.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation();
-        if (!ready || session || finishing || stroke || trimDrag) return;
+        if (!ready || stroke || trimDrag) return;
         clips = moveLayer(clips, clip.id, direction); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
         const moved = [...document.querySelectorAll('.cached-layer')].find(item => item.dataset.layerId === clip.id);
         const next = moved?.querySelector(`.layer-reorder button[data-direction="${direction}"]`);
@@ -396,53 +384,56 @@ function rebuildCache() {
       colorB.setAttribute('aria-label', `Layer ${index + 1} ${firework ? 'firework fade color' : 'gradient color B'}`);
       colorB.value = (firework ? item.fireworkColorTo : item.colorGradient?.to) ?? item.color; hexB.textContent = colorB.value.toUpperCase(); gradientPreview.style.background = `linear-gradient(to right, ${item.color}, ${colorB.value})`;
     });
-    const edge = document.createElement('div'); edge.className = 'layer-paint-field';
-    const edgeColor = document.createElement('input'); edgeColor.type = 'color'; edgeColor.className = 'layer-color layer-edge-color'; edgeColor.setAttribute('aria-label', `Layer ${index + 1} edge color`);
-    const edgeHex = document.createElement('output'); edgeHex.className = 'layer-color-hex';
-    edgeColor.addEventListener('input', () => update(item => ({ ...item, edgeColor: edgeColor.value, edgeWidth: edgeWidth(item.edgeWidth) })));
-    sync.push(() => { const item = current(); edgeColor.value = item.edgeColor ?? item.color; edgeHex.textContent = (hasColorGradient(item) || hasFireworkColor(item) || hasSampleColor(item)) && !item.edgeColor ? 'FOLLOWS FILL' : edgeColor.value.toUpperCase(); });
-    const edgeLabel = document.createElement('label'); edgeLabel.className = 'layer-paint-label'; edgeLabel.append('EDGE', edgeColor);
-    edge.append(edgeLabel, edgeHex);
-    number(edge, 'WIDTH', 'edge width in pixels', item => edgeWidth(item.edgeWidth), 1, 32, 1, (item, value) => ({ ...item, edgeWidth: value }));
     const geometry = section('SHAPE');
     const shape = document.createElement('select'); shape.className = 'layer-shape'; shape.setAttribute('aria-label', `Layer ${index + 1} shape`);
-    for (const [value, text] of [['circle', 'CIRCLE'], ['rect', 'RECTANGLE']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; shape.append(option); }
+    for (const [value, text] of [['circle', 'CIRCLE'], ['ring', 'RING · OUTLINE'], ['rect', 'RECTANGLE']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; shape.append(option); }
     shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => ({ ...item, shape: shape.value }), true)); geometry.append(shape);
     const sizes = section(shape.value === 'rect' ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
     if (shape.value === 'rect') {
       for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, 320, 1, (item, value) => resizeDimension(item, axis, bound, value));
       number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => ({ ...item, angle: value, followDirection: false }), '°');
     } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, 320, 1, (item, value) => resizeGesture(item, bound, value));
+    if (shape.value === 'ring') number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, 160, 1, (item, value) => ({ ...item, ringWidth: value }));
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
       for (const [key, text, min, max, fallback] of [['fadeInMs', 'FADE IN', 0, 10, 300], ['holdMs', 'HOLD', 0.1, 600, 1000], ['fadeOutMs', 'FADE OUT', 0, 10, 1000]]) number(envelope, text, `${text.toLowerCase()} in seconds`, item => (item[key] ?? fallback) / 1000, min, max, 0.1, (item, value) => ({ ...item, [key]: Math.round(value * 1000) }), 's');
     } else if (current().mode !== 'trail') number(envelope, 'RELEASE', 'release fade in seconds', item => (item.fadeMs ?? 2000) / 1000, 0.1, 10, 0.1, (item, value) => ({ ...item, fadeMs: Math.round(value * 1000) }), 's');
-    const paints = document.createElement('div'); paints.className = 'layer-paints'; paints.append(colorSettings, edge);
+    const paints = document.createElement('div'); paints.className = 'layer-paints'; paints.append(colorSettings);
     const blending = document.createElement('div'); blending.className = 'layer-blending';
-    const blendLabel = document.createElement('label'); blendLabel.append('BLEND');
-    const blend = document.createElement('select'); blend.setAttribute('aria-label', `Layer ${index + 1} blend mode`);
-    blend.title = 'NORMAL paints over lower layers. ANALOG mixes pigment colors in overlapping areas.';
-    for (const [value, text] of [['normal', 'NORMAL'], ['analog', 'ANALOG']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; blend.append(option); }
-    blend.addEventListener('change', () => update(item => ({ ...item, blendMode: blend.value })));
-    blendLabel.append(blend);
+    const blendLabel = document.createElement('span'); blendLabel.className = 'layer-size-heading'; blendLabel.textContent = 'ANALOG MIX';
     const ratioLabel = document.createElement('label'); ratioLabel.className = 'layer-mix-ratio'; ratioLabel.append('RATIO');
     const ratio = document.createElement('input'); ratio.type = 'range'; ratio.min = 0; ratio.max = 100; ratio.step = 1; ratio.setAttribute('aria-label', `Layer ${index + 1} pigment mix ratio`);
     ratio.title = 'In overlaps: 0% uses the lower color; 100% uses this layer’s color.';
     const ratioValue = document.createElement('output'); ratioLabel.append(ratio, ratioValue);
     ratio.addEventListener('input', () => update(item => ({ ...item, mixAmount: Number(ratio.value) })));
-    sync.push(() => { blend.value = current().blendMode ?? 'normal'; ratio.value = current().mixAmount ?? 50; ratioValue.textContent = `${ratio.value}%`; ratioLabel.hidden = blend.value !== 'analog'; });
+    sync.push(() => { ratio.value = current().mixAmount ?? 50; ratioValue.textContent = `${ratio.value}%`; });
     blending.append(blendLabel, ratioLabel);
+    const effectsPanel = document.createElement('section'); effectsPanel.className = 'layer-effects';
+    const effectsHeading = document.createElement('h3'); effectsHeading.textContent = 'Effects'; effectsPanel.append(effectsHeading);
+    for (const [key, title, amountKey] of [['blur', 'Blur', 'blurRadius'], ['glitch', 'Glitch', 'glitchAmount'], ['chromatic', 'Chromatic aberration', 'chromaticAmount']]) {
+      const effect = document.createElement('div'); effect.className = 'layer-effect';
+      const label = document.createElement('label'); label.className = 'effect-switch';
+      const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.setAttribute('aria-label', `Layer ${index + 1} ${title}`);
+      const name = document.createElement('span'); name.textContent = title; label.append(enabled, name); effect.append(label);
+      const controls = document.createElement('div'); controls.className = 'effect-amount';
+      const slider = document.createElement('input'); slider.type = 'range'; slider.min = EFFECT_LIMITS[amountKey][0]; slider.max = EFFECT_LIMITS[amountKey][1]; slider.step = 1; slider.setAttribute('aria-label', `Layer ${index + 1} ${title} amount`);
+      const amount = number(controls, key === 'blur' ? 'Radius' : 'Amount', `${title} pixels`, item => layerEffects(item)[amountKey], ...EFFECT_LIMITS[amountKey], 1, (item, value) => ({ ...item, effects: { ...layerEffects(item), [amountKey]: value } }));
+      controls.prepend(slider); effect.append(controls); effectsPanel.append(effect);
+      enabled.addEventListener('change', () => update(item => ({ ...item, effects: { ...layerEffects(item), [key]: enabled.checked } })));
+      slider.addEventListener('input', () => update(item => ({ ...item, effects: { ...layerEffects(item), [amountKey]: Number(slider.value) } })));
+      sync.push(() => { const fx = layerEffects(current()); enabled.checked = fx[key]; slider.value = fx[amountKey]; slider.disabled = amount.disabled = !fx[key]; controls.classList.toggle('effect-disabled', !fx[key]); });
+    }
     const identity = document.createElement('span'); identity.className = 'layer-identity'; identity.append(label, timing);
     const chevron = document.createElement('span'); chevron.className = 'layer-chevron'; chevron.textContent = '⌄'; chevron.setAttribute('aria-hidden', 'true');
     const body = document.createElement('div'); body.className = 'layer-body'; body.dataset.layerId = clip.id;
-    body.append(paints, gradientTiming, blending, actions, layerFold(clip.id, 'shape', 'SHAPE & SIZE', [geometry, sizes]), layerFold(clip.id, 'timing', 'TIMING & TRIM', [envelope, track, summary]));
+    body.append(paints, gradientTiming, effectsPanel, blending, actions, layerFold(clip.id, 'shape', 'SHAPE & SIZE', [geometry, sizes]), layerFold(clip.id, 'timing', 'TIMING & TRIM', [envelope, track, summary]));
     actions.append(reorder);
     const card = layerFold(clip.id, 'card', [toggle, identity, chevron, remove], []);
     card.open = false;
     card.querySelector('summary').addEventListener('click', event => {
       event.preventDefault();
-      if (event.target.closest('button') || session || finishing || stroke || trimDrag) return;
+      if (event.target.closest('button') || stroke || trimDrag) return;
       selectedLayerId = clip.id; shell.showLayer(clip.id, body);
     });
     row.append(card, body);
@@ -452,17 +443,15 @@ function rebuildCache() {
     sync.forEach(fn => fn()); trimTrackObserver?.observe(track);
   });
   $('#layer-list').scrollTop = listScrollTop;
-  $('#export-loop').disabled = !hasVisibleLayers() || Boolean(session) || finishing || Boolean(stroke);
-  if (session || finishing) exportUI(true);
   historyUI();
   syncLayerDisclosure();
 }
 function historyUI() {
-  const locked = !ready || Boolean(session) || finishing || Boolean(stroke) || Boolean(trimDrag);
+  const locked = !ready || Boolean(stroke) || Boolean(trimDrag);
   $('#undo').disabled = locked || !history.canUndo; $('#redo').disabled = locked || !history.canRedo;
 }
 function restoreHistory(direction) {
-  if (!ready || session || finishing) return;
+  if (!ready) return;
   trimDrag?.finish(); endStroke(null);
   const project = history[direction]();
   if (!project) return;
@@ -519,14 +508,14 @@ function flushSave() {
     cacheFailed = false;
   }).catch(error => {
     $('#cache-status').textContent = 'MEMORY ONLY';
-    if (!cacheFailed) toast('Local cache could not be saved. Keep this page open and export your video.');
+    if (!cacheFailed) toast('Local cache could not be saved. Use Files → Save project to keep your work.');
     cacheFailed = true; console.error('Local cache failed:', error);
   });
 }
 function cacheStroke(current, now) {
   const duration = Math.max(now - current.started, current.samples.at(-1).t);
   if (current.samples.at(-1).t < duration) current.samples.push({ ...current.last, t: duration });
-  clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, angle: current.angle, followDirection: false, color: current.color, edgeWidth: DEFAULT_EDGE_WIDTH, targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
+  clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, angle: current.angle, followDirection: false, color: current.color, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
   const required = Math.ceil(minimumLoop(clips) / 1000) * 1000;
   if (clock.duration < required) {
     clock.resize(required, now);
@@ -548,7 +537,7 @@ function selectCanvas() {
 }
 function setSync() { state.sync = false; selectCanvas(); }
 function setMode(mode, restoring = false) {
-  if (!modes.includes(mode) || !restoring && (!ready || session || finishing || trimDrag)) return;
+  if (!modes.includes(mode) || !restoring && (!ready || trimDrag)) return;
   endStroke(null);
   state.mode = mode;
   $('.studio').dataset.mode = mode;
@@ -563,7 +552,7 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
-  painting.draw(index, phase, { now, placementPreview: !clock.playing && !session, blurRadius: state.showBlurPreview ? state.blurRadius : 0 });
+  painting.draw(index, phase, { now, placementPreview: !clock.playing });
 }
 function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
 let animationFrame = -1;
@@ -580,7 +569,7 @@ function animate(now) {
 renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas) {
   const pressure = state.pressure && event.pointerType === 'pen' ? (Number.isFinite(event.pressure) ? Math.max(0, Math.min(1, event.pressure)) : 0.5) : 1;
-  const geometry = state.shape === 'rect' ? { shape: 'rect', width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : {};
+  const geometry = state.shape === 'rect' ? { shape: 'rect', width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
   return { ...canvasPoint(event, canvas.getBoundingClientRect()), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
 }
 function drawPoint(pointValue) {
@@ -605,12 +594,12 @@ function endStroke(event) {
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch' && !state.touch) { if (!stroke) selectCanvas(index); return; }
-    if (!ready || stroke || trimDrag || event.button !== 0 || session || finishing) return;
+    if (!ready || stroke || trimDrag || event.button !== 0) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, canvas, targets: state.sync ? [0] : [index], color: state.color, mode: state.mode, shape: state.shape, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: point(event, canvas), started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, canvas, targets: state.sync ? [0] : [index], color: state.color, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...DEFAULT_EFFECTS }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: point(event, canvas), started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
-    $('#export-loop').disabled = true; history.endGroup(); historyUI();
+    history.endGroup(); historyUI();
     if (stroke.mode === 'move') {
       const circle = new SmoothedCircle(stroke.last, stroke.color, performance.now());
       stroke.targets.forEach(index => layers[index].circle = circle);
@@ -654,11 +643,13 @@ function updateSize(bound, rawValue) {
 });
 function syncShapeUI() {
   $('#shape').value = state.shape;
-  $('#circle-controls').hidden = state.shape !== 'circle'; $('#rectangle-controls').hidden = state.shape !== 'rect';
+  $('#circle-controls').hidden = state.shape === 'rect'; $('#ring-controls').hidden = state.shape !== 'ring'; $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.shape !== 'rect';
   for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) { $(`#${axis}-${bound}`).value = $(`#${axis}-range-${bound}`).value = state[`${axis}${bound}`]; }
   $('#shape-angle').value = state.angle;
 }
-$('#shape').addEventListener('change', event => { endStroke(null); state.shape = event.target.value; syncShapeUI(); queueSave(); });
+function setShape(shape) { if (!ready || trimDrag) return; endStroke(null); state.shape = shape; syncShapeUI(); queueSave(); }
+$('#shape').addEventListener('change', event => setShape(event.target.value));
+$('#ring-width').addEventListener('input', event => { if (!event.target.value) return; state.ringWidth = Math.max(1, Math.min(160, Math.round(Number(event.target.value)))); syncShapeUI(); queueSave(); });
 for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) {
   const update = raw => {
     if (raw === '' || !Number.isFinite(Number(raw))) return;
@@ -683,12 +674,12 @@ $('#play').addEventListener('click', () => {
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('pointerdown', event => {
-  if (!ready || session || finishing || event.button !== 0) return;
+  if (!ready || event.button !== 0) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('input', event => {
-  if (!ready || session || finishing) return;
+  if (!ready) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
@@ -702,15 +693,7 @@ $('#loop-duration').addEventListener('change', event => {
   clock.resize(Math.max(minimum, seconds * 1000), performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
   if (seconds * 1000 < minimum) toast(`These layers need at least ${minimum / 1000}s to finish their motion.`);
 });
-function syncEffectsUI() {
-  $('#blur-radius').value = state.blurRadius; $('#blur-value').textContent = `${state.blurRadius} px`;
-  $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
-  $('#show-blur-preview').checked = state.showBlurPreview;
-}
-$('#show-blur-preview').addEventListener('change', event => { state.showBlurPreview = event.target.checked; syncEffectsUI(); renderTargets([0], performance.now(), true); queueSave(); });
-$('#blur-radius').addEventListener('input', event => {
-  state.blurRadius = Number(event.target.value); syncEffectsUI(); renderTargets([0], performance.now(), true); queueSave();
-});
+function syncEffectsUI() { $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000; }
 function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
@@ -723,7 +706,7 @@ $('#fade-range').addEventListener('input', event => setFade(event.target.value))
 $('#fade-seconds').addEventListener('input', event => setFade(event.target.value));
 $('#fade-seconds').addEventListener('change', syncEffectsUI);
 $('#clear').addEventListener('click', () => {
-  if (!ready || session || finishing || trimDrag) return;
+  if (!ready || trimDrag) return;
   endStroke(null);
   const targets = state.sync ? [0] : [state.active];
   targets.forEach(index => { layers[index].circle = null; });
@@ -738,139 +721,37 @@ function download(blob, filename) {
   // Safari may still be reading the object URL after the click.
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-function downloadURL(url, filename) {
-  const link = document.createElement('a'); link.href = url; link.download = filename;
-  document.body.append(link); link.click(); link.remove();
-}
 function currentProject() { return { version: 1, canvas: { ...CANVAS_SPEC }, clips, duration: clock.duration, settings: state }; }
-$('#export-format').addEventListener('change', event => { state.exportFormat = event.target.value; queueSave(); });
 $('#save-project').addEventListener('click', () => {
-  if (!ready || session || finishing) return;
+  if (!ready) return;
   endStroke(null);
   download(new Blob([serializeProject(currentProject(), playbackSnapshot(clock, performance.now()))], { type: 'application/json' }), `direct-painting-${timestamp()}.json`);
 });
 function importProjectText(text) {
   const imported = parseProject(text);
-  if (!ready || session || finishing || stroke || trimDrag) throw new Error('Finish drawing or exporting, then import the project again.');
+  if (!ready || stroke || trimDrag) throw new Error('Finish drawing, then import the project again.');
   applyProject(imported.project, imported.playback); queueSave(true);
   toast('Project imported. Layers and drawing settings restored.');
 }
-const importPicker = createImportPicker({
-  canImport: () => ready && !session && !finishing && !stroke && !trimDrag,
-  importProject: importProjectText,
-  chooseFile: () => $('#import-file').click(),
-});
-$('#import-project').addEventListener('click', () => { if (ready && !session && !finishing) { endStroke(null); importPicker.open(); } });
+$('#import-project').addEventListener('click', () => { if (ready && !trimDrag) { endStroke(null); $('#import-file').click(); } });
 $('#import-file').addEventListener('change', async event => {
   const file = event.target.files?.[0]; event.target.value = '';
-  if (!file || !ready || session || finishing || stroke) return;
-  importPicker.close();
+  if (!file || !ready || stroke) return;
   try {
     if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds 16MB');
     importProjectText(await file.text());
   } catch (error) { toast(`Could not import JSON: ${error.message}`); }
 });
-function formatDuration(ms) { const seconds = Math.floor(ms / 1000); return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }
-function exportUI(exporting) {
-  $('.studio').classList.toggle('exporting', exporting);
-  document.querySelectorAll('.toolbar button, .toolbar input, .toolbar select, .loop-controls button, .loop-controls input, .layers-panel button, .layers-panel input, .layers-panel select, .selection-properties input, .selection-properties select, .selection-properties button, .files-panel button, .files-panel input, .files-panel select, .canvas-tools button, #clear').forEach(control => control.disabled = exporting || control.dataset.edge === 'true');
-  $('#export-loop').disabled = exporting || !hasVisibleLayers() || Boolean(stroke);
-  $('#export-label').textContent = exporting ? finishing ? 'SAVING…' : 'EXPORTING…' : 'Export loop';
-  if (!exporting) $('#export-status').textContent = '';
-  historyUI();
-}
-function renderRecordings(job) {
-  if (exportGroups.has(job.id)) return;
-  const group = document.createElement('div'); group.className = 'recording-group'; group.dataset.exportId = job.id;
-  for (const file of job.files) {
-    const card = document.createElement('article'); card.className = 'recording-card';
-    const video = document.createElement('video'); video.controls = true; video.playsInline = true; video.preload = 'metadata'; video.src = file.previewURL;
-    video.setAttribute('aria-label', `${file.side} exported loop preview`);
-    const info = document.createElement('div'); info.className = 'recording-info';
-    const description = document.createElement('div'), side = document.createElement('strong'), format = document.createElement('span');
-    side.textContent = 'CANVAS'; format.textContent = `${formatDuration(job.duration)} · ${job.format === 'rgba' ? 'PRORES 4444 · RGBA' : 'H.264 · RGB'} · 1920 × 1080 · ${FPS}fps`;
-    description.append(side, format); info.append(description);
-    const buttons = document.createElement('div'); buttons.className = 'export-downloads';
-    const button = (label, url, filename) => { const element = document.createElement('button'); element.className = 'secondary-button'; element.textContent = label; element.addEventListener('click', () => downloadURL(url, filename)); buttons.append(element); };
-    button('DOWNLOAD VIDEO', file.url, file.filename);
-    if (job.format === 'rgba') button('MP4 COPY', file.previewDownloadURL, file.previewFilename);
-    info.append(buttons);
-    const caption = document.createElement('p'); caption.className = 'filename'; caption.textContent = file.filename;
-    card.append(video, info, caption);
-    if (job.format === 'rgba') { const hint = document.createElement('span'); hint.className = 'preview-note'; hint.textContent = 'Preview / MP4 copy: black background · MOV: alpha'; card.append(hint); }
-    group.append(card);
-  }
-  const projectCard = document.createElement('div'); projectCard.className = 'project-download';
-  const save = document.createElement('button'); save.className = 'secondary-button'; save.textContent = 'DOWNLOAD JSON';
-  save.addEventListener('click', () => downloadURL(job.projectURL, `direct-painting-${job.stamp}.json`));
-  const caption = document.createElement('span'); caption.textContent = `${job.stamp} · Shared on this server · Download within 1 hour`;
-  projectCard.append(save, caption); group.append(projectCard);
-  exportGroups.set(job.id, group); $('#recording-list').prepend(group); $('#recordings').hidden = false;
-}
-async function pollExports() {
-  if (libraryLoading || libraryClosed) return;
-  libraryLoading = true; clearTimeout(exportLibraryTimer);
-  const generation = libraryGeneration;
-  try {
-    const response = await fetch('/api/export', { cache: 'no-store' });
-    if (!response.ok) throw new Error('Export list unavailable');
-    const { exports: jobs } = await response.json();
-    if (generation !== libraryGeneration || libraryClosed) return;
-    const ids = new Set(jobs.map(job => job.id));
-    for (const [id, group] of exportGroups) if (!ids.has(id)) { group.remove(); exportGroups.delete(id); }
-    jobs.filter(job => job.state === 'ready').reverse().forEach(renderRecordings);
-    const running = jobs.find(job => job.state === 'running');
-    $('#shared-export-status').textContent = running ? `EXPORTING · ${Math.round(running.progress * 100)}%` : '';
-    $('#recordings').hidden = !running && !exportGroups.size;
-  } catch { $('#shared-export-status').textContent = 'EXPORT LIST OFFLINE'; }
-  finally { libraryLoading = false; if (!libraryClosed) exportLibraryTimer = setTimeout(pollExports, document.hidden ? 5000 : 2000); }
-}
-window.addEventListener('pagehide', () => { libraryClosed = true; clearTimeout(exportLibraryTimer); }, { once: true });
-function restorePlayback(current) {
-  const now = performance.now();
-  clock.seek(current.savedPhase, now);
-  if (current.wasPlaying) clock.play(now); else clock.pause(now);
-  playbackUI(); renderTargets([0], now, true); publisher.publish(true);
-}
-async function exportLoop() {
-  if (!ready || finishing || session || stroke || trimDrag || !hasVisibleLayers()) return;
-  const project = structuredClone(normalizeProject(currentProject())), now = performance.now();
-  const current = { savedPhase: clock.phase(now), wasPlaying: clock.playing, stamp: timestamp() };
-  const playback = playbackSnapshot(clock, now), format = state.exportFormat;
-  session = current; clock.pause(now); playbackUI(); exportUI(true); publisher.publish(true);
-  try {
-    $('#export-status').textContent = 'PREPARING VIDEO…';
-    const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project, playback, format, stamp: current.stamp }) });
-    const created = await response.json();
-    if (!response.ok) throw new Error(created.error || 'Export server unavailable');
-    if (!/^[0-9a-f-]{36}$/.test(created.id)) throw new Error('Invalid export response');
-    for (;;) {
-      const response = await fetch(`/api/export/${created.id}`, { cache: 'no-store' });
-      const status = await response.json();
-      if (!response.ok || status.state === 'error') throw new Error(status.error || 'Video export failed');
-      if (status.state === 'cancelled') throw new Error('Export cancelled');
-      $('#export-status').textContent = `${Math.round(status.progress * 100)}% · ${format === 'rgba' ? 'PRORES 4444' : 'H.264 MP4'}`;
-      if (status.state === 'ready') {
-        libraryGeneration++; renderRecordings(status); void pollExports();
-        toast('Loop ready. Video and project are available on all connected devices.'); break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
-  } catch (error) { toast(`Export failed: ${error.message}. Completed exports appear below.`); }
-  finally { session = null; restorePlayback(current); exportUI(false); }
-}
-$('#export-loop').addEventListener('click', exportLoop);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { trimDrag?.finish(); endStroke(null); if (dirty) flushSave(); }
-  else void pollExports();
 });
-window.addEventListener('beforeunload', event => { if (dirty || stroke || session || finishing) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (dirty || stroke) { event.preventDefault(); event.returnValue = ''; } });
 
 // Optional browser agent API; the editor works normally without it.
 if (document.modelContext?.registerTool) {
   const lifecycle = new AbortController();
   const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal: lifecycle.signal })).catch(console.error); } catch (error) { console.error(error); } };
-  register({ name: 'read_editor_state', description: 'Read the canvas size, brush settings and recording state.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => ({ ...state, recording: Boolean(session) }) });
+  register({ name: 'read_editor_state', description: 'Read the canvas size and brush settings.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => ({ ...state }) });
   window.addEventListener('pagehide', () => lifecycle.abort(), { once: true });
 }
 
@@ -882,7 +763,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
-    syncSizeUI(); syncShapeUI(); syncEffectsUI(); $('#export-format').value = state.exportFormat;
+    syncSizeUI(); syncShapeUI(); syncEffectsUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
     const now = performance.now(); clock.resize(project.duration, now); clock.seek(playback.phase, now);
     if (playback.playing) clock.play(now); else clock.pause(now);
@@ -902,10 +783,9 @@ async function restoreProject() {
     $('#cache-status').textContent = cacheFailed ? 'MEMORY ONLY' : clips.length ? 'SAVED LOCALLY' : 'DRAW TO ADD A LAYER';
   } catch (error) {
     $('#cache-status').textContent = 'MEMORY ONLY'; cacheFailed = true;
-    toast('Local cache could not be restored. You can still draw and export video.'); console.error(error);
+    toast('Local cache could not be restored. You can still draw and save a project.'); console.error(error);
   } finally {
     history.reset(currentProject()); ready = true; historyUI(); $('.sidebar-scroll').inert = false; $('.loop-controls').inert = false; clock.restart(performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); publisher.publish(true);
   }
 }
 restoreProject();
-void pollExports();

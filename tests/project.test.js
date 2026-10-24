@@ -13,7 +13,7 @@ test('JSON round-trip preserves edited diameters, color, motion, hidden layers a
 test('JSON validation rejects malformed files and settings before a project can be replaced', () => {
   assert.throws(() => parseProject('{'));
   assert.throws(() => parseProject(JSON.stringify({ format: 'unrelated', project: {} })));
-  for (const settings of [{ blurRadius: 999 }, { color: 'bad' }, { pressure: 'yes' }, { minSize: 200, maxSize: 10 }, { mode: 'invalid' }, { exportFormat: 'exe' }]) assert.throws(() => normalizeProject({ version: 1, duration: 4000, clips: [clip], settings }));
+  for (const settings of [{ ringWidth: 161 }, { color: 'bad' }, { pressure: 'yes' }, { minSize: 200, maxSize: 10 }, { mode: 'invalid' }]) assert.throws(() => normalizeProject({ version: 1, duration: 4000, clips: [clip], settings }));
   assert.throws(() => normalizeProject({ version: 1, duration: Infinity, clips: [] }));
   assert.throws(() => parseProject(JSON.stringify({ project: { version: 1, duration: 4000, clips: [clip] }, playback: { playing: true, phase: -1 } })));
 });

@@ -16,11 +16,11 @@ export class TrailField {
   constructor(trackPaint = false) { if (trackPaint) this.paintMask = new Uint8Array(PIXELS); }
 
   add(point, color, now, style = {}) {
-    const fill = colorValue(color), edge = colorValue(style.edgeColor ?? color);
-    visitPaint(point, color, style, (start, end, paint, isEdge) => {
-      this.times.fill(now + 1, start, end); this.colors.fill(paint === color ? fill : edge, start, end);
-      this.paintMask?.fill(isEdge ? 2 : 1, start, end);
-    }, Boolean(this.paintMask));
+    const fill = colorValue(color);
+    visitPaint(point, color, style, (start, end) => {
+      this.times.fill(now + 1, start, end); this.colors.fill(fill, start, end);
+      this.paintMask?.fill(1, start, end);
+    });
     this.active = true;
   }
 
@@ -57,10 +57,10 @@ export class PersistentField {
   constructor(trackPaint = false) { if (trackPaint) this.paintMask = new Uint8Array(PIXELS); }
 
   add(point, color, _now, style = {}) {
-    const fill = colorValue(color), edge = colorValue(style.edgeColor ?? color);
-    visitPaint(point, color, style, (start, end, paint, isEdge) => {
-      this.paintMask?.fill(isEdge ? 2 : 1, start, end);
-      const value = paint === color ? fill : edge;
+    const fill = colorValue(color);
+    visitPaint(point, color, style, (start, end) => {
+      this.paintMask?.fill(1, start, end);
+      const value = fill;
       for (let i = start; i < end; i++) {
         const offset = i * 4;
         this.data[offset] = value >> 16;
@@ -68,7 +68,7 @@ export class PersistentField {
         this.data[offset + 2] = value & 255;
         this.data[offset + 3] = 255;
       }
-    }, Boolean(this.paintMask));
+    });
     this.active = this.dirty = true;
   }
 

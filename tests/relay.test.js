@@ -8,7 +8,7 @@ import { createLoopRelay, validateSnapshot } from '../server/loop-relay.js';
 import { outputPhase, playbackSnapshot } from '../src/relay.js';
 import { LoopClock } from '../src/loop.js';
 
-const project = { version: 1, clips: [], duration: 6000, settings: { blurRadius: 64 } };
+const project = { version: 1, clips: [], duration: 6000, settings: {} };
 test('relay clocks use server time rather than the editor device wall clock', () => {
   const clock = new LoopClock(100, 6000);
   const state = validateSnapshot({ project, playback: playbackSnapshot(clock, 2600) }, 100000);
@@ -16,10 +16,7 @@ test('relay clocks use server time rather than the editor device wall clock', ()
   assert.equal(outputPhase(state, 104000), 500);
   state.playback.playing = false; assert.equal(outputPhase(state, 104000), 2500);
   assert.throws(() => validateSnapshot({ project, playback: { playing: true, phase: NaN } }, 100000));
-  assert.throws(() => validateSnapshot({ project: { ...project, settings: { blurRadius: -1 } }, playback: { playing: true, phase: 0 } }, 100000));
-  assert.throws(() => validateSnapshot({ project: { ...project, settings: { blurRadius: 161 } }, playback: { playing: true, phase: 0 } }, 100000));
-  const maximumBlur = validateSnapshot({ project: { ...project, settings: { blurRadius: 160 } }, playback: { playing: true, phase: 0 } }, 100000);
-  assert.equal(maximumBlur.project.settings.blurRadius, 160);
+
 });
 test('shared state reaches isolated browsers, persists on disk, and rejects malformed uploads', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'imagraph-relay-')), file = join(folder, 'cache/loop.json');

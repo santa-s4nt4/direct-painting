@@ -1,3 +1,4 @@
+import { validateEffects, validateRingWidth } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
 import { TrailField, PersistentField, SmoothedCircle, TRAIL_LIFETIME } from './motion.js';
 import { prepareShapeClip } from './geometry.js';
@@ -108,7 +109,7 @@ export function sampleAt(samples, time) {
     }
   }
   if (a.step || a.active === false || b.active === false) return { ...a, ...appearance, t: time };
-  return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, size: a.size + (b.size - a.size) * fraction, t: time, ...appearance, ...(a.active !== undefined ? { active: a.active } : {}), ...(a.shape === 'rect' ? { shape: 'rect', width: a.width + (b.width - a.width) * fraction, height: a.height + (b.height - a.height) * fraction, angle: a.angle + angleDelta(a.angle, b.angle) * fraction } : {}) };
+  return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, size: a.size + (b.size - a.size) * fraction, t: time, ...appearance, ...(a.active !== undefined ? { active: a.active } : {}), ...(a.shape === 'ring' ? { shape: 'ring', ringWidth: a.ringWidth } : {}), ...(a.shape === 'rect' ? { shape: 'rect', width: a.width + (b.width - a.width) * fraction, height: a.height + (b.height - a.height) * fraction, angle: a.angle + angleDelta(a.angle, b.angle) * fraction } : {}) };
 }
 
 function addSegment(field, a, b, color, style) {
@@ -129,7 +130,7 @@ export class CachedGesture {
     else {
       const circle = new SmoothedCircle(clip.samples[0], clip.color, 0);
       this.positions = [{ ...circle.point, t: 0 }];
-      // Bake the same easing on a fixed clock so scrubbing/export is deterministic.
+      // Bake the same easing on a fixed clock so scrubbing is deterministic.
       let next = 1;
       for (let time = 1000 / 60; time < clip.duration + 750; time += 1000 / 60) {
         while (next < clip.samples.length && clip.samples[next].t <= time) {
@@ -167,7 +168,7 @@ export class CachedGesture {
   colorizedField(time) {
     const { data, paintMask } = this.field;
     if (!paintMask) return data;
-    const fill = colorAtTime(this.clip, time), colors = [0, Number.parseInt(fill.slice(1), 16), Number.parseInt((this.clip.edgeColor ?? fill).slice(1), 16)];
+    const fill = colorAtTime(this.clip, time), colors = [0, Number.parseInt(fill.slice(1), 16), Number.parseInt(fill.slice(1), 16)];
     // Keep geometry and alpha cached. Recolor the visible surface without
     // replaying its path, including when a color is edited on a paused frame.
     for (let pixel = 0; pixel < paintMask.length; pixel++) {
@@ -193,8 +194,9 @@ export function validateProject(project) {
       validateP5Source(clip.procedural);
       if (clip.mode === 'place') throw new Error('p5 motion cannot be a placed shape');
     }
+    validateEffects(clip.effects); validateRingWidth(clip.ringWidth);
     const start = clip.start ?? 0;
-    if (clip.shape !== undefined && !['circle', 'rect'].includes(clip.shape)) throw new Error('Invalid shape');
+    if (clip.shape !== undefined && !['circle', 'rect', 'ring'].includes(clip.shape)) throw new Error('Invalid shape');
     if (clip.angle !== undefined && (!Number.isFinite(clip.angle) || Math.abs(clip.angle) > 360)) throw new Error('Invalid angle');
     if (clip.followDirection !== undefined && typeof clip.followDirection !== 'boolean') throw new Error('Invalid direction setting');
     if (clip.editScope !== undefined && (!['all', '0', '1'].includes(clip.editScope) || (clip.editScope !== 'all' && !clip.targets.includes(Number(clip.editScope))))) throw new Error('Invalid edit scope');
@@ -229,7 +231,8 @@ export function validateProject(project) {
       for (const key of ['active', 'step']) if (sample[key] !== undefined && (typeof sample[key] !== 'boolean' || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       for (const key of ['opacity', 'colorProgress']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1 || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       if (sample.color !== undefined && (typeof sample.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(sample.color) || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error('Invalid sample color');
-      if (sample.shape !== undefined && !['circle', 'rect'].includes(sample.shape)) throw new Error('Invalid sample shape');
+      if (sample.shape !== undefined && !['circle', 'rect', 'ring'].includes(sample.shape)) throw new Error('Invalid sample shape');
+      validateRingWidth(sample.ringWidth);
       for (const key of ['width', 'height']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 1 || sample[key] > 320)) throw new Error('Invalid rectangle dimensions');
       for (const key of ['angle', 'heading']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || Math.abs(sample[key]) > 720)) throw new Error('Invalid sample angle');
       for (const key of ['pressure', 'diameterPosition', 'widthPosition', 'heightPosition']) {

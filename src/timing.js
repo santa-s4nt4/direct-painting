@@ -1,4 +1,4 @@
-// Shared by the editor, live transport, output page and video encoder.
+// Shared by the editor, live transport, output page.
 export const FPS = 60;
 export const FRAME_MS = 1000 / FPS;
 // A fixed frame grid avoids falling to 30fps when a 60Hz callback arrives a

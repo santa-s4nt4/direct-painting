@@ -5,13 +5,13 @@ import {
   OneMinusSrcAlphaFactor, AddEquation, DoubleSide, NearestFilter, LinearFilter, NoColorSpace,
 } from 'three';
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
-import { edgeWidth } from '../drawing.js';
+import { DEFAULT_RING_WIDTH, layerEffects, paintingStyle } from '../effects.js';
 import { prepareShapeClip } from '../geometry.js';
 import { CachedGesture, gestureTime, gestureVisible, gestureOpacity } from '../loop.js';
 import { layerVariants } from '../layers.js';
 import { colorAtTime } from '../color.js';
 import { sameGeometry, strokeBounds, StampCursor, LiveStroke } from './stroke.js';
-import { stampVertex, stampFragment, layerVertex, normalFragment, analogFragment, screenVertex, copyFragment, presentVertex, presentFragment, blurFragment } from './shaders.js';
+import { stampVertex, stampFragment, layerVertex, normalFragment, analogFragment, screenVertex, copyFragment, presentVertex, presentFragment, blurFragment, effectFragment } from './shaders.js';
 
 const FULL = { x: 0, y: 0, width: W, height: H };
 const CAPACITY = 4096;
@@ -55,6 +55,7 @@ export class WebGLPaintingRenderer {
     this.renderer.compile(this.stampScene, this.camera);
     this.passMesh.material = this.normalMaterial; this.renderer.compile(this.passScene, this.camera);
     this.renderer.compile(this.scene, this.camera);
+    this.prepareEffects();
     this.contextLost = false;
     this.lost = event => { event.preventDefault(); this.contextLost = true; this.notify('webgl2-lost'); };
     this.restored = () => {
@@ -70,22 +71,22 @@ export class WebGLPaintingRenderer {
   layerMaterial(fragment, blending) {
     return material(layerVertex, fragment, {
       bounds: { value: new Vector4() }, resolution: { value: new Vector2(W, H) }, maskTexture: { value: null },
-      fillColor: { value: new Vector3(1, 1, 1) }, edgeColor: { value: new Vector3(1, 1, 1) },
+      fillColor: { value: new Vector3(1, 1, 1) },
       sourceTime: { value: 0 }, layerOpacity: { value: 1 }, trail: { value: 0 },
       directShape: { value: 0 }, directBrush: { value: new Vector4() }, directAngle: { value: 0 }, edgeSize: { value: 5 },
-      belowTexture: { value: null }, mixAmount: { value: .5 },
+      image: { value: null }, glitchAmount: { value: 0 }, chromaticAmount: { value: 0 }, belowTexture: { value: null }, mixAmount: { value: .5 },
     }, blending);
   }
   setProject(project) {
     this.duration = project.duration;
     const old = new Map(this.items.map(item => [item.clip.id, item]));
-    this.items = project.clips.flatMap(layerVariants).map(source => {
+    this.items = project.clips.flatMap(layerVariants).map(paintingStyle).map(source => {
       let item = old.get(source.id); old.delete(source.id);
       if (!item || !sameGeometry(item.source, source)) {
         if (item) this.release(item);
         const clip = prepareShapeClip(source), moving = clip.mode === 'move' || clip.mode === 'place';
         item = { source, clip, bounds: strokeBounds(clip), moving, cursor: moving ? null : new StampCursor(clip.samples), gesture: moving ? new CachedGesture(clip) : null, initialized: false, target: null, lastUsed: -1 };
-      } else item.clip = { ...source, samples: item.clip.samples };
+      } else { item.clip = { ...source, samples: item.clip.samples }; if (item.gesture) item.gesture.clip = item.clip; }
       item.source = source; return item;
     });
     for (const item of old.values()) this.release(item);
@@ -109,7 +110,7 @@ export class WebGLPaintingRenderer {
     if (!item.initialized || until < item.cursor.time) { this.clearTarget(item.target); item.cursor.reset(); item.initialized = true; }
     if (until === item.cursor.time && !head) return;
     const b = item.bounds, shader = this.stampMaterial;
-    shader.uniforms.targetBounds.value.set(b.x, b.y, b.width, b.height); shader.uniforms.edgeSize.value = Math.round(edgeWidth(item.clip.edgeWidth));
+    shader.uniforms.targetBounds.value.set(b.x, b.y, b.width, b.height); shader.uniforms.edgeSize.value = item.clip.ringWidth ?? DEFAULT_RING_WIDTH;
     let count = 0;
     const flush = () => {
       if (!count) return;
@@ -121,41 +122,76 @@ export class WebGLPaintingRenderer {
     const add = (point, time) => {
       const rect = point.shape === 'rect', size = Math.max(1, Math.min(320, Math.round(point.size)));
       this.brushData.set([point.x, point.y, rect ? Math.max(1, Math.min(320, point.width ?? size)) : size, rect ? Math.max(1, Math.min(320, point.height ?? size)) : size], count * 4);
-      this.appearanceData.set([(point.angle ?? 0) * Math.PI / 180, rect ? 1 : 0, time], count * 3);
+      this.appearanceData.set([(point.angle ?? 0) * Math.PI / 180, rect ? 1 : point.shape === 'ring' ? 2 : 0, time], count * 3);
       if (++count === CAPACITY) flush();
     };
     item.cursor.advance(until, add);
     if (head) add(head.point, head.time);
     flush();
   }
-  compose(item, time, opacity, visual) {
-    const clip = item.clip, analog = clip.blendMode === 'analog';
-    if (analog) {
-      this.analogMaterial ??= this.layerMaterial(analogFragment, NoBlending);
-      this.alternate ??= target(W, H);
-      this.copyMaterial.uniforms.image.value = this.current.texture; this.pass(this.copyMaterial, this.alternate);
-    }
-    const shader = analog ? this.analogMaterial : this.normalMaterial, u = shader.uniforms;
+  prepareLayer(shader, item, time, opacity, visual) {
+    const clip = item.clip, u = shader.uniforms;
     let b = item.bounds;
     if (visual) {
       const rect = visual.shape === 'rect', size = Math.max(1, Math.round(visual.size));
       const w = rect ? visual.width ?? size : size, h = rect ? visual.height ?? size : size;
-      const radius = Math.hypot(w, h) / 2 + 2;
+      const radius = (rect ? Math.hypot(w, h) : size) / 2 + 2;
       b = { x: Math.floor(visual.x - radius), y: Math.floor(visual.y - radius), width: Math.ceil(radius * 2 + 2), height: Math.ceil(radius * 2 + 2) };
-      u.directShape.value = rect ? 2 : 1;
-      // MOVE uses the same final pixel rounding as the software/export renderer.
+      u.directShape.value = rect ? 2 : visual.shape === 'ring' ? 3 : 1;
       u.directBrush.value.set(Math.round(visual.x), Math.round(visual.y), w, h);
       u.directAngle.value = (visual.angle ?? 0) * Math.PI / 180;
     } else u.directShape.value = 0;
     u.bounds.value.set(b.x, b.y, b.width, b.height); u.maskTexture.value = item.target?.texture ?? this.liveTarget.texture;
     u.sourceTime.value = time; u.layerOpacity.value = opacity; u.trail.value = clip.mode === 'trail' ? 1 : 0;
-    u.edgeSize.value = Math.round(edgeWidth(clip.edgeWidth));
-    const fill = colorAtTime(clip, time, visual); color(u.fillColor.value, fill); color(u.edgeColor.value, clip.edgeColor ?? fill);
-    if (analog) { u.belowTexture.value = this.current.texture; u.mixAmount.value = (clip.mixAmount ?? 50) / 100; }
-    this.pass(shader, analog ? this.alternate : this.current);
-    if (analog) { const old = this.current; this.current = this.alternate; this.alternate = old; }
+    u.edgeSize.value = clip.ringWidth ?? DEFAULT_RING_WIDTH;
+    color(u.fillColor.value, colorAtTime(clip, time, visual));
+    return b;
   }
-  draw(side, phase, { now = performance.now(), placementPreview = false, blurRadius = 0 } = {}) {
+  prepareEffects() {
+    if (this.effectMaterial) return;
+    this.effectMaterial = this.layerMaterial(effectFragment, NoBlending);
+    this.effectSource = target(W, H, true);
+    this.blurA = target(W / 4, H / 4, true); this.blurB = target(W / 4, H / 4, true);
+    this.blurMaterial = material(screenVertex, blurFragment, { image: { value: null }, direction: { value: new Vector2() } });
+    for (const rt of [this.effectSource, this.blurA, this.blurB]) this.clearTarget(rt);
+    this.passMesh.material = this.effectMaterial; this.renderer.compile(this.passScene, this.camera);
+    this.passMesh.material = this.blurMaterial; this.renderer.compile(this.passScene, this.camera);
+  }
+  compose(item, time, opacity, visual) {
+    const clip = item.clip, effects = layerEffects(clip);
+    const processed = effects.blur && effects.blurRadius > 0 || effects.glitch && effects.glitchAmount > 0 || effects.chromatic && effects.chromaticAmount > 0;
+    let shader, b;
+    if (processed) {
+      this.prepareEffects();
+      this.clearTarget(this.effectSource);
+      b = this.prepareLayer(this.normalMaterial, item, time, opacity, visual);
+      this.pass(this.normalMaterial, this.effectSource);
+      let image = this.effectSource.texture;
+      if (effects.blur && effects.blurRadius > 0) {
+        this.copyMaterial.uniforms.image.value = image; this.pass(this.copyMaterial, this.blurA);
+        this.blurMaterial.uniforms.image.value = this.blurA.texture; this.blurMaterial.uniforms.direction.value.set(effects.blurRadius / 16 / W, 0); this.pass(this.blurMaterial, this.blurB);
+        this.blurMaterial.uniforms.image.value = this.blurB.texture; this.blurMaterial.uniforms.direction.value.set(0, effects.blurRadius / 16 / H); this.pass(this.blurMaterial, this.blurA);
+        image = this.blurA.texture;
+      }
+      shader = this.effectMaterial;
+      const u = shader.uniforms, pad = (effects.blur ? effects.blurRadius + 8 : 0) + (effects.glitch ? effects.glitchAmount : 0) + (effects.chromatic ? effects.chromaticAmount : 0);
+      u.bounds.value.set(b.x - pad, b.y - pad, b.width + pad * 2, b.height + pad * 2);
+      u.image.value = image; u.sourceTime.value = time;
+      u.glitchAmount.value = effects.glitch ? effects.glitchAmount : 0; u.chromaticAmount.value = effects.chromatic ? effects.chromaticAmount : 0;
+    } else {
+      this.analogMaterial ??= this.layerMaterial(analogFragment, NoBlending);
+      shader = this.analogMaterial; this.prepareLayer(shader, item, time, opacity, visual);
+    }
+    // Both inputs are immutable for this pass. Never sample the render target
+    // being written; the same pair is reused by all layers and subsequent frames.
+    this.alternate ??= target(W, H);
+    this.copyMaterial.uniforms.image.value = this.current.texture; this.pass(this.copyMaterial, this.alternate);
+    shader.uniforms.belowTexture.value = this.current.texture;
+    shader.uniforms.mixAmount.value = (clip.mixAmount ?? 50) / 100;
+    this.pass(shader, this.alternate);
+    const old = this.current; this.current = this.alternate; this.alternate = old;
+  }
+  draw(side, phase, { now = performance.now(), placementPreview = false } = {}) {
     if (this.contextLost) return;
     this.frame++; this.renderer.info.reset(); this.current = this.accumulator; this.clearTarget(this.current);
     for (const item of this.items) {
@@ -172,7 +208,7 @@ export class WebGLPaintingRenderer {
     const live = this.live;
     if (live.id && live.targets?.includes(side)) {
       if (!this.liveItem || this.liveItem.clip.id !== live.id) {
-        const clip = { id: live.id, mode: live.mode, samples: live.samples, color: live.color, edgeColor: live.edgeColor, edgeWidth: live.edgeWidth };
+        const clip = { id: live.id, mode: live.mode, samples: live.samples, color: live.color, effects: live.effects, ringWidth: live.ringWidth };
         this.liveItem = { clip, bounds: FULL, target: this.liveTarget, cursor: new StampCursor(live.samples), initialized: false };
       }
       const item = this.liveItem; item.clip.samples = live.samples; item.cursor.samples = live.samples;
@@ -180,18 +216,9 @@ export class WebGLPaintingRenderer {
       if (live.mode === 'move' || live.mode === 'place') this.compose(item, time, 1, live.move ?? live.head);
       else { this.paintMask(item, live.samples.at(-1).t, live.mode === 'trail' ? { point: live.head, time } : null); this.compose(item, time, 1); }
     }
-    let image = this.current.texture;
-    if (blurRadius > 0) {
-      if (!this.blurMaterial) {
-        this.blurMaterial = material(screenVertex, blurFragment, { image: { value: null }, direction: { value: new Vector2() } });
-        this.blurA = target(W / 4, H / 4, true); this.blurB = target(W / 4, H / 4, true);
-      }
-      this.blurMaterial.uniforms.image.value = image; this.blurMaterial.uniforms.direction.value.set(blurRadius * .5 / W, 0); this.pass(this.blurMaterial, this.blurA);
-      this.blurMaterial.uniforms.image.value = this.blurA.texture; this.blurMaterial.uniforms.direction.value.set(0, blurRadius * .5 / H); this.pass(this.blurMaterial, this.blurB); image = this.blurB.texture;
-    }
     this.accumulator = this.current;
     this.paintingTexture = this.current.texture;
-    this.presentMaterial.uniforms.image.value = image;
+    this.presentMaterial.uniforms.image.value = this.current.texture;
     this.renderer.setRenderTarget(null); this.renderer.clearDepth(); this.renderer.render(this.scene, this.camera);
     this.stats.frames++; this.stats.drawCalls = this.renderer.info.render.calls;
     // Keep inactive masks warm, but evict the oldest ones when the cache budget
@@ -206,8 +233,8 @@ export class WebGLPaintingRenderer {
   finish() { this.renderer.getContext().finish(); }
   dispose() {
     for (const item of this.items) this.release(item);
-    for (const rt of [this.accumulator, this.alternate, this.liveTarget, this.blurA, this.blurB]) rt?.dispose();
-    for (const m of [this.stampMaterial, this.normalMaterial, this.analogMaterial, this.copyMaterial, this.presentMaterial, this.blurMaterial]) m?.dispose();
+    for (const rt of [this.accumulator, this.alternate, this.liveTarget, this.effectSource, this.blurA, this.blurB]) rt?.dispose();
+    for (const m of [this.stampMaterial, this.normalMaterial, this.analogMaterial, this.copyMaterial, this.presentMaterial, this.effectMaterial, this.blurMaterial]) m?.dispose();
     this.quad.dispose(); this.stampGeometry.dispose(); this.painting.geometry.dispose(); this.renderer.dispose();
     this.canvas.removeEventListener('webglcontextlost', this.lost); this.canvas.removeEventListener('webglcontextrestored', this.restored);
   }

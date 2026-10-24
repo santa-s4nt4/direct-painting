@@ -33,7 +33,7 @@ test('temporal gradients hold A/B outside the transition and interpolate RGB ins
   assert.equal(colorAtTime(clip({ color: '#000000', colorGradient: { to: '#ffffff', startMs: 0, endMs: 1000 } }), 500), '#808080');
 });
 
-test('all modes and both shapes animate fill without changing geometry, fades or explicit edges', () => {
+test('all modes and both shapes animate fill without changing geometry or fades', () => {
   for (const mode of ['trail', 'return', 'move', 'place']) for (const shape of ['circle', 'rect']) {
     const source = clip({ mode, shape, edgeColor: '#ff0000', edgeWidth: 5,
       ...(mode === 'place' ? { duration: 0, fadeInMs: 0, holdMs: 1000, fadeOutMs: 1000, samples: [{ x: 100, y: 100, size: 100, width: 100, height: 60, t: 0 }] } : {}),
@@ -43,12 +43,12 @@ test('all modes and both shapes animate fill without changing geometry, fades or
       const actual = scene.draw(0, phase);
       const expected = new RGBAScene(project({ ...source, colorEditMode: 'color', color: colorAtTime(source, phase) })).draw(0, phase);
       equalPixels(actual, expected);
-      if (phase === 500) { assert.deepEqual(pixel(actual), [128, 0, 128, 255]); assert.deepEqual(pixel(actual, 148), [255, 0, 0, 255]); }
+      if (phase === 500) { assert.deepEqual(pixel(actual), [128, 0, 128, 255]); assert.deepEqual(pixel(actual, 148), [128, 0, 128, 255]); }
     }
   }
 });
 
-test('unset edges follow the animated fill, including black and tiny shapes containing only edge', () => {
+test('the entire footprint follows the animated fill, including black and tiny shapes', () => {
   for (const mode of ['trail', 'return', 'move']) {
     const scene = new RGBAScene(project(clip({ mode, colorGradient: { to: '#000000', startMs: 0, endMs: 1000 } })));
     assert.deepEqual(pixel(scene.draw(0, 500)), [128, 0, 0, 255]);
@@ -67,7 +67,7 @@ test('cached paths recolor the entire trail while scrubbing and accept B edits o
     gesture.clip = { ...value, colorGradient: { ...value.colorGradient, to: '#00ff00' } };
     const recolored = gesture.render(500);
     assert.deepEqual(pixel(recolored, 120).slice(0, 3), [128, 128, 0]);
-    assert.deepEqual(pixel(recolored, 120, 118).slice(0, 3), [255, 0, 0]);
+    assert.deepEqual(pixel(recolored, 120, 118).slice(0, 3), [128, 128, 0]);
     assert.equal(renderSignature(value), renderSignature(gesture.clip), 'B edits reuse the geometry cache');
     assert.notEqual(renderSignature(value), renderSignature({ ...value, colorEditMode: 'color' }));
   }

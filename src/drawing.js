@@ -1,8 +1,5 @@
+import { DEFAULT_RING_WIDTH } from './effects.js';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, MAX_BRUSH_SIZE } from './canvas.js';
-export const DEFAULT_EDGE_WIDTH = 5;
-// Old projects used zero to disable the edge. Treat it as the default now.
-export const edgeWidth = value => value === undefined || value === 0 ? DEFAULT_EDGE_WIDTH : value;
-
 export function brushSize(min, max, pressure, pointerType, enabled) {
   if (!enabled || pointerType !== 'pen') return max;
   const p = Number.isFinite(pressure) ? Math.min(1, Math.max(0, pressure)) : 0.5;
@@ -22,7 +19,7 @@ export function strokePoints(from, to) {
   if (!steps) return [];
   return Array.from({ length: steps }, (_, i) => {
     const t = (i + 1) / steps;
-    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, size: Math.round(from.size + (to.size - from.size) * t), ...(rect ? { shape: 'rect', width: (from.width ?? from.size) + ((to.width ?? to.size) - (from.width ?? from.size)) * t, height: (from.height ?? from.size) + ((to.height ?? to.size) - (from.height ?? from.size)) * t, angle: (from.angle ?? 0) + rotation * t } : {}) };
+    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, size: Math.round(from.size + (to.size - from.size) * t), ...(to.shape === 'ring' ? { shape: 'ring', ringWidth: to.ringWidth ?? DEFAULT_RING_WIDTH } : {}), ...(rect ? { shape: 'rect', width: (from.width ?? from.size) + ((to.width ?? to.size) - (from.width ?? from.size)) * t, height: (from.height ?? from.size) + ((to.height ?? to.size) - (from.height ?? from.size)) * t, angle: (from.angle ?? 0) + rotation * t } : {}) };
   });
 }
 export const angleDelta = (from, to) => ((to - from) % 360 + 540) % 360 - 180;
@@ -52,6 +49,18 @@ export function visitDisk(point, writeRow) {
 }
 
 export function visitShape(point, writeRow) {
+  if (point.shape === 'ring') {
+    const size = Math.max(1, Math.min(MAX_BRUSH_SIZE, Math.round(point.size))), radius = size / 2;
+    const inner = Math.max(0, radius - (point.ringWidth ?? DEFAULT_RING_WIDTH));
+    const cx = Math.floor(point.x) + size % 2 * .5, cy = Math.floor(point.y) + size % 2 * .5;
+    return visitDisk(point, (start, end) => {
+      const y = Math.floor(start / CANVAS_WIDTH), dy = y + .5 - cy;
+      if (inner <= 0 || Math.abs(dy) >= inner) return writeRow(start, end);
+      const half = Math.sqrt(inner * inner - dy * dy), left = y * CANVAS_WIDTH + Math.ceil(cx - half - .5), right = y * CANVAS_WIDTH + Math.floor(cx + half - .5) + 1;
+      if (left > start) writeRow(start, Math.min(end, left));
+      if (right < end) writeRow(Math.max(start, right), end);
+    });
+  }
   if (point.shape !== 'rect') return visitDisk(point, writeRow);
   const w = Math.max(1, Math.min(MAX_BRUSH_SIZE, point.width ?? point.size)) / 2, h = Math.max(1, Math.min(MAX_BRUSH_SIZE, point.height ?? point.size)) / 2;
   const angle = (point.angle ?? 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle), cx = Math.floor(point.x), cy = Math.floor(point.y);
@@ -68,25 +77,10 @@ export function visitShape(point, writeRow) {
     if (right > left) writeRow(y * CANVAS_WIDTH + left, y * CANVAS_WIDTH + right);
   }
 }
-// Split the existing shape into disjoint fill/edge spans. Keeping the edge
-// inside its bounds preserves the recorded diameter and avoids double alpha.
-export function visitPaint(point, color, style, writeRow, separateEdge = false) {
-  const width = Math.round(edgeWidth(style?.edgeWidth)), edge = style?.edgeColor ?? color;
-  if (edge === color && !separateEdge) return visitShape(point, (start, end) => writeRow(start, end, color, false));
-  const inner = point.shape === 'rect' ? { ...point, width: (point.width ?? point.size) - width * 2, height: (point.height ?? point.size) - width * 2 } : { ...point, size: Math.round(point.size) - width * 2 };
-  const hasFill = point.shape === 'rect' ? inner.width > 0 && inner.height > 0 : inner.size > 0;
-  const rows = [];
-  if (hasFill) visitShape(inner, (start, end) => rows.push([start, end]));
-  let next = 0;
-  visitShape(point, (start, end) => {
-    while (next < rows.length && rows[next][1] <= start) next++;
-    const fill = rows[next];
-    if (!fill || fill[0] >= end) { writeRow(start, end, edge, true); return; }
-    const left = Math.max(start, fill[0]), right = Math.min(end, fill[1]);
-    if (left > start) writeRow(start, left, edge, true);
-    if (right > left) writeRow(left, right, color, false);
-    if (right < end) writeRow(right, end, edge, true);
-  });
+// The main fill color paints the entire footprint. Ring is an annulus and
+// always leaves its center transparent, even where stamps overlap.
+export function visitPaint(point, color, style, writeRow) {
+  visitShape(point.shape === 'ring' ? { ...point, ringWidth: style?.ringWidth ?? point.ringWidth } : point, (start, end) => writeRow(start, end, color, false));
 }
 
 export function stamp(ctx, point, color, opacity = 1, style = {}) {
@@ -102,7 +96,3 @@ export function timestamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-export function recordingMime(Recorder) {
-  const types = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-  return types.find(type => Recorder.isTypeSupported(type)) || '';
-}

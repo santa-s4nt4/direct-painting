@@ -1,30 +1,34 @@
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
-import { LoopScene } from '../scene.js';
+import { RGBAScene } from '../rgba.js';
 import { LiveDrawing } from '../live.js';
-import { blurOpaqueRGB } from '../visuals.js';
+import { paintingStyle } from '../effects.js';
 
-// Compatibility backend for unavailable WebGL2. Server-side RGBA export keeps
-// its deterministic CPU rasterizer as well; no GPU readback is needed there.
+// Compatibility backend. Effects use premultiplied RGBA without requiring
+// Canvas2D.filter, and pigment mixing matches the GPU's Spectral compositor.
 export class CPUPaintingRenderer {
-  backend = 'cpu'; scene = new LoopScene(); live = new LiveDrawing();
+  backend = 'cpu'; scene = new RGBAScene({ clips: [], duration: 10000 }); live = new LiveDrawing();
   constructor(canvas, { onBackendChange = () => {} } = {}) {
-    this.canvas = canvas; this.ctx = canvas.getContext('2d', { willReadFrequently: true });
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.opaque = new Uint8ClampedArray(W * H * 4); this.image = new ImageData(this.opaque, W, H);
     canvas.dataset.renderer = 'cpu'; onBackendChange('cpu');
   }
   get items() { return this.scene.items; }
-  setProject(project) { this.scene.setProject(project); }
+  setProject(project) { this.scene.setProject({ ...project, clips: project.clips.map(paintingStyle) }); }
   setLiveStroke(stroke, now, move) {
     if (!stroke) { this.live.update(null, now); return; }
     const from = this.live.id === stroke.id ? this.live.count : 0;
-    this.live.update({ id: stroke.id, mode: stroke.mode, color: stroke.color, targets: stroke.targets, samples: stroke.samples.slice(from), from, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), head: stroke.last, move }, now);
+    this.live.update({ id: stroke.id, mode: stroke.mode, color: stroke.color, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, samples: stroke.samples.slice(from), from, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), head: stroke.last, move }, now);
   }
   receiveLive(packet, now) { this.live.update(packet, now); }
-  draw(side, phase, { now = performance.now(), placementPreview = false, blurRadius = 0 } = {}) {
-    this.scene.draw(this.ctx, side, phase, { placementPreview }); this.live.draw(this.ctx, side, now);
-    if (blurRadius > 0) {
-      this.scratch ??= new Uint8ClampedArray(W * H * 4); this.blurred ??= new Uint8ClampedArray(W * H * 4); this.image ??= new ImageData(this.blurred, W, H);
-      blurOpaqueRGB(this.ctx.getImageData(0, 0, W, H).data, W, H, this.scratch, this.blurred, blurRadius); this.ctx.putImageData(this.image, 0, 0);
+  draw(side, phase, { now = performance.now(), placementPreview = false } = {}) {
+    const pixels = this.scene.draw(side, phase, { placementPreview, effects: true });
+    if (this.live.id && this.live.targets.includes(side)) {
+      if (!this.liveCanvas) { this.liveCanvas = document.createElement('canvas'); this.liveCanvas.width = W; this.liveCanvas.height = H; this.liveContext = this.liveCanvas.getContext('2d', { willReadFrequently: true }); }
+      this.liveContext.clearRect(0, 0, W, H); this.live.draw(this.liveContext, side, now);
+      this.scene.compositeLayer(this.liveContext.getImageData(0, 0, W, H).data, paintingStyle(this.live.style), this.live.elapsed + Math.max(0, now - this.live.received));
     }
+    for (let p = 0; p < pixels.length; p += 4) { const a = pixels[p + 3] / 255; this.opaque[p] = pixels[p] * a; this.opaque[p + 1] = pixels[p + 1] * a; this.opaque[p + 2] = pixels[p + 2] * a; this.opaque[p + 3] = 255; }
+    this.ctx.putImageData(this.image, 0, 0);
   }
   dispose() { this.scene.items = []; this.live.clear(); }
 }

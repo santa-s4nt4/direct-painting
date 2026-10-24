@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { brushSize, canvasPoint, strokePoints, stamp, recordingMime, timestamp } from '../src/drawing.js';
+import { brushSize, canvasPoint, strokePoints, stamp, timestamp } from '../src/drawing.js';
 
 test('Pencil pressure scales the brush while mouse and disabled pressure use the selected size', () => {
   assert.equal(brushSize(15, 100, 0, 'pen', true), 15);
@@ -36,11 +36,6 @@ test('circle stamps keep crisp pixels, omit square corners, and restore opacity'
   assert.ok(calls[0][2] < calls[4][2]);
   assert.equal(calls[4][2], 10);
   assert.ok(calls.every(args => args.every(Number.isInteger) && args[3] === 1));
-});
-test('recording prefers supported MP4 and falls back to WebM or browser default', () => {
-  assert.equal(recordingMime({ isTypeSupported: type => type === 'video/mp4' }), 'video/mp4');
-  assert.equal(recordingMime({ isTypeSupported: type => type === 'video/webm' }), 'video/webm');
-  assert.equal(recordingMime({ isTypeSupported: () => false }), '');
 });
 test('filenames include a local timestamp', () => {
   assert.equal(timestamp(new Date(2026, 9, 8, 9, 5, 3)), '20261008-090503');

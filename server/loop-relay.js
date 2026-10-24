@@ -1,14 +1,12 @@
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { validateProject } from '../src/loop.js';
-import { MAX_BLUR_RADIUS } from '../src/visuals.js';
+import { validateEffects, validateRingWidth } from '../src/effects.js';
 
 export function validateSnapshot(value, now) {
   const project = validateProject(value?.project);
   const playback = value?.playback;
   if (!playback || typeof playback.playing !== 'boolean' || !Number.isFinite(playback.phase) || playback.phase < 0) throw new Error('Invalid playback');
-  const settings = project.settings || {};
-  if (settings.blurRadius !== undefined && (!Number.isInteger(settings.blurRadius) || settings.blurRadius < 0 || settings.blurRadius > MAX_BLUR_RADIUS)) throw new Error('Invalid blur');
   const phase = playback.phase % project.duration;
   return { project, playback: { playing: playback.playing, phase, anchor: now - phase } };
 }
@@ -18,18 +16,18 @@ function validateControl(value) {
 }
 export function validateLive(value) {
   const control = validateControl(value);
-  if (value.edgeColor !== undefined && !/^#[0-9a-f]{6}$/i.test(value.edgeColor)) throw new Error('Invalid live edge color');
-  if (value.edgeWidth !== undefined && (!Number.isInteger(value.edgeWidth) || value.edgeWidth < 0 || value.edgeWidth > 32)) throw new Error('Invalid live edge width');
+  validateEffects(value.effects); validateRingWidth(value.ringWidth);
   if (!control.id || !['trail', 'return', 'move', 'place'].includes(value.mode) || !/^#[0-9a-f]{6}$/i.test(value.color) || !Array.isArray(value.targets) || !value.targets.length || value.targets.length > 2 || value.targets.some(side => side !== 0 && side !== 1) || !Number.isSafeInteger(value.from) || value.from < 0 || !Array.isArray(value.samples) || value.samples.length > 100000 || !Number.isFinite(value.elapsed) || value.elapsed < 0) throw new Error('Invalid live drawing');
   const point = (sample, timed) => {
     if (!sample || !['x', 'y', 'size'].every(key => Number.isFinite(sample[key])) || sample.size < 1 || sample.size > 320 || (timed && (!Number.isFinite(sample.t) || sample.t < 0 || sample.t > value.elapsed))) throw new Error('Invalid live point');
-    if (sample.shape !== undefined && !['circle', 'rect'].includes(sample.shape)) throw new Error('Invalid live shape');
+    if (sample.shape !== undefined && !['circle', 'rect', 'ring'].includes(sample.shape)) throw new Error('Invalid live shape');
     if (sample.shape === 'rect' && (!['width', 'height', 'angle'].every(key => Number.isFinite(sample[key])) || sample.width < 1 || sample.width > 320 || sample.height < 1 || sample.height > 320 || Math.abs(sample.angle) > 720)) throw new Error('Invalid live rectangle');
-    return { x: sample.x, y: sample.y, size: sample.size, ...(sample.shape === 'rect' ? { shape: 'rect', width: sample.width, height: sample.height, angle: sample.angle } : {}), ...(timed ? { t: sample.t } : {}) };
+    validateRingWidth(sample.ringWidth);
+    return { x: sample.x, y: sample.y, size: sample.size, ...(sample.shape === 'ring' ? { shape: 'ring', ringWidth: sample.ringWidth ?? value.ringWidth ?? 5 } : {}), ...(sample.shape === 'rect' ? { shape: 'rect', width: sample.width, height: sample.height, angle: sample.angle } : {}), ...(timed ? { t: sample.t } : {}) };
   };
   const samples = value.samples.map(sample => point(sample, true));
   if (samples.some((sample, index) => index && sample.t < samples[index - 1].t) || (value.from === 0 && (!samples.length || samples[0].t !== 0))) throw new Error('Invalid live sample timing');
-  return { ...control, mode: value.mode, color: value.color, ...(value.edgeColor !== undefined ? { edgeColor: value.edgeColor } : {}), ...(value.edgeWidth !== undefined ? { edgeWidth: value.edgeWidth } : {}), targets: value.targets, from: value.from, samples, elapsed: value.elapsed, head: point(value.head, true), ...(value.move ? { move: point(value.move, false) } : {}) };
+  return { ...control, mode: value.mode, color: value.color, effects: value.effects, ringWidth: value.ringWidth, targets: value.targets, from: value.from, samples, elapsed: value.elapsed, head: point(value.head, true), ...(value.move ? { move: point(value.move, false) } : {}) };
 }
 export async function createLoopRelay(cacheFile) {
   let state = null, version = 0, writes = Promise.resolve(), live = null, liveVersion = 0, lastLiveAt = 0;

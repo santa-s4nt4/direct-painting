@@ -1,12 +1,13 @@
 import { createPaintingRenderer } from '../src/render/index.js';
 import { WebGLPaintingRenderer } from '../src/render/webgl.js';
 import { LoopScene } from '../src/scene.js';
+import { DEFAULT_EFFECTS } from '../src/effects.js';
 import { RGBAScene } from '../src/rgba.js';
 const result = document.querySelector('#result'), button = document.querySelector('#run');
 const gpu = new WebGLPaintingRenderer(document.querySelector('#gpu'));
 const ctx = document.querySelector('#cpu').getContext('2d');
 const project = clips => ({ version: 1, clips, duration: 10000 });
-const clip = (id, mode = 'return', extra = {}) => ({ id, mode, color: '#0d99ff', enabled: true, targets: [0], duration: 200, start: 0, fadeMs: 1000, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 200 }], ...extra });
+const clip = (id, mode = 'return', extra = {}) => ({ id, mode, blendMode: 'analog', effects: { ...DEFAULT_EFFECTS, blur: false }, color: '#0d99ff', enabled: true, targets: [0], duration: 200, start: 0, fadeMs: 1000, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 200 }], ...extra });
 const gpuPixel = (data, x, y) => [...data.slice(((1080 - 1 - y) * 1920 + x) * 4, ((1080 - 1 - y) * 1920 + x) * 4 + 4)];
 const cpuPixel = (data, x, y) => { const i = (y * 1920 + x) * 4, a = data[i + 3] / 255; return [Math.round(data[i] * a), Math.round(data[i + 1] * a), Math.round(data[i + 2] * a), data[i + 3]]; };
 const pause = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -19,8 +20,10 @@ button.onclick = async () => {
   try {
     const cases = [
       ['return', [clip('r')]], ['trail', [clip('t', 'trail')]], ['move', [clip('m', 'move')]],
-      ['rectangle', [clip('rect', 'return', { shape: 'rect', angle: 32, edgeColor: '#ff4040', edgeWidth: 9, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
-      ['gradient', [clip('gradient', 'return', { colorEditMode: 'gradient', colorGradient: { to: '#ff8800', startMs: 0, endMs: 900 }, edgeColor: '#ffffff' })]],
+      ['rectangle', [clip('rect', 'return', { shape: 'rect', angle: 32, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
+      ['gradient', [clip('gradient', 'return', { colorEditMode: 'gradient', colorGradient: { to: '#ff8800', startMs: 0, endMs: 900 } })]],
+      ['ring move', [clip('ring-move', 'move', { shape: 'ring', ringWidth: 7 })]],
+      ['ring trail', [clip('ring-trail', 'trail', { shape: 'ring', ringWidth: 7 })]],
       ['black', [clip('black', 'return', { color: '#000000' })]],
       ['analog over black', [clip('black-base', 'return', { color: '#000000' }), clip('yellow-over-black', 'return', { color: '#fcd200', blendMode: 'analog' })]],
       ['analog', [clip('below', 'return', { color: '#002185' }), clip('above', 'return', { color: '#fcd200', blendMode: 'analog' })]],
@@ -40,6 +43,23 @@ button.onclick = async () => {
       report.checks.push({ name, passed: true, maxChannelError: worst });
       await pause();
     }
+    const effectClip = clip('fx', 'return', { duration: 100, samples: [{ x: 500, y: 500, size: 160, t: 0 }, { x: 500, y: 500, size: 160, t: 100 }] });
+    const drawFX = (effects, time = 50) => { gpu.setProject(project([{ ...effectClip, effects }])); gpu.draw(0, time); return gpu.readPixels(); };
+    const off = { ...DEFAULT_EFFECTS, blur: false }, sharp = drawFX(off), masks = gpu.stats.masksCreated;
+    const soft = drawFX(DEFAULT_EFFECTS);
+    if (gpuPixel(sharp, 590, 500)[3] !== 0 || gpuPixel(soft, 590, 500)[3] < 3) throw new Error('Default blur did not spread this layer');
+    const restored = drawFX(off);
+    if (restored.some((v, i) => v !== sharp[i]) || gpu.stats.masksCreated !== masks) throw new Error('Toggling effects changed or rebuilt the source geometry');
+    report.checks.push({ name: 'Blur defaults to 64px, toggles reversibly and reuses masks', passed: true });
+    const rgb = drawFX({ ...off, chromatic: true, chromaticAmount: 16 });
+    if (gpuPixel(rgb, 415, 500)[2] < 200 || gpuPixel(rgb, 415, 500)[0] > 5) throw new Error('Chromatic aberration did not separate RGB');
+    const glitched = drawFX({ ...off, glitch: true }, 0), later = drawFX({ ...off, glitch: true }, 270), rewound = drawFX({ ...off, glitch: true }, 0);
+    if (!glitched.some((v, i) => v !== sharp[i]) || !later.some((v, i) => v !== glitched[i]) || rewound.some((v, i) => v !== glitched[i])) throw new Error('Glitch is not deterministic');
+    report.checks.push({ name: 'Chromatic aberration separates channels; Glitch pauses and rewinds deterministically', passed: true });
+    const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
+    gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS, glitch: true, chromatic: true } }, untouched])); gpu.draw(0, 50);
+    if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
+    report.checks.push({ name: 'Effects are isolated per layer', passed: true });
     const clips = Array.from({ length: 10 }, (_, layer) => clip(`bench-${layer}`, 'trail', {
       color: ['#0d99ff', '#ff7331', '#83dc92'][layer % 3], duration: 1800,
       samples: Array.from({ length: 109 }, (_, i) => ({ x: 180 + i * 13, y: 170 + layer * 68 + Math.sin(i / 11) * 55, size: 60 + (i % 30), t: i * 1000 / 60 })),
@@ -57,16 +77,24 @@ button.onclick = async () => {
     report.benchmark.gpu = summary(gpuTimes);
     const stable = gpu.stats.masksCreated === allocations;
     report.checks.push({ name: '10-layer warm playback reuses GPU masks', passed: stable }); if (!stable) throw new Error('GPU targets reallocated during warm playback');
-    const live = { id: 'bench-live', mode: 'trail', color: '#ffffff', targets: [0], started: performance.now(), last: { x: 960, y: 540, size: 80, t: 0 }, samples: [{ x: 960, y: 540, size: 80, t: 0 }] };
+    const live = { id: 'bench-live', mode: 'trail', effects: { ...DEFAULT_EFFECTS, blur: false }, color: '#ffffff', targets: [0], started: performance.now(), last: { x: 960, y: 540, size: 80, t: 0 }, samples: [{ x: 960, y: 540, size: 80, t: 0 }] };
     report.benchmark.gpuFirstPointWith10LayersMs = +measure(() => { gpu.setLiveStroke(live, live.started); gpu.draw(0, 1000, { now: live.started }); gpu.finish(); }).toFixed(2);
     gpu.setLiveStroke(null); const before = gpu.stats.masksCreated;
     gpu.setProject({ ...p, clips: p.clips.map((c, i) => i === 0 ? { ...c, color: '#ff00ff' } : c) }); gpu.draw(0, 1100); gpu.finish();
     report.checks.push({ name: 'color edits reuse existing geometry and masks', passed: before === gpu.stats.masksCreated });
     if (before !== gpu.stats.masksCreated) throw new Error('Color edit invalidated raster geometry');
+    const effectProject = { ...p, clips: p.clips.map(c => ({ ...c, effects: { ...DEFAULT_EFFECTS, glitch: true, chromatic: true } })) };
+    gpu.setProject(effectProject); gpu.draw(0, 900); gpu.finish();
+    const effectTimes = [];
+    for (let i = 0; i < 30; i++) { effectTimes.push(measure(() => { gpu.draw(0, 900 + i * 1000 / 60); gpu.finish(); })); await pause(); }
+    report.benchmark.gpu10LayersAllEffects = summary(effectTimes);
+    const effectLive = { ...live, id: 'effect-live', effects: DEFAULT_EFFECTS, started: performance.now() };
+    report.benchmark.gpuFirstPointWith10EffectLayersMs = +measure(() => { gpu.setLiveStroke(effectLive, effectLive.started); gpu.draw(0, 1100, { now: effectLive.started }); gpu.finish(); }).toFixed(2);
+    gpu.setLiveStroke(null);
     // Late packets must extend the path from the last received source sample,
     // even when the locally predicted head has already advanced in time.
     gpu.setProject(project([]));
-    const packet = { id: 'remote-live', from: 0, mode: 'trail', color: '#ff0000', targets: [0], elapsed: 0, samples: [{ x: 100, y: 400, size: 20, t: 0 }], head: { x: 100, y: 400, size: 20, t: 0 } };
+    const packet = { id: 'remote-live', from: 0, mode: 'trail', effects: { ...DEFAULT_EFFECTS, blur: false }, color: '#ff0000', targets: [0], elapsed: 0, samples: [{ x: 100, y: 400, size: 20, t: 0 }], head: { x: 100, y: 400, size: 20, t: 0 } };
     gpu.receiveLive(packet, 1000); gpu.draw(0, 0, { now: 1000 }); gpu.draw(0, 0, { now: 1200 });
     gpu.receiveLive({ ...packet, from: 1, elapsed: 100, samples: [{ x: 300, y: 400, size: 20, t: 100 }], head: { x: 300, y: 400, size: 20, t: 100 } }, 1200);
     gpu.draw(0, 0, { now: 1200 });

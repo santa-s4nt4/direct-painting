@@ -2,12 +2,11 @@ import { FPS } from './timing.js';
 
 const $ = selector => document.querySelector(selector);
 
-export function setupEditorShell({ icon, modes, modeHints, onMode }) {
+export function setupEditorShell({ icon, modes, modeHints, onMode, onShape }) {
   const main = $('main'), studio = $('.studio'), toolbar = $('.toolbar'), workspace = $('.workspace');
   const layers = $('.layers-panel'), history = $('.history-actions');
   const clear = $('#clear'), save = $('#save-project'), importButton = $('#import-project'), importFile = $('#import-file');
-  const format = $('#export-format'), exportButton = $('#export-loop'), exportStatus = $('#export-status');
-  const cacheStatus = $('#cache-status'), outputStatus = $('#output-status'), recordings = $('#recordings');
+  const cacheStatus = $('#cache-status'), outputStatus = $('#output-status');
   let selected = null;
   main.className = 'editor';
   studio.setAttribute('aria-label', 'direct-painting studio');
@@ -47,15 +46,14 @@ export function setupEditorShell({ icon, modes, modeHints, onMode }) {
     if (hint) { const note = document.createElement('p'); note.className = 'control-hint'; note.textContent = hint; content.append(note); }
     details.append(summary, content); toolbar.append(details); return details;
   };
-  const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#rectangle-controls')]);
+  const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls')]);
   const color = section('Fill', [$('.color-picker')]);
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
-  const preview = section('Preview', [$('#show-blur-preview').closest('label'), $('#blur-radius').previousElementSibling, $('#blur-radius')], false, 'Blur the canvas preview. Output stays sharp.');
-  $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="rect">Rectangle</option>';
-  toolbar.replaceChildren(shape, color, input, fades, preview);
+  $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option>';
+  toolbar.replaceChildren(shape, color, input, fades);
   for (const label of toolbar.querySelectorAll('label > span')) {
-    const names = { PRESSURE: 'Apple Pencil pressure', TOUCH: 'Draw with touch', 'SHOW PREVIEW': 'Show blur preview' };
+    const names = { PRESSURE: 'Apple Pencil pressure', TOUCH: 'Draw with touch' };
     if (names[label.textContent]) label.textContent = names[label.textContent];
   }
   for (const label of toolbar.querySelectorAll('.size-bound label')) label.textContent = label.textContent === 'MIN' ? 'Min' : 'Max';
@@ -67,7 +65,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode }) {
   empty.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg><p>Make your first mark</p><span>Each stroke becomes an<br>editable motion layer.</span>';
   $('#layer-list').after(empty);
   const properties = document.createElement('section'); properties.id = 'selection-properties'; properties.className = 'selection-properties'; properties.setAttribute('aria-label', 'Selected layer properties');
-  const noSelection = () => { properties.innerHTML = '<div class="selection-empty"><span>Layer properties</span><p>Select a layer above to edit its fill, shape and timing.</p></div>'; };
+  const noSelection = () => { properties.innerHTML = '<div class="selection-empty"><span>Layer properties</span><p>Select a layer above to edit its fill, effects, shape and timing.</p></div>'; };
   noSelection(); panels.layer.append(layers, properties);
 
   panels.files.className = 'files-panel';
@@ -75,12 +73,8 @@ export function setupEditorShell({ icon, modes, modeHints, onMode }) {
   projectFiles.innerHTML = '<h2>Project</h2><p>Save or open an editable canvas.</p>';
   save.textContent = 'Save project'; importButton.textContent = 'Import project'; save.title = 'Download an editable JSON project';
   projectFiles.append(save, importButton, importFile);
-  const exportPanel = document.createElement('section'); exportPanel.className = 'export-panel'; exportPanel.setAttribute('aria-label', 'Export');
-  exportPanel.innerHTML = `<div class="export-panel-heading"><strong>Export</strong><span>1920 × 1080 · ${FPS}fps</span></div>`;
-  exportPanel.append(format, exportButton, exportStatus);
-  format.options[0].textContent = 'MOV · ProRes 4444 + Alpha'; format.options[1].textContent = 'MP4 · H.264'; exportButton.querySelector('#export-label').textContent = 'Export loop';
   const connection = document.createElement('div'); connection.className = 'connection-status'; connection.append(outputStatus);
-  panels.files.append(projectFiles, exportPanel, recordings, connection);
+  panels.files.append(projectFiles, connection);
 
   history.className = 'history-actions';
   clear.innerHTML = `${icon('trash')}<span>Clear canvas</span>`;
@@ -92,6 +86,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode }) {
   const floating = document.createElement('div'); floating.className = 'canvas-tools'; floating.setAttribute('role', 'group'); floating.setAttribute('aria-label', 'Motion mode');
   floating.innerHTML = modes.map(mode => `<button data-paint-mode="${mode}" aria-label="${mode[0].toUpperCase() + mode.slice(1)} mode" aria-pressed="${mode === 'trail'}" title="${modeHints[mode]}">${icon(mode)}<span>${mode[0].toUpperCase() + mode.slice(1)}</span></button>`).join('');
   for (const button of floating.querySelectorAll('button')) button.addEventListener('click', () => onMode(button.dataset.paintMode));
+  const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Draw an outline circle'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(ring.getAttribute('aria-pressed') === 'true' ? 'circle' : 'ring')); floating.append(ring);
   const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = `${FPS} fps`;
   controls.append(floating, fps);
   const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove(); timeline.querySelector('.loop-duration label').textContent = 'Duration';
@@ -103,7 +98,8 @@ export function setupEditorShell({ icon, modes, modeHints, onMode }) {
   window.addEventListener('resize', syncSidebar); syncSidebar();
 
   return {
-    setMode(mode) { for (const button of floating.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.paintMode === mode)); },
+    setMode(mode) { for (const button of floating.querySelectorAll('[data-paint-mode]')) button.setAttribute('aria-pressed', String(button.dataset.paintMode === mode)); },
+    setShape(shape) { ring.setAttribute('aria-pressed', String(shape === 'ring')); },
     clearSelectionProperties() { selected = null; noSelection(); },
     showLayer(id, body, activate = true) {
       if (selected) { const previous = properties.querySelector('.layer-body'); const owner = [...document.querySelectorAll('.cached-layer')].find(row => row.dataset.layerId === selected); if (previous && owner) owner.append(previous); }
