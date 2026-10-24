@@ -5,7 +5,7 @@ import {
   Vector2, Vector4, Vector3, GLSL3, NoBlending, CustomBlending, OneFactor,
   OneMinusSrcAlphaFactor, AddEquation, DoubleSide, NearestFilter, LinearFilter, NoColorSpace,
 } from 'three';
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, MAX_BRUSH_SIZE } from '../canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, MAX_BRUSH_SIZE } from '../canvas.js';
 import { DEFAULT_RING_WIDTH, layerEffects, paintingStyle } from '../effects.js';
 import { prepareShapeClip } from '../geometry.js';
 import { CachedGesture, gestureTime, gestureVisible, gestureOpacity } from '../loop.js';
@@ -31,11 +31,11 @@ export class WebGLPaintingRenderer {
   constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024 } = {}) {
     this.canvas = canvas; this.onBackendChange = onBackendChange; this.cacheBytes = cacheBytes;
     this.renderer = new WebGLRenderer({ canvas, alpha: false, antialias: false, depth: true, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(1); this.renderer.setSize(W, H, false); this.renderer.autoClear = false;
+    this.renderer.setPixelRatio(1); this.renderer.setSize(VW, VH, false); this.renderer.autoClear = false;
     this.renderer.info.autoReset = false;
     this.renderer.debug.onShaderError = (gl, program, vertex, fragment) => { throw new Error([gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].join('\n')); };
     this.quad = new PlaneGeometry(1, 1);
-    this.camera = new OrthographicCamera(0, W, H, 0, -1000, 1000);
+    this.camera = new OrthographicCamera(0, VW, VH, 0, -1000, 1000);
     this.passScene = new Scene(); this.passMesh = new Mesh(this.quad); this.passMesh.frustumCulled = false; this.passScene.add(this.passMesh);
     this.accumulator = target(W, H);
     this.liveTarget = target(W, H); // Allocate once at startup, never at Pencil down.
@@ -48,10 +48,10 @@ export class WebGLPaintingRenderer {
     this.stampScene = new Scene(); this.stampScene.add(this.stampMesh);
     this.normalMaterial = this.layerMaterial(normalFragment, CustomBlending);
     this.copyMaterial = material(screenVertex, copyFragment, { image: { value: null } });
-    this.presentMaterial = material(presentVertex, presentFragment, { image: { value: this.accumulator.texture }, resolution: { value: new Vector2(W, H) }, view: { value: new Vector3(1, 0, 0) } });
+    this.presentMaterial = material(presentVertex, presentFragment, { image: { value: this.accumulator.texture }, resolution: { value: new Vector2(VW, VH) }, canvasResolution: { value: new Vector2(W, H) }, view: { value: new Vector3(1, 0, 0) } });
     // The final painting is a normal Three.js scene object. Camera, scene and
     // texture are separate from input/history and available for future 3D use.
-    this.scene = new Scene(); this.painting = new Mesh(new PlaneGeometry(W, H), this.presentMaterial); this.painting.position.set(W / 2, H / 2, 0); this.painting.renderOrder = -1000; this.scene.add(this.painting);
+    this.scene = new Scene(); this.painting = new Mesh(new PlaneGeometry(VW, VH), this.presentMaterial); this.painting.position.set(VW / 2, VH / 2, 0); this.painting.renderOrder = -1000; this.scene.add(this.painting);
     this.clearTarget(this.accumulator); this.clearTarget(this.liveTarget);
     this.renderer.compile(this.stampScene, this.camera);
     this.passMesh.material = this.normalMaterial; this.renderer.compile(this.passScene, this.camera);
@@ -231,7 +231,7 @@ export class WebGLPaintingRenderer {
     }
   }
   // Explicit diagnostics only. Never called during interactive rendering.
-  readPixels({ presented = false } = {}) { const pixels = new Uint8Array(W * H * 4); if (presented) { const gl = this.renderer.getContext(); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, pixels); } else this.renderer.readRenderTargetPixels(this.current, 0, 0, W, H, pixels); return pixels; }
+  readPixels({ presented = false } = {}) { const pixels = new Uint8Array((presented ? VW * VH : W * H) * 4); if (presented) { const gl = this.renderer.getContext(); gl.readPixels(0, 0, VW, VH, gl.RGBA, gl.UNSIGNED_BYTE, pixels); } else this.renderer.readRenderTargetPixels(this.current, 0, 0, W, H, pixels); return pixels; }
   finish() { this.renderer.getContext().finish(); }
   dispose() {
     for (const item of this.items) this.release(item);

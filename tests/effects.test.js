@@ -1,3 +1,4 @@
+import { CANVAS_WIDTH } from '../src/canvas.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_EFFECTS, paintingStyle } from '../src/effects.js';
@@ -45,7 +46,7 @@ test('live streams retain ring and effect settings for both local and remote inp
 });
 
 test('rings leave the center untouched through all motion modes, interpolation and width edits', () => {
-  const center = (100 * 1920 + 100) * 4, edge = (100 * 1920 + 137) * 4;
+  const center = (100 * CANVAS_WIDTH + 100) * 4, edge = (100 * CANVAS_WIDTH + 137) * 4;
   for (const mode of ['trail', 'return', 'move', 'place']) {
     const c = { ...clip, mode, ...(mode === 'place' ? { duration: 0, samples: [clip.samples[0]], fadeInMs: 0, holdMs: 1000, fadeOutMs: 0 } : {}) };
     const visual = new CachedGesture(c).render(50);

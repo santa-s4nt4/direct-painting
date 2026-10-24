@@ -1,5 +1,5 @@
-import { validateView, canvasView } from '../src/view.js';
-import { MAX_BRUSH_SIZE } from '../src/canvas.js';
+import { validateView, canvasView, importedView } from '../src/view.js';
+import { MAX_BRUSH_SIZE, CANVAS_SPEC } from '../src/canvas.js';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { validateProject } from '../src/loop.js';
@@ -7,7 +7,8 @@ import { validateEffects, validateRingWidth } from '../src/effects.js';
 
 export function validateSnapshot(value, now) {
   const project = validateProject(value?.project);
-  validateView(project.settings?.view);
+  if (project.settings?.view !== undefined) project.settings = { ...project.settings, view: importedView(project.settings.view, project.canvas) };
+  if (project.canvas) project.canvas = { ...CANVAS_SPEC };
   const playback = value?.playback;
   if (!playback || typeof playback.playing !== 'boolean' || !Number.isFinite(playback.phase) || playback.phase < 0) throw new Error('Invalid playback');
   const phase = playback.phase % project.duration;

@@ -1,4 +1,4 @@
-import { DEFAULT_VIEW, canvasView, validateView } from './view.js';
+import { DEFAULT_VIEW, importedView } from './view.js';
 import { resolveLayer } from './layers.js';
 import { CANVAS_SPEC, MAX_BRUSH_SIZE } from './canvas.js';
 import { validateProject } from './loop.js';
@@ -35,7 +35,7 @@ export function normalizeProject(value) {
     if (supplied[key] !== undefined) { if (!Number.isInteger(supplied[key]) || supplied[key] < min || supplied[key] > max) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
   validateEffects(supplied.effects); settings.effects = layerEffects({ effects: supplied.effects });
-  validateView(supplied.view); settings.view = canvasView(supplied.view);
+  settings.view = importedView(supplied.view, project.canvas);
   if (supplied.opacity !== undefined) { if (!Number.isFinite(supplied.opacity) || supplied.opacity < 0 || supplied.opacity > 1) throw new Error('Invalid opacity'); settings.opacity = supplied.opacity; }
   validateLEDOptions({ single: settings.p5SingleRatio, climax: settings.p5ClimaxRatio, variation: settings.p5Variation });
   settings.followDirection = false; // Accept legacy JSON but always use the UI angle.

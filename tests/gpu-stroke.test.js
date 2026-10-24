@@ -1,3 +1,4 @@
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../src/canvas.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sameGeometry, strokeBounds, StampCursor, LiveStroke } from '../src/render/stroke.js';
@@ -15,11 +16,11 @@ test('GPU geometry cache survives color, fade, timing and visibility edits, but 
   assert.equal(sameGeometry(clip, { ...clip, samples: samples.map((p, i) => i === 1 ? { ...p, x: 190 } : p) }), false);
 });
 
-test('cropped GPU masks contain all source samples and remain inside the Full HD canvas', () => {
+test('cropped GPU masks contain all source samples and remain inside the UHD canvas', () => {
   const bounds = strokeBounds(clip);
   assert.ok(bounds.width < 300 && bounds.height < 150);
   for (const p of samples) { assert.ok(bounds.x <= p.x - p.size / 2); assert.ok(bounds.y <= p.y - p.size / 2); assert.ok(bounds.x + bounds.width >= p.x + p.size / 2); }
-  assert.deepEqual(strokeBounds({ samples: [{ x: -100, y: 1200, size: 80 }] }), { x: 0, y: 1079, width: 1, height: 1 });
+  assert.deepEqual(strokeBounds({ samples: [{ x: -100, y: CANVAS_HEIGHT + 100, size: 80 }] }), { x: 0, y: CANVAS_HEIGHT - 1, width: 1, height: 1 });
   const rotated = strokeBounds({ shape: 'rect', samples: [{ x: 960, y: 540, size: 20, width: 300, height: 200 }] });
   assert.ok(rotated.width >= Math.hypot(300, 200));
 });

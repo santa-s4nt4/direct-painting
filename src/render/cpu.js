@@ -1,5 +1,5 @@
 import { canvasView } from '../view.js';
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from '../canvas.js';
 import { RGBAScene } from '../rgba.js';
 import { LiveDrawing } from '../live.js';
 import { paintingStyle } from '../effects.js';
@@ -35,7 +35,7 @@ export class CPUPaintingRenderer {
     else {
       if (!this.viewCanvas) { this.viewCanvas = document.createElement('canvas'); this.viewCanvas.width = W; this.viewCanvas.height = H; this.viewContext = this.viewCanvas.getContext('2d'); }
       this.viewContext.putImageData(this.image, 0, 0);
-      this.ctx.fillStyle = '#000'; this.ctx.fillRect(0, 0, W, H); this.ctx.save(); this.ctx.setTransform(scale, 0, 0, scale, x, y); this.ctx.drawImage(this.viewCanvas, 0, 0); this.ctx.restore();
+      this.ctx.fillStyle = '#000'; this.ctx.fillRect(0, 0, VW, VH); this.ctx.save(); this.ctx.setTransform(scale, 0, 0, scale, x, y); this.ctx.drawImage(this.viewCanvas, 0, 0); this.ctx.restore();
     }
   }
   dispose() { this.scene.items = []; this.live.clear(); }

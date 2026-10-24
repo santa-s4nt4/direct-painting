@@ -1,3 +1,4 @@
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from '../src/canvas.js';
 import { createPaintingRenderer } from '../src/render/index.js';
 import { WebGLPaintingRenderer } from '../src/render/webgl.js';
 import { LoopScene } from '../src/scene.js';
@@ -9,15 +10,16 @@ const gpu = new WebGLPaintingRenderer(document.querySelector('#gpu'));
 const ctx = document.querySelector('#cpu').getContext('2d');
 const project = clips => ({ version: 1, clips, duration: 10000 });
 const clip = (id, mode = 'return', extra = {}) => ({ id, mode, blendMode: 'analog', effects: { ...DEFAULT_EFFECTS, blur: false }, color: '#0d99ff', enabled: true, targets: [0], duration: 200, start: 0, fadeMs: 1000, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 200 }], ...extra });
-const gpuPixel = (data, x, y) => [...data.slice(((1080 - 1 - y) * 1920 + x) * 4, ((1080 - 1 - y) * 1920 + x) * 4 + 4)];
-const cpuPixel = (data, x, y) => { const i = (y * 1920 + x) * 4, a = data[i + 3] / 255; return [Math.round(data[i] * a), Math.round(data[i + 1] * a), Math.round(data[i + 2] * a), data[i + 3]]; };
+const gpuPixel = (data, x, y) => [...data.slice(((H - 1 - y) * W + x) * 4, ((H - 1 - y) * W + x) * 4 + 4)];
+const presentedPixel = (data, x, y) => [...data.slice(((VH - 1 - y) * VW + x) * 4, ((VH - 1 - y) * VW + x) * 4 + 4)];
+const cpuPixel = (data, x, y) => { const i = (y * W + x) * 4, a = data[i + 3] / 255; return [Math.round(data[i] * a), Math.round(data[i + 1] * a), Math.round(data[i + 2] * a), data[i + 3]]; };
 const pause = () => new Promise(resolve => requestAnimationFrame(resolve));
 const measure = run => { const start = performance.now(); run(); return performance.now() - start; };
 const summary = times => ({ meanMs: +(times.reduce((a, b) => a + b, 0) / times.length).toFixed(2), p95Ms: +times.slice().sort((a, b) => a - b)[Math.floor(times.length * .95)].toFixed(2) });
 
 button.onclick = async () => {
   button.disabled = true; result.textContent = 'Running pixel and cache checks…';
-  const report = { resolution: '1920x1080', targetFPS: 60, userAgent: navigator.userAgent, checks: [], benchmark: {} };
+  const report = { resolution: '3840x2160', viewport: '1920x1080', zoomRange: [0.5, 2], targetFPS: 60, userAgent: navigator.userAgent, checks: [], benchmark: {} };
   try {
     const cases = [
       ['return', [clip('r')]], ['trail', [clip('t', 'trail')]], ['move', [clip('m', 'move')]],
@@ -26,6 +28,7 @@ button.onclick = async () => {
       ['ring move', [clip('ring-move', 'move', { shape: 'ring', ringWidth: 7 })]],
       ['ring trail', [clip('ring-trail', 'trail', { shape: 'ring', ringWidth: 7 })]],
       ['opacity', [clip('opacity', 'return', { opacity: .35 })]],
+      ['4K far edge', [clip('far-edge', 'return', { samples: [{ x: 3500, y: 1980, size: 80, t: 0 }, { x: 3600, y: 1980, size: 80, t: 200 }] })]],
       ['black', [clip('black', 'return', { color: '#000000' })]],
       ['analog over black', [clip('black-base', 'return', { color: '#000000' }), clip('yellow-over-black', 'return', { color: '#fcd200', blendMode: 'analog' })]],
       ['analog', [clip('below', 'return', { color: '#002185' }), clip('above', 'return', { color: '#fcd200', blendMode: 'analog' })]],
@@ -36,7 +39,7 @@ button.onclick = async () => {
       const p = project(clips), cpu = new RGBAScene(p); gpu.setProject(p); let worst = 0;
       for (const time of [0, 100, 700, 4000, 100]) {
         gpu.draw(0, time); const actual = gpu.readPixels(), expected = cpu.draw(0, time);
-        for (const [x, y] of [[180, 200], [190, 200], [180, 220], [200, 210], [380, 200], [20, 20]]) {
+        for (const [x, y] of [[180, 200], [190, 200], [180, 220], [200, 210], [380, 200], [20, 20], [3500, 1980], [3600, 1980]]) {
           const a = gpuPixel(actual, x, y), e = cpuPixel(expected, x, y);
           const error = Math.max(...a.map((v, i) => Math.abs(v - e[i]))); worst = Math.max(worst, error);
           if (error > 5) throw new Error(`${name} at ${time} (${x},${y}): GPU ${a}, CPU ${e}`);
@@ -58,12 +61,23 @@ button.onclick = async () => {
     const beforeViewMasks = gpu.stats.masksCreated;
     gpu.setView({ scale: 2, x: -500, y: -500 }); gpu.draw(0, 50);
     const zoomed = gpu.readPixels({ presented: true });
-    if (gpuPixel(zoomed, 610, 500)[2] < 200 || gpuPixel(sharp, 610, 500)[3] !== 0) throw new Error('Zoom did not transform the final painting');
-    gpu.setView({ scale: .5, x: 480, y: 270 }); gpu.draw(0, 50);
-    if (gpuPixel(gpu.readPixels({ presented: true }), 730, 520)[2] < 200) throw new Error('Zoom out has the wrong anchor');
+    if (presentedPixel(zoomed, 610, 500)[2] < 200 || gpuPixel(sharp, 610, 500)[3] !== 0) throw new Error('Zoom did not transform the final painting');
+    gpu.setView({ scale: .5, x: 0, y: 0 }); gpu.draw(0, 50);
+    if (presentedPixel(gpu.readPixels({ presented: true }), 250, 250)[2] < 200) throw new Error('Zoom out has the wrong anchor');
     gpu.setView(DEFAULT_VIEW); gpu.draw(0, 50);
     if (gpu.readPixels().some((v, i) => v !== sharp[i]) || beforeViewMasks !== gpu.stats.masksCreated) throw new Error('View changes rebuilt or mutated the painting');
     report.checks.push({ name: 'Zoom in/out and reset transform presentation without rebuilding source geometry', passed: true });
+    const far = clip('4k-viewport', 'return', { samples: [{ x: 3500, y: 1980, size: 80, t: 0 }, { x: 3500, y: 1980, size: 80, t: 200 }] });
+    gpu.setProject(project([far])); gpu.draw(0, 50);
+    if (gpu.canvas.width !== VW || gpu.canvas.height !== VH || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] !== 0) throw new Error('Default output is not the original Full HD region');
+    gpu.setView({ scale: .1, x: 200, y: 200 }); gpu.draw(0, 50);
+    if (gpu.view.scale !== .5 || gpu.view.x !== 0 || gpu.view.y !== 0 || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
+    gpu.setView({ scale: 1, x: -99999, y: -99999 }); gpu.draw(0, 50);
+    if (gpu.view.x !== -1920 || gpu.view.y !== -1080 || presentedPixel(gpu.readPixels({ presented: true }), 1580, 900)[2] < 200) throw new Error('Panning does not reach the far 4K region');
+    gpu.setView({ scale: 8, x: 5000, y: -99999 });
+    if (gpu.view.scale !== 2 || gpu.view.x !== 0 || gpu.view.y !== -3240) throw new Error('Zoom exceeds the 4K bounds');
+    gpu.setView(DEFAULT_VIEW);
+    report.checks.push({ name: '4K far-edge painting, 50–200% bounds and Full HD default output', passed: true });
     const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
     gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS } }, untouched])); gpu.draw(0, 50);
     if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
@@ -82,8 +96,8 @@ button.onclick = async () => {
     result.textContent = 'Running 10-layer CPU reference…'; await pause();
     report.benchmark.cpuColdMs = +measure(() => { cpu.setProject(p); cpu.draw(ctx, 0, 500); }).toFixed(2);
     const cpuTimes = [];
-    for (let i = 1; i <= 30; i++) { cpuTimes.push(measure(() => cpu.draw(ctx, 0, 500 + i * 1000 / 60))); await pause(); }
-    report.benchmark.cpu = summary(cpuTimes); cpu.items = [];
+    for (let i = 1; i <= 6; i++) { cpuTimes.push(measure(() => cpu.draw(ctx, 0, 500 + i * 1000 / 60))); await pause(); }
+    report.benchmark.cpuSamples = cpuTimes.length; report.benchmark.cpu = summary(cpuTimes); cpu.items = [];
     result.textContent = 'Running 10-layer WebGL2 renderer…'; await pause();
     report.benchmark.gpuColdMs = +measure(() => { gpu.setProject(p); gpu.draw(0, 500); gpu.finish(); }).toFixed(2);
     const allocations = gpu.stats.masksCreated, gpuTimes = [];

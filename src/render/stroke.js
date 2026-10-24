@@ -47,7 +47,7 @@ export class StampCursor {
   }
 }
 
-// Receive live samples without allocating full-HD CPU images. Local input uses
+// Receive live samples without allocating UHD CPU images. Local input uses
 // a shared source array; network input appends only its incremental packet.
 export class LiveStroke {
   clear() { this.id = null; this.samples = []; this.count = 0; }

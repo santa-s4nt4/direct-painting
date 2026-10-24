@@ -152,11 +152,12 @@ in vec2 texCoord;
 uniform sampler2D image;
 out vec4 result;
 uniform vec2 resolution;
+uniform vec2 canvasResolution;
 uniform vec3 view; // scale, native x/y translation
 void main() {
   vec2 p=(vec2(texCoord.x,1.-texCoord.y)*resolution-view.yz)/view.x;
-  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,resolution))) { result=vec4(0.,0.,0.,1.); return; }
-  result=vec4(texture(image,vec2(p.x/resolution.x,1.-p.y/resolution.y)).rgb,1.);
+  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,canvasResolution))) { result=vec4(0.,0.,0.,1.); return; }
+  result=vec4(texture(image,vec2(p.x/canvasResolution.x,1.-p.y/canvasResolution.y)).rgb,1.);
 }
 `;
 export const blurFragment = `

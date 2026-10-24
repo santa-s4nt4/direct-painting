@@ -29,7 +29,7 @@ export class LoopScene {
   }
   draw(ctx, index, phase, { placementPreview = false } = {}) {
     ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    // Full HD rasters are large. Keep only layers active at the current phase,
+    // UHD rasters are large. Keep only layers active at the current phase,
     // and rebuild from their source samples when seeking or looping back.
     for (const item of this.items) {
       if (!item.clip.enabled || !gestureVisible(item.clip, phase, this.duration)) {

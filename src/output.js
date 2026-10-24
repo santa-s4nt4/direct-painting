@@ -1,12 +1,12 @@
 import './output.css';
 import { frameNumber } from './timing.js';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from './canvas.js';
+import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT } from './canvas.js';
 import { createPaintingRenderer } from './render/index.js';
 import { outputPhase } from './relay.js';
 
 const side = 0;
 document.title = 'direct-painting · Output';
-document.querySelector('#app').innerHTML = `<canvas id="output" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" aria-label="direct-painting 1920 by 1080 output"></canvas>`;
+document.querySelector('#app').innerHTML = `<canvas id="output" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="direct-painting 1920 by 1080 output"></canvas>`;
 const scene = createPaintingRenderer(document.querySelector('#output'));
 let snapshot = null, version = -1, liveVersion = -1, serverTime = 0, calibratedAt = performance.now(), renderedAt = -Infinity;
 let calibrated = false, connectedStream = false, polling = false, pollTimer;

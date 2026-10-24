@@ -8,6 +8,20 @@ keeps the previous rendering path for devices without a working WebGL2 context.
 The deterministic `RGBAScene` remains a test reference;
 interactive rendering never reads GPU pixels back into CPU memory.
 
+## Painting surface and viewport
+
+The painting coordinate system and raster targets are 3840×2160 (UHD). The
+editor and `/output` canvases remain 1920×1080. At the default view (scale 1,
+offset 0), the first Full HD region is displayed without rescaling old strokes.
+Scale 0.5 fits the entire 4K painting; scale 2 is the maximum zoom. Translation
+is clamped so the visible rectangle always stays inside the painting.
+
+The presentation shader receives separate viewport and painting resolutions.
+Input coordinates map through the Full HD viewport and inverse view transform;
+GPU masks, color compositing, CPU fallback and saved coordinates use UHD bounds.
+Old Full HD project cameras are migrated into the new limits without modifying
+recorded positions, diameters or timing. View relay updates use the same bounds.
+
 ## GPU passes
 
 1. `StampCursor` advances through new source samples only. Instanced quads stamp
@@ -47,7 +61,7 @@ The cropped 2D metadata targets themselves deliberately have no depth buffers.
 ## Verification
 
 `/benchmarks/render.html` runs browser pixel comparisons against `RGBAScene`,
-a 10-layer Full HD CPU/GPU benchmark, a first-live-point measurement, resource
+a 10-layer UHD CPU/GPU benchmark with a Full HD viewport, a first-live-point measurement, resource
 reuse checks, delayed live-packet checks, context-loss restoration and CPU
 fallback. `finish()` and `readPixels()` exist only for these explicit checks;
 they are never used by editor/output animation.

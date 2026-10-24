@@ -1,17 +1,31 @@
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from './canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from './canvas.js';
 
 export const DEFAULT_VIEW = Object.freeze({ scale: 1, x: 0, y: 0 });
-export const MIN_ZOOM = .1, MAX_ZOOM = 8;
+export const MIN_ZOOM = VW / W, MAX_ZOOM = W / VW;
+export const viewBounds = scale => ({ minX: VW - W * scale, minY: VH - H * scale, maxX: 0, maxY: 0 });
 export function validateView(view) {
   if (view === undefined) return;
-  if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < MIN_ZOOM || view.scale > MAX_ZOOM || Math.abs(view.x) > W * MAX_ZOOM || Math.abs(view.y) > H * MAX_ZOOM) throw new Error('Invalid canvas view');
+  if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < MIN_ZOOM || view.scale > MAX_ZOOM) throw new Error('Invalid canvas view');
+  const b = viewBounds(view.scale), epsilon = 1e-6;
+  if (view.x < b.minX - epsilon || view.x > epsilon || view.y < b.minY - epsilon || view.y > epsilon) throw new Error('View exceeds 4K canvas');
 }
-export const canvasView = value => ({ ...DEFAULT_VIEW, ...value });
+export function canvasView(value) {
+  const scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value?.scale ?? 1)), b = viewBounds(scale);
+  return { scale, x: Math.max(b.minX, Math.min(0, value?.x ?? 0)), y: Math.max(b.minY, Math.min(0, value?.y ?? 0)) };
+}
+// Older projects allowed 10–800% and unbounded margins. Preserve the recorded
+// stroke coordinates while fitting that old camera into the new UHD bounds.
+export function importedView(view, canvas) {
+  if (view === undefined) return { ...DEFAULT_VIEW };
+  if (canvas?.width === W && canvas?.height === H) { validateView(view); return canvasView(view); }
+  if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < .1 || view.scale > 8 || Math.abs(view.x) > VW * 8 || Math.abs(view.y) > VH * 8) throw new Error('Invalid legacy canvas view');
+  return canvasView(view);
+}
 export const screenToWorld = (p, view) => ({ x: (p.x - view.x) / view.scale, y: (p.y - view.y) / view.scale });
 export const worldToScreen = (p, view) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
 export function zoomAt(view, scale, anchor, destination = anchor) {
   const world = screenToWorld(anchor, view), next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale));
-  return { scale: next, x: Math.max(-W * MAX_ZOOM, Math.min(W * MAX_ZOOM, destination.x - world.x * next)), y: Math.max(-H * MAX_ZOOM, Math.min(H * MAX_ZOOM, destination.y - world.y * next)) };
+  return canvasView({ scale: next, x: destination.x - world.x * next, y: destination.y - world.y * next });
 }
 
 // Pointer positions use native canvas coordinates. After a pinch, the remaining

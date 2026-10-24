@@ -1,5 +1,5 @@
 import { DEFAULT_RING_WIDTH } from './effects.js';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, MAX_BRUSH_SIZE } from './canvas.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE } from './canvas.js';
 export function brushSize(min, max, pressure, pointerType, enabled) {
   if (!enabled || pointerType !== 'pen') return max;
   const p = Number.isFinite(pressure) ? Math.min(1, Math.max(0, pressure)) : 0.5;
@@ -7,7 +7,7 @@ export function brushSize(min, max, pressure, pointerType, enabled) {
 }
 
 export function canvasPoint(event, rect) {
-  return { x: (event.clientX - rect.left) * CANVAS_WIDTH / rect.width, y: (event.clientY - rect.top) * CANVAS_HEIGHT / rect.height };
+  return { x: (event.clientX - rect.left) * VIEWPORT_WIDTH / rect.width, y: (event.clientY - rect.top) * VIEWPORT_HEIGHT / rect.height };
 }
 
 // Keep small strokes dense; large footprints need fewer overlapping stamps.

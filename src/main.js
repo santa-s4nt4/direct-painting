@@ -1,7 +1,7 @@
 import { setupColorPanel } from './color-panel.js';
-import { DEFAULT_VIEW, canvasView, screenToWorld, worldToScreen, zoomAt, PinchGesture } from './view.js';
+import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, screenToWorld, worldToScreen, zoomAt, PinchGesture } from './view.js';
 import './style.css';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
+import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
 import { FPS, FRAME_MS, frameNumber } from './timing.js';
 import { setupEditorShell } from './editor-shell.js';
 import { brushSize, canvasPoint, timestamp } from './drawing.js';
@@ -70,7 +70,7 @@ document.querySelector('#app').innerHTML = `
       </aside>
       <div class="workspace">
       <div class="canvas-pair">
-        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" aria-label="1920 by 1080 drawing canvas" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">1920 × 1080</span><span class="canvas-state">16:9</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
+        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="4K painting canvas with Full HD viewport" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">3840 × 2160 · 4K</span><span class="canvas-state">View 1920 × 1080</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
       </div>
         <div class="loop-controls">
           <span class="section-label">LOOP</span>
@@ -610,6 +610,8 @@ function endStroke(event) {
 }
 function syncViewUI() {
   const percent = `${Math.round(state.view.scale * 100)}%`;
+  $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
+  $('.canvas-state').textContent = `View ${Math.round(VIEWPORT_WIDTH / state.view.scale)} × ${Math.round(VIEWPORT_HEIGHT / state.view.scale)}`;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset zoom and position`;
   painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
 }
@@ -625,7 +627,7 @@ function cancelTouchStroke() {
   $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now(), true);
 }
 $('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
-for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(state.view, state.view.scale * factor, { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 })); finishView(); });
+for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(state.view, state.view.scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch') {
@@ -655,9 +657,9 @@ canvases.forEach((canvas, index) => {
     }
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
-    const scale = canvas.getBoundingClientRect().width / CANVAS_WIDTH * state.view.scale;
+    const scale = canvas.getBoundingClientRect().width / VIEWPORT_WIDTH * state.view.scale;
     const cursorScreen = worldToScreen(cursorPoint, state.view);
-    cursor.style.left = `${cursorScreen.x / CANVAS_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / CANVAS_HEIGHT * 100}%`;
+    cursor.style.left = `${cursorScreen.x / VIEWPORT_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / VIEWPORT_HEIGHT * 100}%`;
     cursor.style.width = `${Math.max(3, (cursorPoint.width ?? cursorPoint.size) * scale)}px`;
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
     cursor.style.borderRadius = state.shape === 'rect' ? '0' : '50%';
