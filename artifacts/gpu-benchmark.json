@@ -1,0 +1,103 @@
+{
+  "resolution": "1920x1080",
+  "targetFPS": 60,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "checks": [
+    {
+      "name": "return",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "trail",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "rectangle",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "gradient",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog over black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "two analog layers",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "place legacy",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "10-layer warm playback reuses GPU masks",
+      "passed": true
+    },
+    {
+      "name": "color edits reuse existing geometry and masks",
+      "passed": true
+    },
+    {
+      "name": "late live packets preserve the whole path",
+      "passed": true
+    },
+    {
+      "name": "WebGL context loss recovers painting from source data",
+      "passed": true
+    },
+    {
+      "name": "WebGL2-unavailable devices use a working CPU fallback",
+      "passed": true
+    }
+  ],
+  "benchmark": {
+    "cpuColdMs": 115.8,
+    "cpu": {
+      "meanMs": 33.71,
+      "p95Ms": 35
+    },
+    "gpuColdMs": 1.3,
+    "gpu": {
+      "meanMs": 0.31,
+      "p95Ms": 0.5
+    },
+    "gpuFirstPointWith10LayersMs": 0.3,
+    "gpuStats": {
+      "backend": "webgl2",
+      "frames": 88,
+      "stamps": 32804,
+      "maskPasses": 392,
+      "masksCreated": 32,
+      "maskBytes": 11816000,
+      "drawCalls": 21,
+      "cpuPixelUploads": 0,
+      "cachedMaskMiB": 11.27
+    },
+    "speedup": 108.7
+  },
+  "passed": true
+}
