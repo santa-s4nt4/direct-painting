@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.direct-painting/
+.imagraph/
+.DS_Store

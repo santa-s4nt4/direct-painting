@@ -1,0 +1,4 @@
+:root { color-scheme: dark; background: #000; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
+#app { display: grid; place-items: center; }
+#output { display: block; width: min(100vw, calc(100dvh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; background: #000; }
