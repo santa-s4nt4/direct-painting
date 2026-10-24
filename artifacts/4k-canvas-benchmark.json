@@ -1,0 +1,154 @@
+{
+  "resolution": "3840x2160",
+  "viewport": "1920x1080",
+  "zoomRange": [
+    0.5,
+    2
+  ],
+  "targetFPS": 60,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "checks": [
+    {
+      "name": "return",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "trail",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "rectangle",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "gradient",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "ring move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "ring trail",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "opacity",
+      "passed": true,
+      "maxChannelError": 1
+    },
+    {
+      "name": "4K far edge",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog over black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "two analog layers",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "place legacy",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "Blur defaults to 16px, toggles reversibly and reuses masks",
+      "passed": true
+    },
+    {
+      "name": "Zoom in/out and reset transform presentation without rebuilding source geometry",
+      "passed": true
+    },
+    {
+      "name": "4K far-edge painting, 50–200% bounds and Full HD default output",
+      "passed": true
+    },
+    {
+      "name": "Effects are isolated per layer",
+      "passed": true
+    },
+    {
+      "name": "3000px brushes render across the Full HD canvas in every motion mode",
+      "passed": true
+    },
+    {
+      "name": "10-layer warm playback reuses GPU masks",
+      "passed": true
+    },
+    {
+      "name": "color edits reuse existing geometry and masks",
+      "passed": true
+    },
+    {
+      "name": "late live packets preserve the whole path",
+      "passed": true
+    },
+    {
+      "name": "WebGL context loss recovers painting from source data",
+      "passed": true
+    },
+    {
+      "name": "WebGL2-unavailable devices use a working CPU fallback",
+      "passed": true
+    }
+  ],
+  "benchmark": {
+    "cpuColdMs": 2972.4,
+    "cpuSamples": 6,
+    "cpu": {
+      "meanMs": 1467.35,
+      "p95Ms": 1572.5
+    },
+    "gpuColdMs": 4.9,
+    "gpu": {
+      "meanMs": 1.85,
+      "p95Ms": 6.2
+    },
+    "gpuFirstPointWith10LayersMs": 1.1,
+    "gpu10LayersBlur": {
+      "meanMs": 1.66,
+      "p95Ms": 4.1
+    },
+    "gpuFirstPointWith10BlurLayersMs": 6.5,
+    "gpuStats": {
+      "backend": "webgl2",
+      "frames": 154,
+      "stamps": 55358,
+      "maskPasses": 721,
+      "masksCreated": 41,
+      "maskBytes": 11816000,
+      "drawCalls": 31,
+      "cpuPixelUploads": 0,
+      "cachedMaskMiB": 11.27
+    },
+    "speedup": 793.2
+  },
+  "passed": true
+}

@@ -1,13 +1,16 @@
 # 画面と描画検証の記録
 
-## 現行版
+## 現行版（4K対応）
 
-- [操作画面](direct-painting-blur-palette-zoom.jpg)：DrawのBlur 16px、右上の円形カラーパレット、不透明度、125%ズーム。
-- [ブラウザ検証と10レイヤー計測](blur-zoom-benchmark.json)：22項目成功。GPU / CPU画素比較、Blur、表示倍率・リセット、3000px、キャッシュ、コンテキスト復帰を含みます。
+- [4K全体表示](direct-painting-4k-overview.jpg)：内部3840×2160を50%で表示。右下のFull HD範囲外にも描画しています。
+- [初期Full HD表示](direct-painting-4k-default.jpg)：100%・初期位置で1920×1080の範囲を表示します。
+- [4K描画検証と10レイヤー計測](4k-canvas-benchmark.json)：24項目成功。Full HD出力、4Kの端、50〜200%・移動制限、Blur、GPUキャッシュ、CPUフォールバックを含みます。
 
-![操作画面](direct-painting-blur-palette-zoom.jpg)
+![4K全体表示](direct-painting-4k-overview.jpg)
 
 ## 過去の段階
+
+- `direct-painting-blur-palette-zoom.jpg` / `blur-zoom-benchmark.json`：4K対応前のパレット・ズーム追加時。ブラウザ検証22項目成功。
 
 - `direct-painting-ipad.jpg`：単一キャンバスへの変更時。
 - `direct-painting-left-panel.jpg`：左パネル統合時。
