@@ -3,3 +3,8 @@ dist/
 .direct-painting/
 .imagraph/
 .DS_Store
+
+# Local Ableton Live project and analysis files
+*.als
+*.asd
+TD/sound/sound_test Project/
