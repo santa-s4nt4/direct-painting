@@ -1,6 +1,11 @@
 # 画面と描画検証の記録
 
 
+## MIDI入力の切替
+
+[MIDIタブ](direct-painting-midi-tab.png)：左パネルで独立したタブから入力デバイスを切り替えられます。接続手順と受信状態を日本語で表示します。カラーパネルは外側タッチで閉じます。
+
+
 ## 現行の描画ツール
 
 [Ellipse / Rectangle / Line｜Ring](direct-painting-shape-tools.png)：Move表示を廃止し、Lineは30px固定。1133×744と744×1133で配置を確認しました。以下の過去画像には変更前のMoveボタンが含まれます。
