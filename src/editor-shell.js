@@ -12,11 +12,11 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
   studio.setAttribute('aria-label', 'direct-painting studio');
 
   const sidebar = document.createElement('aside'); sidebar.className = 'inspector sidebar'; sidebar.setAttribute('aria-label', 'Editor controls');
-  sidebar.innerHTML = `<div class="inspector-tabs" role="tablist" aria-label="Editor panels">${['draw', 'layer', 'files'].map((tab, i) => `<button id="tab-${tab}" role="tab" aria-selected="${i === 0}" aria-controls="${tab}-panel" tabindex="${i === 0 ? 0 : -1}">${tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}</div><div class="sidebar-scroll"></div><footer class="sidebar-footer"></footer>`;
+  sidebar.innerHTML = `<div class="inspector-tabs" role="tablist" aria-label="Editor panels">${['draw', 'layer', 'files', 'midi'].map((tab, i) => `<button id="tab-${tab}" role="tab" aria-selected="${i === 0}" aria-controls="${tab}-panel" tabindex="${i === 0 ? 0 : -1}">${tab === 'midi' ? 'MIDI' : tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}</div><div class="sidebar-scroll"></div><footer class="sidebar-footer"></footer>`;
   studio.append(sidebar);
   const scroll = sidebar.querySelector('.sidebar-scroll'), footer = sidebar.querySelector('.sidebar-footer');
   const panels = {};
-  for (const tab of ['draw', 'layer', 'files']) {
+  for (const tab of ['draw', 'layer', 'files', 'midi']) {
     const panel = document.createElement('section'); panel.id = `${tab}-panel`; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', `tab-${tab}`); panel.hidden = tab !== 'draw';
     panels[tab] = panel; scroll.append(panel);
   }

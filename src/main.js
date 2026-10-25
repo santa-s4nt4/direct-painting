@@ -160,7 +160,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   rebuildCache(); playbackUI(); renderTargets([0],now,true); queueSave(false,false);
 }
-setupMidiPanel($('#files-panel'), receiveTransport);
+setupMidiPanel($('#midi-panel'), receiveTransport);
 
 const trimTrackObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
   for (const { target } of entries) {

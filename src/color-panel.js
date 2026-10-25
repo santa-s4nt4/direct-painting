@@ -43,6 +43,10 @@ export function setupColorPanel(container, { onChange, onVisibility }) {
   const setVisible = value => { visible = value; panel.hidden = !visible; toggle.setAttribute('aria-expanded', String(visible)); };
   const visibility = value => { setVisible(value); onVisibility(value); };
   toggle.addEventListener('click', () => visibility(!visible)); $('#close-color-panel').addEventListener('click', () => visibility(false));
+  // Close before the target handles the touch, without swallowing drawing or UI input.
+  document.addEventListener('pointerdown', event => {
+    if (visible && !root.contains(event.target)) visibility(false);
+  }, { capture: true });
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') { visibility(false); toggle.focus(); } });
   const point = event => {
     const rect = canvas.getBoundingClientRect(), c = wheelColor((event.clientX - rect.left) / rect.width * 2 - 1, (event.clientY - rect.top) / rect.height * 2 - 1, 1);

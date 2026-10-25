@@ -1,7 +1,7 @@
 // Receive MIDI on the host, so iPad Safari and HTTP Ethernet connections work.
 export function setupMidiPanel(parent, onTransport) {
   const panel = document.createElement('section'); panel.className = 'midi-panel';
-  panel.innerHTML = `<h2>MIDI sync</h2><p>Connect the MIDI interface to the Mac running this app.</p><label for="midi-device">Input device · Mac</label><select id="midi-device" aria-label="MIDI input device"><option value="">Off</option></select><label for="midi-note">C1 note number</label><select id="midi-note" aria-label="C1 MIDI note number"><option value="24">24 · C1 (C4 = 60)</option><option value="36">36 · C1 (C3 = 60)</option></select><p class="midi-status" role="status">Starting MIDI input…</p><p class="midi-last" aria-live="polite"></p><p>Note On → restart & play<br>120 BPM · 4/4 · 8 bars · 16s</p>`;
+  panel.innerHTML = `<h2>MIDI入力</h2><p>インターフェースを、このアプリを起動したMacへ接続してください。</p><label for="midi-device">入力デバイス（Mac）</label><select id="midi-device" aria-label="MIDI input device"><option value="">OFF（入力なし）</option></select><label for="midi-note">C1のノート番号</label><select id="midi-note" aria-label="C1 MIDI note number"><option value="24">24 · C1 (C4 = 60)</option><option value="36">36 · C1 (C3 = 60)</option></select><p class="midi-status" role="status">MIDI入力を準備中…</p><p class="midi-last" aria-live="polite"></p><p>C1のNote On → 0秒から再生<br>120 BPM · 4/4 · 8小節 · 16秒</p>`;
   parent.append(panel);
   const device = panel.querySelector('#midi-device'), note = panel.querySelector('#midi-note'), status = panel.querySelector('.midi-status'), last = panel.querySelector('.midi-last');
   let busy = false, stopped = false, timer, latency = 0;
@@ -10,14 +10,14 @@ export function setupMidiPanel(parent, onTransport) {
   };
   const update = data => {
     if (busy) return;
-    const inputs = [{id:'',name:'Off'}, ...(data.devices ?? [])];
-    if (data.selected && !inputs.some(d => d.id === data.selected)) inputs.push({id:data.selected,name:'Selected input · disconnected'});
+    const inputs = [{id:'',name:'OFF（入力なし）'}, ...(data.devices ?? [])];
+    if (data.selected && !inputs.some(d => d.id === data.selected)) inputs.push({id:data.selected,name:'選択したデバイス（未接続）'});
     const signature = JSON.stringify(inputs);
     if (device.dataset.inputs !== signature) { device.replaceChildren(...inputs.map(d => new Option(d.name,d.id))); device.dataset.inputs = signature; }
     device.value = data.selected ?? ''; note.value = String(data.note ?? 24);
     device.disabled = !data.available || data.starting; note.disabled = !!data.starting;
-    status.textContent = data.error || (data.starting ? 'Starting MIDI input…' : data.connected ? 'MIDI connected · waiting for C1' : data.selected ? 'Input disconnected · reconnect to resume' : data.devices?.length ? 'Choose an input device' : 'No MIDI inputs · connect an interface to the Mac');
-    last.textContent = data.lastNote ? `Last note ${data.lastNote.number} · Ch ${data.lastNote.channel} · Restarts ${data.triggers}` : '';
+    status.textContent = data.error || (data.starting ? 'MIDI入力を準備中…' : data.connected ? 'MIDI接続済み · C1受信待ち' : data.selected ? (data.devices?.some(d => d.id === data.selected) ? 'MIDI入力に接続しています…' : 'デバイス未接続 · 再接続すると再開します') : data.devices?.length ? '上の一覧から入力デバイスを選んでください' : 'MIDI入力がありません · Macに接続してください');
+    last.textContent = data.lastNote ? `受信ノート ${data.lastNote.number} · Ch ${data.lastNote.channel} · 頭出し ${data.triggers}回` : '';
     transport(data);
   };
   const poll = async () => {
