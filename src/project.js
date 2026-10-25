@@ -1,3 +1,4 @@
+import { FIXED_LINE_WIDTH, fixedLineStyle } from './line-tool.js';
 import { LOOP_MS } from './transport.js';
 import { BOX_SPEC } from './space.js';
 import { DEFAULT_VIEW, importedView } from './view.js';
@@ -9,7 +10,7 @@ import { DEFAULT_P5_CODE, MAX_SNIPPET_LENGTH, MAX_P5_DURATION_MS, P5_PRESETS, up
 import { validateLEDOptions } from './p5-led.js';
 
 export const MAX_PROJECT_BYTES = 16 * 1024 * 1024;
-export const DEFAULT_SETTINGS = Object.freeze({ mode: 'move', lineWidth: 5, shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, viewVersion: 4, rectangleDefaultsVersion: 1, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 1600, heightMin: 20, heightMax: 1600, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
+export const DEFAULT_SETTINGS = Object.freeze({ mode: 'move', lineWidth: FIXED_LINE_WIDTH, shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, viewVersion: 4, rectangleDefaultsVersion: 1, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 1600, heightMin: 20, heightMax: 1600, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
 
 export function normalizeProject(value) {
   if (value?.duration !== undefined && (!Number.isFinite(value.duration) || value.duration <= 0)) throw new Error('Invalid loop length');
@@ -44,6 +45,7 @@ export function normalizeProject(value) {
   settings.viewVersion = 4;
   if (supplied.opacity !== undefined) { if (!Number.isFinite(supplied.opacity) || supplied.opacity < 0 || supplied.opacity > 1) throw new Error('Invalid opacity'); settings.opacity = supplied.opacity; }
   validateLEDOptions({ single: settings.p5SingleRatio, climax: settings.p5ClimaxRatio, variation: settings.p5Variation });
+  settings.lineWidth = FIXED_LINE_WIDTH;
   settings.followDirection = false; // Accept legacy JSON but always use the UI angle.
   if (settings.minSize > settings.maxSize) throw new Error('Minimum diameter exceeds maximum');
   if (settings.widthMin > settings.widthMax || settings.heightMin > settings.heightMax) throw new Error('Minimum rectangle dimension exceeds maximum');
@@ -53,7 +55,7 @@ export function normalizeProject(value) {
       const { edgeColor, edgeWidth, ...fields } = patch;
       return [side, { ...fields, blendMode: 'analog', ...(patch.effects ? { effects: paintingStyle({ effects: { ...normalized.effects, ...patch.effects } }).effects } : {}) }];
     }));
-    return normalized;
+    return fixedLineStyle(normalized);
   });
   return { ...project, duration: LOOP_MS, clips, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, settings };
 }

@@ -2,7 +2,7 @@ import { FPS } from './timing.js';
 
 const $ = selector => document.querySelector(selector);
 
-export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTab = () => {} }) {
+export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
   const main = $('main'), studio = $('.studio'), toolbar = $('.toolbar'), workspace = $('.workspace');
   const layers = $('.layers-panel'), history = $('.history-actions');
   const clear = $('#clear'), save = $('#save-project'), importButton = $('#import-project'), importFile = $('#import-file');
@@ -84,10 +84,19 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   stage.append($('.canvas-pair'));
   const controls = document.createElement('div'); controls.className = 'canvas-controls';
   controls.innerHTML = '<div class="navigation-tools"><button id="toggle-sidebar" class="icon-button" title="Toggle left panel" aria-label="Toggle left panel" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button></div>';
-  const floating = document.createElement('div'); floating.className = 'canvas-tools'; floating.setAttribute('role', 'group'); floating.setAttribute('aria-label', 'Motion mode');
-  floating.innerHTML = modes.map(mode => `<button data-paint-mode="${mode}" aria-label="${mode[0].toUpperCase() + mode.slice(1)} mode" aria-pressed="${mode === modes[0]}" title="${modeHints[mode]}">${icon(mode)}<span>${mode[0].toUpperCase() + mode.slice(1)}</span></button>`).join('');
-  for (const button of floating.querySelectorAll('button')) button.addEventListener('click', () => onMode(button.dataset.paintMode));
-  const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Toggle circle or rectangle outline'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(({ circle: 'ring', ring: 'circle', rect: 'rect-ring', 'rect-ring': 'rect' })[$('#shape').value])); floating.append(ring);
+  const floating = document.createElement('div'); floating.className = 'canvas-tools'; floating.setAttribute('role', 'group'); floating.setAttribute('aria-label', 'Drawing tools');
+  floating.innerHTML = ['ellipse', 'rectangle', 'line'].map(tool => {
+    const label = tool[0].toUpperCase() + tool.slice(1);
+    return `<button data-paint-tool="${tool}" aria-label="${label} tool" aria-pressed="${tool === 'ellipse'}">${icon(tool)}<span>${label}</span></button>`;
+  }).join('');
+  for (const button of floating.querySelectorAll('[data-paint-tool]')) button.addEventListener('click', () => onTool(button.dataset.paintTool));
+  const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Toggle ellipse or rectangle outline'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(({ circle: 'ring', ring: 'circle', rect: 'rect-ring', 'rect-ring': 'rect' })[$('#shape').value])); floating.append(ring);
+  let currentMode = 'move', currentShape = 'circle';
+  const syncTools = () => {
+    const selected = currentMode === 'line' ? 'line' : ['rect', 'rect-ring'].includes(currentShape) ? 'rectangle' : 'ellipse';
+    for (const button of floating.querySelectorAll('[data-paint-tool]')) button.setAttribute('aria-pressed', String(button.dataset.paintTool === selected));
+    ring.disabled = currentMode === 'line'; ring.setAttribute('aria-pressed', String(['ring', 'rect-ring'].includes(currentShape)));
+  };
   const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = `${FPS} fps`;
   const view = document.createElement('div'); view.className = 'view-tools';
   view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
@@ -101,8 +110,8 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   window.addEventListener('resize', syncSidebar); syncSidebar();
 
   return {
-    setMode(mode) { ring.disabled = mode === 'line'; for (const button of floating.querySelectorAll('[data-paint-mode]')) button.setAttribute('aria-pressed', String(button.dataset.paintMode === mode)); },
-    setShape(shape) { ring.setAttribute('aria-pressed', String(['ring', 'rect-ring'].includes(shape))); },
+    setMode(mode) { currentMode = mode; syncTools(); },
+    setShape(shape) { currentShape = shape; syncTools(); },
     clearSelectionProperties() { selected = null; noSelection(); },
     showLayer(id, body, activate = true) {
       if (selected) { const previous = properties.querySelector('.layer-body'); const owner = [...document.querySelectorAll('.cached-layer')].find(row => row.dataset.layerId === selected); if (previous && owner) owner.append(previous); }

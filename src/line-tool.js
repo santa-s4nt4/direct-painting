@@ -1,3 +1,11 @@
+export const FIXED_LINE_WIDTH = 30;
+
+// The endpoint Ring gestures keep their own stroke; only the final line is fixed.
+export function fixedLineStyle(clip) {
+  if (clip.mode !== 'line') return clip;
+  return { ...clip, ringWidth: FIXED_LINE_WIDTH, ...(clip.eyeOverrides ? { eyeOverrides: Object.fromEntries(Object.entries(clip.eyeOverrides).map(([side, patch]) => [side, { ...patch, ringWidth: FIXED_LINE_WIDTH }])) } : {}) };
+}
+
 const wrap = (value, duration) => ((value % duration) + duration) % duration;
 // The first cycle shows endpoint rings. The editor and relay share this gate;
 // the relay keeps output playback running when the iPad tab sleeps or closes.

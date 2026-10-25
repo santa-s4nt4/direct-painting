@@ -1,7 +1,7 @@
 import { setupMidiPanel } from './midi-panel.js';
 import { BOX_SPEC, workingPlane, drawingPoint, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
-import { LineSchedule } from './line-tool.js';
+import { LineSchedule, FIXED_LINE_WIDTH } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
 import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, zoomAt, PinchGesture } from './view.js';
 import './style.css';
@@ -28,11 +28,11 @@ const icons = {
   redo: '<path d="m16 4 5 5-5 5M21 9H10a7 7 0 0 0 0 14"/>',
   ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="5"/>',
   line: '<path d="M5 19 19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/>',
-  move: '<circle cx="12" cy="12" r="5"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
+  rectangle: '<rect x="4" y="5" width="16" height="14" rx="1"/>',
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const modes = ['move', 'line'];
-const modeHints = { line: 'Tap two points. The line appears at the first point’s time on the next loop.', move: 'Move a smoothed shape and fade after release' };
 
 document.querySelector('#app').innerHTML = `
   <main>
@@ -66,7 +66,7 @@ document.querySelector('#app').innerHTML = `
           ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
           <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div><div class="angle-presets"><button type="button" data-draw-angle="0">0°</button><button type="button" data-draw-angle="45">45°</button></div>
         </div>
-        <div id="line-tool-controls" class="line-tool-controls" hidden><p id="line-hint">Tap the first point, then the second point.</p><div class="effect-value"><label for="line-width">Width</label><input id="line-width" type="number" min="1" max="1500" step="1" value="5" aria-label="Line width in pixels"><span>px</span></div><button id="cancel-line" class="secondary-button" disabled>Cancel first point</button></div><div class="input-controls">
+        <div id="line-tool-controls" class="line-tool-controls" hidden><p id="line-hint">Tap the first point, then the second point.</p><p class="fixed-line-width">Line width · ${FIXED_LINE_WIDTH}px</p><button id="cancel-line" class="secondary-button" disabled>Cancel first point</button></div><div class="input-controls">
           <label class="checkbox-control"><input type="checkbox" id="pressure" checked><span>PRESSURE</span></label>
           <label class="checkbox-control"><input type="checkbox" id="touch"><span>TOUCH</span></label>
         </div>
@@ -102,7 +102,12 @@ document.querySelector('#app').innerHTML = `
 `;
 
 const $ = selector => document.querySelector(selector);
-const shell = setupEditorShell({ icon, modes, modeHints, onMode: mode => setMode(mode), onShape: shape => setShape(shape), onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
+const shell = setupEditorShell({ icon, onTool: tool => {
+  if (tool === 'line') return setMode('line');
+  const outline = ['ring', 'rect-ring'].includes(state.shape);
+  setShape(tool === 'ellipse' ? (outline ? 'ring' : 'circle') : (outline ? 'rect-ring' : 'rect'));
+  setMode('move');
+}, onShape: shape => setShape(shape), onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
 const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => {
   const label = document.querySelector('.fps-label');
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
@@ -425,14 +430,14 @@ function rebuildCache() {
     shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => ({ ...item, shape: shape.value }), true)); geometry.append(shape);
     const sizes = section(clip.mode === 'line' ? 'LINE' : ['rect', 'rect-ring'].includes(shape.value) ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
     geometry.hidden = clip.mode === 'line';
-    if (clip.mode === 'line') { number(sizes, 'WIDTH', 'line width in pixels', item => item.ringWidth ?? 5, 1, MAX_RING_WIDTH, 1, (item,value) => ({ ...item, ringWidth: value })); }
+    if (clip.mode === 'line') { const width = document.createElement('p'); width.className = 'control-hint'; width.textContent = `Width · ${FIXED_LINE_WIDTH}px (fixed)`; sizes.append(width); }
     else if (['rect', 'rect-ring'].includes(shape.value)) {
       for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeDimension(item, axis, bound, value));
       number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => ({ ...item, angle: value, followDirection: false }), '°');
       const presets = document.createElement('div'); presets.className = 'angle-presets';
       for (const angle of [0,45]) { const button = document.createElement('button'); button.textContent = `${angle}°`; button.setAttribute('aria-label', `Layer ${index + 1} angle ${angle} degrees`); button.addEventListener('click', () => update(item => ({ ...item, angle }))); presets.append(button); } sizes.append(presets);
     } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeGesture(item, bound, value));
-    if (['ring', 'rect-ring'].includes(shape.value)) number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
+    if (clip.mode !== 'line' && ['ring', 'rect-ring'].includes(shape.value)) number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
@@ -732,7 +737,7 @@ function updateSize(bound, rawValue) {
 function syncShapeUI() {
   $('#shape').value = state.mode === 'line' ? 'ring' : state.shape;
   $('#line-tool-controls').hidden = state.mode !== 'line';
-  $('#circle-controls').hidden = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode !== 'line' && !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.mode === 'line' ? 'ring' : state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
+  $('#circle-controls').hidden = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode !== 'line' && !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
   for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) { $(`#${axis}-${bound}`).value = $(`#${axis}-range-${bound}`).value = state[`${axis}${bound}`]; }
   $('#shape-angle').value = state.angle; $('#shape').disabled = state.mode === 'line';
 }
@@ -821,7 +826,6 @@ $('#clear').addEventListener('click', () => {
 
 function syncLineUI() {
   const draft = clips.find(c => c.mode === 'line' && c.lineIncomplete);
-  $('#line-width').value = state.lineWidth;
   $('#cancel-line').disabled = !draft;
   $('#line-hint').textContent = draft ? '2点目を描いてください。円Ringと同じ筆圧・サイズ・フェードを使います。' : '2回入力。初回は円Ringとして描画・フェードし、次の周回から直線になります。';
 }
@@ -832,9 +836,8 @@ function cacheLineGesture(current, duration) {
   if(draft){
     const first = draft.lineMarkers?.[0] ?? { ...marker,id:`${draft.id}-ring-0`,plane:draft.plane,samples:[{...draft.samples[0],shape:'ring',t:0}],duration:0,start:draft.start,ringWidth:draft.ringWidth,fadeMs:draft.fadeMs };
     clips=clips.map(c=>c.id===draft.id?{...c,samples:[c.samples[0],point],points3D:[c.points3D?.[0]??pointInSpace(c.samples[0],c.plane),world],lineMarkers:[first,marker],lineIncomplete:false}:c);
-  }else clips=[...clips,{id:`${current.id}-line`,mode:'line',shape:'circle',color:current.color,opacity:current.opacity,effects:{...current.effects},ringWidth:state.lineWidth,targets:[0],samples:[point],points3D:[world],lineMarkers:[marker],duration:0,start:current.start,fadeMs:state.fadeMs,enabled:true,blendMode:'analog',linePending:true,lineIncomplete:true}];
+  }else clips=[...clips,{id:`${current.id}-line`,mode:'line',shape:'circle',color:current.color,opacity:current.opacity,effects:{...current.effects},ringWidth:FIXED_LINE_WIDTH,targets:[0],samples:[point],points3D:[world],lineMarkers:[marker],duration:0,start:current.start,fadeMs:state.fadeMs,enabled:true,blendMode:'analog',linePending:true,lineIncomplete:true}];
 }
-$('#line-width').addEventListener('input', event => { if (!event.target.value) return; state.lineWidth = Math.max(1, Math.min(MAX_RING_WIDTH, Math.round(Number(event.target.value)))); syncLineUI(); queueSave(); });
 $('#cancel-line').addEventListener('click', () => { clips = clips.filter(c => !(c.mode === 'line' && c.lineIncomplete)); rebuildCache(); renderTargets([0], performance.now(), true); queueSave(); });
 
 function download(blob, filename) {

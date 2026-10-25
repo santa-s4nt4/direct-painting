@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { LOOP_MS } from '../src/transport.js';
 import { createMidiInput } from './midi.js';
 import { validatePlane } from '../src/space.js';
-import { LineSchedule } from '../src/line-tool.js';
+import { LineSchedule, fixedLineStyle } from '../src/line-tool.js';
 import { validateView, canvasView, importedView } from '../src/view.js';
 import { MAX_BRUSH_SIZE, CANVAS_SPEC } from '../src/canvas.js';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
@@ -15,6 +15,7 @@ export function validateSnapshot(value, now) {
   if (project.settings?.viewVersion !== undefined && project.settings.viewVersion !== 2 && project.settings.viewVersion !== 3 && project.settings.viewVersion !== 4) throw new Error('Invalid canvas view version');
   if (project.settings?.view !== undefined) project.settings = { ...project.settings, view: importedView(project.settings.view, project.canvas, project.settings.viewVersion), viewVersion: 4 };
   if (project.canvas) project.canvas = { ...CANVAS_SPEC };
+  project.clips = project.clips.map(fixedLineStyle);
   const playback = value?.playback;
   if (!playback || typeof playback.playing !== 'boolean' || !Number.isFinite(playback.phase) || playback.phase < 0) throw new Error('Invalid playback');
   const phase = playback.phase % project.duration;

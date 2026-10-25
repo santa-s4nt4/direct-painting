@@ -212,3 +212,14 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
 .midi-panel select { width: 100%; min-height: 34px; }
 .midi-panel .midi-status { color: #c9d9ec; }
 .loop-duration { display: flex; flex-direction: column; gap: 3px; white-space: nowrap; font-size: 10px; }
+
+.canvas-tools .ring-tool { margin-left: 5px; position: relative; }
+.canvas-tools .ring-tool::before { content: ''; position: absolute; left: -5px; top: 6px; bottom: 6px; width: 1px; background: #555; }
+.fixed-line-width { margin: 0; color: #aaa; font-size: 11px; }
+@media (max-width: 900px) {
+  .canvas-controls { grid-template-columns: auto auto auto; justify-content: space-between; }
+  .canvas-tools { gap: 2px; }
+  .canvas-tools button { min-width: 32px; padding: 0 5px; gap: 4px; font-size: 10px; }
+  .canvas-tools button svg { width: 14px; height: 14px; }
+}
+.orientation-details button { white-space: nowrap; }
