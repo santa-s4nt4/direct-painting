@@ -11,6 +11,7 @@ import { prepareShapeClip } from '../geometry.js';
 import { CachedGesture, gestureTime, gestureVisible, gestureOpacity } from '../loop.js';
 import { layerVariants } from '../layers.js';
 import { colorAtTime } from '../color.js';
+import { TRAIL_LIFETIME } from '../motion.js';
 import { sameGeometry, strokeBounds, StampCursor, LiveStroke } from './stroke.js';
 import { stampVertex, stampFragment, layerVertex, normalFragment, analogFragment, screenVertex, copyFragment, presentVertex, presentFragment, blurFragment, effectFragment } from './shaders.js';
 
@@ -27,7 +28,7 @@ function color(vector, hex) { const value = Number.parseInt(hex.slice(1), 16); v
 
 export class WebGLPaintingRenderer {
   backend = 'webgl2'; items = []; duration = 10000; live = new LiveStroke(); frame = 0; view = canvasView();
-  stats = { backend: 'webgl2', frames: 0, stamps: 0, maskPasses: 0, masksCreated: 0, maskBytes: 0, drawCalls: 0, cpuPixelUploads: 0 };
+  stats = { backend: 'webgl2', frames: 0, stamps: 0, maskPasses: 0, masksCreated: 0, maskBytes: 0, drawCalls: 0, copyPixels: 0, blurPixels: 0, maskRebuilds: 0, cpuPixelUploads: 0 };
   constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024 } = {}) {
     this.canvas = canvas; this.onBackendChange = onBackendChange; this.cacheBytes = cacheBytes;
     this.renderer = new WebGLRenderer({ canvas, alpha: false, antialias: false, depth: true, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
@@ -71,7 +72,7 @@ export class WebGLPaintingRenderer {
   notify(backend) { this.canvas.dataset.renderer = backend; this.onBackendChange(backend); }
   layerMaterial(fragment, blending) {
     return material(layerVertex, fragment, {
-      bounds: { value: new Vector4() }, resolution: { value: new Vector2(W, H) }, maskTexture: { value: null },
+      bounds: { value: new Vector4() }, maskBounds: { value: new Vector4() }, resolution: { value: new Vector2(W, H) }, maskTexture: { value: null },
       fillColor: { value: new Vector3(1, 1, 1) },
       sourceTime: { value: 0 }, layerOpacity: { value: 1 }, trail: { value: 0 },
       directShape: { value: 0 }, directBrush: { value: new Vector4() }, directAngle: { value: 0 }, edgeSize: { value: 5 },
@@ -98,8 +99,19 @@ export class WebGLPaintingRenderer {
     if (item.target && item.target !== this.liveTarget) { this.stats.maskBytes -= item.target.width * item.target.height * 4; item.target.dispose(); }
     item.target = null; item.initialized = false; item.cursor?.reset();
   }
-  clearTarget(rt) { this.renderer.setRenderTarget(rt); this.renderer.setClearColor(0, 0); this.renderer.clear(true, false, false); }
-  pass(shader, rt) { this.passMesh.material = shader; this.renderer.setRenderTarget(rt); this.renderer.render(this.passScene, this.camera); }
+  clearTarget(rt) { rt.scissorTest = false; this.renderer.setRenderTarget(rt); this.renderer.setClearColor(0, 0); this.renderer.clear(true, false, false); }
+  pass(shader, rt, bounds = FULL) {
+    // Scissors use bottom-left target pixels, while painting bounds use top-left
+    // world pixels. Round outward so quarter-resolution blur keeps its halo.
+    const x = Math.max(0, Math.floor(bounds.x * rt.width / W)), y = Math.max(0, Math.floor(bounds.y * rt.height / H));
+    const right = Math.min(rt.width, Math.ceil((bounds.x + bounds.width) * rt.width / W)), bottom = Math.min(rt.height, Math.ceil((bounds.y + bounds.height) * rt.height / H));
+    const width = Math.max(0, right - x), height = Math.max(0, bottom - y);
+    if (!width || !height) return;
+    rt.scissor.set(x, rt.height - bottom, width, height); rt.scissorTest = true;
+    this.passMesh.material = shader; this.renderer.setRenderTarget(rt); this.renderer.render(this.passScene, this.camera); rt.scissorTest = false;
+    if (shader === this.copyMaterial) this.stats.copyPixels += width * height;
+    if (shader === this.blurMaterial) this.stats.blurPixels += width * height;
+  }
   setLiveStroke(stroke, now, move) { this.live.setLocal(stroke, now, move); }
   receiveLive(packet, now) { this.live.update(packet, now); }
   ensureMask(item) {
@@ -108,9 +120,9 @@ export class WebGLPaintingRenderer {
       this.stats.maskBytes += item.bounds.width * item.bounds.height * 4;
     }
   }
-  paintMask(item, until, head = null) {
+  paintMask(item, until, head = null, visibleTime = until) {
     this.ensureMask(item);
-    if (!item.initialized || until < item.cursor.time) { this.clearTarget(item.target); item.cursor.reset(); item.initialized = true; }
+    if (!item.initialized || until < item.cursor.time) { this.clearTarget(item.target); item.cursor.reset(item.clip.mode === 'trail' ? Math.max(0, Math.min(until, visibleTime - TRAIL_LIFETIME)) : 0); item.initialized = true; this.stats.maskRebuilds++; }
     if (until === item.cursor.time && !head) return;
     const b = item.bounds, shader = this.stampMaterial;
     shader.uniforms.targetBounds.value.set(b.x, b.y, b.width, b.height); shader.uniforms.edgeSize.value = item.clip.ringWidth ?? DEFAULT_RING_WIDTH;
@@ -134,7 +146,7 @@ export class WebGLPaintingRenderer {
   }
   prepareLayer(shader, item, time, opacity, visual) {
     const clip = item.clip, u = shader.uniforms;
-    let b = item.bounds;
+    let b = item.paintBounds ?? item.bounds;
     if (visual) {
       const rect = visual.shape === 'rect', size = Math.max(1, Math.round(visual.size));
       const w = rect ? visual.width ?? size : size, h = rect ? visual.height ?? size : size;
@@ -145,6 +157,7 @@ export class WebGLPaintingRenderer {
       u.directAngle.value = (visual.angle ?? 0) * Math.PI / 180;
     } else u.directShape.value = 0;
     u.bounds.value.set(b.x, b.y, b.width, b.height); u.maskTexture.value = item.target?.texture ?? this.liveTarget.texture;
+    const mask = item.bounds; u.maskBounds.value.set(mask.x, mask.y, mask.width, mask.height);
     u.sourceTime.value = time; u.layerOpacity.value = opacity * (clip.opacity ?? 1); u.trail.value = clip.mode === 'trail' ? 1 : 0;
     u.edgeSize.value = clip.ringWidth ?? DEFAULT_RING_WIDTH;
     color(u.fillColor.value, colorAtTime(clip, time, visual));
@@ -170,14 +183,19 @@ export class WebGLPaintingRenderer {
       b = this.prepareLayer(this.normalMaterial, item, time, opacity, visual);
       this.pass(this.normalMaterial, this.effectSource);
       let image = this.effectSource.texture;
+      const pad = effects.blurRadius + 8;
+      const affected = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
       if (effects.blur && effects.blurRadius > 0) {
-        this.copyMaterial.uniforms.image.value = image; this.pass(this.copyMaterial, this.blurA);
-        this.blurMaterial.uniforms.image.value = this.blurA.texture; this.blurMaterial.uniforms.direction.value.set(effects.blurRadius / 16 / W, 0); this.pass(this.blurMaterial, this.blurB);
-        this.blurMaterial.uniforms.image.value = this.blurB.texture; this.blurMaterial.uniforms.direction.value.set(0, effects.blurRadius / 16 / H); this.pass(this.blurMaterial, this.blurA);
+        this.clearTarget(this.blurA);
+        this.copyMaterial.uniforms.image.value = image; this.pass(this.copyMaterial, this.blurA, affected);
+        this.clearTarget(this.blurB);
+        this.blurMaterial.uniforms.image.value = this.blurA.texture; this.blurMaterial.uniforms.direction.value.set(effects.blurRadius / 16 / W, 0); this.pass(this.blurMaterial, this.blurB, affected);
+        this.clearTarget(this.blurA);
+        this.blurMaterial.uniforms.image.value = this.blurB.texture; this.blurMaterial.uniforms.direction.value.set(0, effects.blurRadius / 16 / H); this.pass(this.blurMaterial, this.blurA, affected);
         image = this.blurA.texture;
       }
       shader = this.effectMaterial;
-      const u = shader.uniforms, pad = effects.blurRadius + 8;
+      const u = shader.uniforms;
       u.bounds.value.set(b.x - pad, b.y - pad, b.width + pad * 2, b.height + pad * 2);
       u.image.value = image;
     } else {
@@ -187,15 +205,20 @@ export class WebGLPaintingRenderer {
     // Both inputs are immutable for this pass. Never sample the render target
     // being written; the same pair is reused by all layers and subsequent frames.
     this.alternate ??= target(W, H);
-    this.copyMaterial.uniforms.image.value = this.current.texture; this.pass(this.copyMaterial, this.alternate);
+    // The pair differs only where the previous layer wrote. Synchronize that
+    // region, then composite this layer. The first pair starts transparent.
+    if (this.pendingBounds) { this.copyMaterial.uniforms.image.value = this.current.texture; this.pass(this.copyMaterial, this.alternate, this.pendingBounds); }
+    else this.clearTarget(this.alternate);
     shader.uniforms.belowTexture.value = this.current.texture;
     shader.uniforms.mixAmount.value = (clip.mixAmount ?? 50) / 100;
     this.pass(shader, this.alternate);
+    const written = shader.uniforms.bounds.value;
+    this.pendingBounds = { x: written.x, y: written.y, width: written.z, height: written.w };
     const old = this.current; this.current = this.alternate; this.alternate = old;
   }
   draw(side, phase, { now = performance.now(), placementPreview = false } = {}) {
     if (this.contextLost) return;
-    this.frame++; this.renderer.info.reset(); this.current = this.accumulator; this.clearTarget(this.current);
+    this.frame++; this.renderer.info.reset(); this.current = this.accumulator; this.pendingBounds = null; this.clearTarget(this.current);
     for (const item of this.items) {
       const clip = item.clip;
       if (!clip.enabled || !clip.targets.includes(side) || !gestureVisible(clip, phase, this.duration)) continue;
@@ -203,7 +226,7 @@ export class WebGLPaintingRenderer {
       const time = gestureTime(clip, phase, this.duration);
       let visual = null;
       if (item.moving) { visual = item.gesture.render(time); if (visual.active === false) continue; }
-      else this.paintMask(item, Math.min(time, clip.duration));
+      else this.paintMask(item, Math.min(time, clip.duration), null, time);
       const opacity = (placementPreview && clip.mode === 'place' && time < 1 ? 1 : gestureOpacity(clip, time)) * (visual?.opacity ?? 1);
       this.compose(item, time, opacity, visual);
     }
@@ -211,12 +234,26 @@ export class WebGLPaintingRenderer {
     if (live.id && live.targets?.includes(side)) {
       if (!this.liveItem || this.liveItem.clip.id !== live.id) {
         const clip = { id: live.id, mode: live.mode, samples: live.samples, color: live.color, opacity: live.opacity, effects: live.effects, ringWidth: live.ringWidth };
-        this.liveItem = { clip, bounds: FULL, target: this.liveTarget, cursor: new StampCursor(live.samples), initialized: false };
+        this.liveItem = { clip, bounds: FULL, target: this.liveTarget, cursor: new StampCursor(live.samples), initialized: false, boundedSamples: 0 };
       }
       const item = this.liveItem; item.clip.samples = live.samples; item.cursor.samples = live.samples;
+      // The reusable live mask stays 4K, but its visible quad and Blur only
+      // cover points received so far. Never scan all old input on each frame.
+      if (live.mode === 'trail' || live.mode === 'return') {
+        if (live.samples.length < item.boundedSamples) { item.paintBounds = null; item.boundedSamples = 0; }
+        const added = live.samples.slice(item.boundedSamples);
+        if (added.length) {
+          const next = strokeBounds({ samples: added }), old = item.paintBounds;
+          if (old) {
+            const x = Math.min(old.x, next.x), y = Math.min(old.y, next.y);
+            item.paintBounds = { x, y, width: Math.max(old.x + old.width, next.x + next.width) - x, height: Math.max(old.y + old.height, next.y + next.height) - y };
+          } else item.paintBounds = next;
+          item.boundedSamples = live.samples.length;
+        }
+      }
       const time = live.time(now);
       if (live.mode === 'move' || live.mode === 'place') this.compose(item, time, 1, live.move ?? live.head);
-      else { this.paintMask(item, live.samples.at(-1).t, live.mode === 'trail' ? { point: live.head, time } : null); this.compose(item, time, 1); }
+      else { this.paintMask(item, live.samples.at(-1).t, live.mode === 'trail' ? { point: live.head, time } : null, time); this.compose(item, time, 1); }
     }
     this.accumulator = this.current;
     this.paintingTexture = this.current.texture;

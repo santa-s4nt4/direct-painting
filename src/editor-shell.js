@@ -75,6 +75,8 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   projectFiles.append(save, importButton, importFile);
   const connection = document.createElement('div'); connection.className = 'connection-status'; connection.append(outputStatus);
   panels.files.append(projectFiles, connection);
+  const performanceLink = document.createElement('a'); performanceLink.className = 'control-hint'; performanceLink.href = '/benchmarks/trail.html'; performanceLink.textContent = 'Trail performance · この端末で本数を計測';
+  panels.files.append(performanceLink);
 
   history.className = 'history-actions';
   clear.innerHTML = `${icon('trash')}<span>Clear canvas</span>`;

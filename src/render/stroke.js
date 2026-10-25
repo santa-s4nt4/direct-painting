@@ -26,7 +26,17 @@ export function strokeBounds(clip) {
 // Advance only through newly recorded samples. Nothing here scans image pixels.
 export class StampCursor {
   constructor(samples) { this.samples = samples; this.reset(); }
-  reset() { this.time = -1; this.next = 1; }
+  reset(from = 0) {
+    this.time = -1; this.next = 1;
+    // For a Trail rebuild, fully expired stamps cannot contribute any pixels.
+    // Start at the last original sample before that window so subsequent
+    // segment interpolation keeps the same source boundaries.
+    if (from > 0) {
+      let low = 0, high = this.samples.length - 1;
+      while (low < high) { const mid = Math.ceil((low + high) / 2); if (this.samples[mid].t <= from) low = mid; else high = mid - 1; }
+      this.time = this.samples[low].t; this.next = low + 1;
+    }
+  }
   advance(until, add) {
     if (until === this.time) return false;
     const reset = until < this.time;

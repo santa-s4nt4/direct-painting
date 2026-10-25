@@ -45,3 +45,13 @@ test('live GPU input appends incremental packets, ignores stale data, and clears
   live.update({ ...frame, elapsed: 5 }, 230); assert.equal(live.count, 2);
   assert.equal(live.field, undefined); live.update(null, 240); assert.equal(live.id, null);
 });
+
+test('Trail rebuilds skip expired history while preserving the visible source segments', () => {
+  const path = Array.from({ length: 1001 }, (_, i) => ({ x: i, y: 200, size: 20, t: i * 10 }));
+  const full = new StampCursor(path), bounded = new StampCursor(path), expected = [], actual = [];
+  full.advance(9000, (p, t) => { if (t > 7200) expected.push({ ...p, t }); });
+  bounded.reset(7200); bounded.advance(9000, (p, t) => actual.push({ ...p, t }));
+  assert.deepEqual(actual, expected);
+  assert.ok(actual.length < 200, 'A long source rebuilds only its 1800ms visible tail');
+  bounded.reset(); assert.equal(bounded.time, -1); assert.equal(bounded.next, 1);
+});

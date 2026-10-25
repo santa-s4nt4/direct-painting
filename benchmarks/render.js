@@ -2,7 +2,7 @@ import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_H
 import { createPaintingRenderer } from '../src/render/index.js';
 import { WebGLPaintingRenderer } from '../src/render/webgl.js';
 import { LoopScene } from '../src/scene.js';
-import { DEFAULT_VIEW } from '../src/view.js';
+import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM } from '../src/view.js';
 import { DEFAULT_EFFECTS } from '../src/effects.js';
 import { RGBAScene } from '../src/rgba.js';
 const result = document.querySelector('#result'), button = document.querySelector('#run');
@@ -19,10 +19,11 @@ const summary = times => ({ meanMs: +(times.reduce((a, b) => a + b, 0) / times.l
 
 button.onclick = async () => {
   button.disabled = true; result.textContent = 'Running pixel and cache checks…';
-  const report = { resolution: '3840x2160', viewport: '1920x1080', zoomRange: [0.5, 2], targetFPS: 60, userAgent: navigator.userAgent, checks: [], benchmark: {} };
+  const report = { resolution: '3840x2160', viewport: '1920x1080', zoomRange: [MIN_ZOOM, MAX_ZOOM], targetFPS: 60, userAgent: navigator.userAgent, checks: [], benchmark: {} };
   try {
     const cases = [
-      ['return', [clip('r')]], ['trail', [clip('t', 'trail')]], ['move', [clip('m', 'move')]],
+      ['return', [clip('r')]], ['trail', [clip('t', 'trail')]],
+      ['long trail window', [clip('long-trail', 'trail', { duration: 4000, samples: Array.from({ length: 81 }, (_, i) => ({ x: 200 + Math.sin(i / 5) * 20, y: 200, size: 50, t: i * 50 })) })]], ['move', [clip('m', 'move')]],
       ['rectangle', [clip('rect', 'return', { shape: 'rect', angle: 32, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
       ['gradient', [clip('gradient', 'return', { colorEditMode: 'gradient', colorGradient: { to: '#ff8800', startMs: 0, endMs: 900 } })]],
       ['ring move', [clip('ring-move', 'move', { shape: 'ring', ringWidth: 7 })]],
@@ -37,7 +38,7 @@ button.onclick = async () => {
     ];
     for (const [name, clips] of cases) {
       const p = project(clips), cpu = new RGBAScene(p); gpu.setProject(p); let worst = 0;
-      for (const time of [0, 100, 700, 4000, 100]) {
+      for (const time of (name === 'long trail window' ? [2500, 2200, 0] : [0, 100, 700, 4000, 100])) {
         gpu.draw(0, time); const actual = gpu.readPixels(), expected = cpu.draw(0, time);
         for (const [x, y] of [[180, 200], [190, 200], [180, 220], [200, 210], [380, 200], [20, 20], [3500, 1980], [3600, 1980]]) {
           const a = gpuPixel(actual, x, y), e = cpuPixel(expected, x, y);
@@ -69,15 +70,22 @@ button.onclick = async () => {
     report.checks.push({ name: 'Zoom in/out and reset transform presentation without rebuilding source geometry', passed: true });
     const far = clip('4k-viewport', 'return', { samples: [{ x: 3500, y: 1980, size: 80, t: 0 }, { x: 3500, y: 1980, size: 80, t: 200 }] });
     gpu.setProject(project([far])); gpu.draw(0, 50);
-    if (gpu.canvas.width !== VW || gpu.canvas.height !== VH || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] !== 0) throw new Error('Default output is not the original Full HD region');
+    if (gpu.canvas.width !== VW || gpu.canvas.height !== VH || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] !== 0) throw new Error('Default output is not the center Full HD region');
     gpu.setView({ scale: .1, x: 200, y: 200 }); gpu.draw(0, 50);
-    if (gpu.view.scale !== .5 || gpu.view.x !== 0 || gpu.view.y !== 0 || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
+    if (gpu.view.scale !== .1 || gpu.view.x !== 768 || gpu.view.y !== 432 || presentedPixel(gpu.readPixels({ presented: true }), 1118, 630)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
     gpu.setView({ scale: 1, x: -99999, y: -99999 }); gpu.draw(0, 50);
     if (gpu.view.x !== -1920 || gpu.view.y !== -1080 || presentedPixel(gpu.readPixels({ presented: true }), 1580, 900)[2] < 200) throw new Error('Panning does not reach the far 4K region');
     gpu.setView({ scale: 8, x: 5000, y: -99999 });
     if (gpu.view.scale !== 2 || gpu.view.x !== 0 || gpu.view.y !== -3240) throw new Error('Zoom exceeds the 4K bounds');
     gpu.setView(DEFAULT_VIEW);
-    report.checks.push({ name: '4K far-edge painting, 50–200% bounds and Full HD default output', passed: true });
+    const centerClip = clip('center-viewport', 'return', { samples: [{ x: 1920, y: 1080, size: 80, t: 0 }, { x: 1920, y: 1080, size: 80, t: 200 }] });
+    gpu.setProject(project([centerClip])); gpu.draw(0, 50);
+    if (presentedPixel(gpu.readPixels({ presented: true }), 960, 540)[2] < 200) throw new Error('100% does not center the 4K painting');
+    gpu.setView({ scale: .1 }); gpu.draw(0, 50);
+    const overview = gpu.readPixels({ presented: true });
+    if (presentedPixel(overview, 960, 540)[2] < 200 || presentedPixel(overview, 10, 10)[2] !== 0) throw new Error('10% did not center the painting with black margins');
+    gpu.setView(DEFAULT_VIEW);
+    report.checks.push({ name: '4K far-edge painting, 10–200% bounds and centered Full HD default output', passed: true });
     const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
     gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS } }, untouched])); gpu.draw(0, 50);
     if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
@@ -88,6 +96,36 @@ button.onclick = async () => {
       if (gpuPixel(gpu.readPixels(), 10, 10)[2] !== 255 || gpuPixel(gpu.readPixels(), 1910, 1070)[2] !== 255) throw new Error('A 3000px brush was clamped in ' + mode);
     }
     report.checks.push({ name: '3000px brushes render across the Full HD canvas in every motion mode', passed: true });
+    const referenceCanvas = document.createElement('canvas');
+    class FullPassReference extends WebGLPaintingRenderer {
+      prepareLayer(shader, item, ...args) { return super.prepareLayer(shader, item.paintBounds ? { ...item, paintBounds: undefined } : item, ...args); }
+      pass(shader, target) { return super.pass(shader, target); }
+      compose(...args) { if (this.pendingBounds) this.pendingBounds = { x: 0, y: 0, width: W, height: H }; return super.compose(...args); }
+    }
+    const reference = new FullPassReference(referenceCanvas);
+    try {
+      const roiClips = [clip('left', 'trail', { effects: DEFAULT_EFFECTS, samples: [{ x: 2, y: 10, size: 120, t: 0 }, { x: 1000, y: 700, size: 200, t: 200 }] }), clip('right', 'return', { effects: { blur: true, blurRadius: 192 }, color: '#ff8800', samples: [{ x: 3800, y: 2100, size: 100, t: 0 }, { x: 3838, y: 2150, size: 100, t: 200 }] }), clip('overlap', 'return', { effects: DEFAULT_EFFECTS, color: '#ffffff', samples: [{ x: 300, y: 300, size: 400, t: 0 }, { x: 900, y: 650, size: 80, t: 200 }] })];
+      gpu.setProject(project(roiClips)); reference.setProject(project(roiClips));
+      let worst = 0;
+      for (const phase of [100, 2000, 50]) {
+        gpu.draw(0, phase); reference.draw(0, phase);
+        const actual = gpu.readPixels(), expected = reference.readPixels();
+        for (let i = 0; i < actual.length; i++) worst = Math.max(worst, Math.abs(actual[i] - expected[i]));
+      }
+      gpu.setProject(project([])); reference.setProject(project([]));
+      const livePoint = { x: 1920, y: 1080, size: 100, t: 0 };
+      const liveProbe = { id: 'region-live', mode: 'trail', color: '#ff00ff', effects: DEFAULT_EFFECTS, targets: [0], samples: [livePoint], last: livePoint, started: 0 };
+      for (const now of [0, 100]) {
+        if (now) { liveProbe.last = { x: 3000, y: 2000, size: 3000, t: now }; liveProbe.samples.push(liveProbe.last); }
+        gpu.setLiveStroke(liveProbe, now); reference.setLiveStroke(liveProbe, now);
+        gpu.draw(0, 0, { now }); reference.draw(0, 0, { now });
+        const actual = gpu.readPixels(), expected = reference.readPixels();
+        for (let i = 0; i < actual.length; i++) worst = Math.max(worst, Math.abs(actual[i] - expected[i]));
+      }
+      gpu.setLiveStroke(null); reference.setLiveStroke(null);
+      if (worst > 1) throw new Error(`Region passes differ from full-frame reference: ${worst}`);
+      report.checks.push({ name: 'Region copies and Blur match full-frame passes at overlaps, edges, seeks and growing live strokes', passed: true, maxChannelError: worst });
+    } finally { reference.dispose(); }
     const clips = Array.from({ length: 10 }, (_, layer) => clip(`bench-${layer}`, 'trail', {
       color: ['#0d99ff', '#ff7331', '#83dc92'][layer % 3], duration: 1800,
       samples: Array.from({ length: 109 }, (_, i) => ({ x: 180 + i * 13, y: 170 + layer * 68 + Math.sin(i / 11) * 55, size: 60 + (i % 30), t: i * 1000 / 60 })),
@@ -148,7 +186,7 @@ button.onclick = async () => {
     const originalContext = blocked.getContext.bind(blocked);
     blocked.getContext = (kind, options) => kind === 'webgl2' ? null : originalContext(kind, options);
     const fallback = createPaintingRenderer(blocked);
-    fallback.setProject(project([clip('fallback')])); fallback.draw(0, 100);
+    fallback.setView({ scale: 1, x: 0, y: 0 }); fallback.setProject(project([clip('fallback')])); fallback.draw(0, 100);
     const fallbackPixel = [...fallback.ctx.getImageData(180, 200, 1, 1).data];
     if (fallback.backend !== 'cpu' || fallbackPixel[2] !== 255) throw new Error('CPU fallback did not paint');
     fallback.dispose(); report.checks.push({ name: 'WebGL2-unavailable devices use a working CPU fallback', passed: true });

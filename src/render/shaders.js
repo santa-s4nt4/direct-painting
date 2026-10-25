@@ -60,6 +60,7 @@ in vec2 pixel;
 uniform vec2 resolution;
 uniform vec4 bounds;
 uniform sampler2D maskTexture;
+uniform vec4 maskBounds;
 uniform vec3 fillColor;
 uniform float sourceTime;
 uniform float layerOpacity;
@@ -81,7 +82,7 @@ vec4 layerColor() {
     if (footprint(p,directBrush.zw,rect) < .5) return vec4(0.);
     if (directShape == 3 && footprint(p,directBrush.zw-edgeSize*2.,false) > .5) return vec4(0.);
   } else {
-    vec2 uv = (pixel-bounds.xy)/bounds.zw; uv.y=1.-uv.y;
+    vec2 uv = (pixel-maskBounds.xy)/maskBounds.zw; uv.y=1.-uv.y;
     vec4 mask = texture(maskTexture,uv);
     if (mask.a < .1) return vec4(0.);
     if (trail == 1) {
