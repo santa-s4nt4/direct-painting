@@ -1,0 +1,57 @@
+{
+  "viewport": [
+    1133,
+    744
+  ],
+  "zoomRange": [
+    0.5,
+    5
+  ],
+  "defaultView": {
+    "scale": 1,
+    "x": -960,
+    "y": -540
+  },
+  "view": {
+    "scale": 1,
+    "x": -960,
+    "y": -540,
+    "pitch": -25,
+    "yaw": -35
+  },
+  "line": {
+    "start": 497.19999980926514,
+    "revealedAtPhase": 519.2,
+    "initialCycle": "two endpoint rings",
+    "linePending": false
+  },
+  "shapes": [
+    {
+      "mode": "line",
+      "shape": "circle"
+    },
+    {
+      "mode": "move",
+      "shape": "rect-ring",
+      "angle": 45
+    },
+    {
+      "mode": "move",
+      "shape": "rect-ring",
+      "angle": 0
+    }
+  ],
+  "projectedInput": {
+    "expected": {
+      "x": 560,
+      "y": 380
+    },
+    "actual": {
+      "x": 560,
+      "y": 380
+    },
+    "errorPx": 0
+  },
+  "backend": "webgl2",
+  "note": "Desktop browser at iPad mini dimensions. Physical iPad multi-touch and Pencil pressure are not measured."
+}

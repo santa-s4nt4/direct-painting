@@ -2,7 +2,7 @@ import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_H
 import { createPaintingRenderer } from '../src/render/index.js';
 import { WebGLPaintingRenderer } from '../src/render/webgl.js';
 import { LoopScene } from '../src/scene.js';
-import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM } from '../src/view.js';
+import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, worldToScreen } from '../src/view.js';
 import { DEFAULT_EFFECTS } from '../src/effects.js';
 import { RGBAScene } from '../src/rgba.js';
 const result = document.querySelector('#result'), button = document.querySelector('#run');
@@ -27,6 +27,12 @@ button.onclick = async () => {
       ['rectangle', [clip('rect', 'return', { shape: 'rect', angle: 32, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
       ['gradient', [clip('gradient', 'return', { colorEditMode: 'gradient', colorGradient: { to: '#ff8800', startMs: 0, endMs: 900 } })]],
       ['ring move', [clip('ring-move', 'move', { shape: 'ring', ringWidth: 7 })]],
+      ['rectangle outline move', [clip('rect-ring-move', 'move', { shape: 'rect-ring', angle: 45, ringWidth: 5, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
+      ['rectangle outline cached', [clip('rect-ring-cached', 'return', { shape: 'rect-ring', angle: 17, ringWidth: 5, samples: [{ x: 180, y: 200, size: 60, width: 80, height: 40, t: 0 }, { x: 380, y: 200, size: 60, width: 80, height: 40, t: 200 }] })]],
+      ['line first frame', [clip('line', 'line', { duration: 0, ringWidth: 6, linePending: false, lineIncomplete: false, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 0 }] })]],
+      ['line initial endpoint rings', [clip('line-pending', 'line', { duration: 0, ringWidth: 6, linePending: true, lineIncomplete: false, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 0 }] })]],
+      ['line wide-width endpoint rings', [clip('line-wide-pending', 'line', { duration: 0, ringWidth: 1500, linePending: true, lineIncomplete: false, samples: [{ x: 180, y: 200, size: 60, t: 0 }, { x: 380, y: 200, size: 60, t: 0 }] })]],
+      ['line incomplete first ring', [clip('line-incomplete', 'line', { duration: 0, ringWidth: 6, linePending: true, lineIncomplete: true, samples: [{ x: 180, y: 200, size: 60, t: 0 }] })]],
       ['ring trail', [clip('ring-trail', 'trail', { shape: 'ring', ringWidth: 7 })]],
       ['opacity', [clip('opacity', 'return', { opacity: .35 })]],
       ['4K far edge', [clip('far-edge', 'return', { samples: [{ x: 3500, y: 1980, size: 80, t: 0 }, { x: 3600, y: 1980, size: 80, t: 200 }] })]],
@@ -40,7 +46,7 @@ button.onclick = async () => {
       const p = project(clips), cpu = new RGBAScene(p); gpu.setProject(p); let worst = 0;
       for (const time of (name === 'long trail window' ? [2500, 2200, 0] : [0, 100, 700, 4000, 100])) {
         gpu.draw(0, time); const actual = gpu.readPixels(), expected = cpu.draw(0, time);
-        for (const [x, y] of [[180, 200], [190, 200], [180, 220], [200, 210], [380, 200], [20, 20], [3500, 1980], [3600, 1980]]) {
+        for (const [x, y] of [[180, 200], [190, 200], [208, 200], [280, 200], [180, 220], [200, 210], [380, 200], [20, 20], [3500, 1980], [3600, 1980]]) {
           const a = gpuPixel(actual, x, y), e = cpuPixel(expected, x, y);
           const error = Math.max(...a.map((v, i) => Math.abs(v - e[i]))); worst = Math.max(worst, error);
           if (error > 5) throw new Error(`${name} at ${time} (${x},${y}): GPU ${a}, CPU ${e}`);
@@ -72,20 +78,27 @@ button.onclick = async () => {
     gpu.setProject(project([far])); gpu.draw(0, 50);
     if (gpu.canvas.width !== VW || gpu.canvas.height !== VH || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] !== 0) throw new Error('Default output is not the center Full HD region');
     gpu.setView({ scale: .1, x: 200, y: 200 }); gpu.draw(0, 50);
-    if (gpu.view.scale !== .1 || gpu.view.x !== 768 || gpu.view.y !== 432 || presentedPixel(gpu.readPixels({ presented: true }), 1118, 630)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
+    if (gpu.view.scale !== .5 || gpu.view.x !== 0 || gpu.view.y !== 0 || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
     gpu.setView({ scale: 1, x: -99999, y: -99999 }); gpu.draw(0, 50);
     if (gpu.view.x !== -1920 || gpu.view.y !== -1080 || presentedPixel(gpu.readPixels({ presented: true }), 1580, 900)[2] < 200) throw new Error('Panning does not reach the far 4K region');
     gpu.setView({ scale: 8, x: 5000, y: -99999 });
-    if (gpu.view.scale !== 2 || gpu.view.x !== 0 || gpu.view.y !== -3240) throw new Error('Zoom exceeds the 4K bounds');
+    if (gpu.view.scale !== 5 || gpu.view.x !== 0 || gpu.view.y !== -9720) throw new Error('Zoom exceeds the 4K bounds');
     gpu.setView(DEFAULT_VIEW);
     const centerClip = clip('center-viewport', 'return', { samples: [{ x: 1920, y: 1080, size: 80, t: 0 }, { x: 1920, y: 1080, size: 80, t: 200 }] });
     gpu.setProject(project([centerClip])); gpu.draw(0, 50);
     if (presentedPixel(gpu.readPixels({ presented: true }), 960, 540)[2] < 200) throw new Error('100% does not center the 4K painting');
     gpu.setView({ scale: .1 }); gpu.draw(0, 50);
     const overview = gpu.readPixels({ presented: true });
-    if (presentedPixel(overview, 960, 540)[2] < 200 || presentedPixel(overview, 10, 10)[2] !== 0) throw new Error('10% did not center the painting with black margins');
+    if (presentedPixel(overview, 960, 540)[2] < 200 || presentedPixel(overview, 10, 10)[2] !== 0) throw new Error('50% did not center the entire painting');
     gpu.setView(DEFAULT_VIEW);
-    report.checks.push({ name: '4K far-edge painting, 10–200% bounds and centered Full HD default output', passed: true });
+    report.checks.push({ name: '4K far-edge painting, 50–500% bounds and centered Full HD default output', passed: true });
+    const pose = canvasView({ scale: 1.3, yaw: -35, pitch: 25, rotation: 37 });
+    const point3D = { x: 2220, y: 1180, size: 80, t: 0 }, expected3D = worldToScreen(point3D, pose);
+    const p3D = project([clip('3d-probe', 'move', { samples: [point3D, { ...point3D, t: 200 }] })]);
+    gpu.setProject(p3D); gpu.setView(pose); gpu.draw(0, 50);
+    if (!gpu.camera.isPerspectiveCamera || gpu.painting.geometry.parameters.width !== W || presentedPixel(gpu.readPixels({ presented: true }), Math.floor(expected3D.x), Math.floor(expected3D.y))[2] < 200) throw new Error('3D plane and inverse input projection disagree');
+    gpu.setView(DEFAULT_VIEW);
+    report.checks.push({ name: 'Perspective camera, tilted plane and combined roll project the recorded point correctly', passed: true });
     const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
     gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS } }, untouched])); gpu.draw(0, 50);
     if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
@@ -189,6 +202,8 @@ button.onclick = async () => {
     fallback.setView({ scale: 1, x: 0, y: 0 }); fallback.setProject(project([clip('fallback')])); fallback.draw(0, 100);
     const fallbackPixel = [...fallback.ctx.getImageData(180, 200, 1, 1).data];
     if (fallback.backend !== 'cpu' || fallbackPixel[2] !== 255) throw new Error('CPU fallback did not paint');
+    fallback.setProject(p3D); fallback.setView(pose); fallback.draw(0, 50);
+    if (fallback.ctx.getImageData(Math.floor(expected3D.x), Math.floor(expected3D.y), 1, 1).data[2] < 200) throw new Error('CPU fallback does not project the same 3D plane');
     fallback.dispose(); report.checks.push({ name: 'WebGL2-unavailable devices use a working CPU fallback', passed: true });
     report.benchmark.speedup = +(report.benchmark.cpu.meanMs / report.benchmark.gpu.meanMs).toFixed(1);
     report.passed = true;
