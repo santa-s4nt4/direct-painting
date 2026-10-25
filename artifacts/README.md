@@ -1,6 +1,16 @@
 # 画面と描画検証の記録
 
-## 現行版（中央表示・Trail負荷対策）
+## 現行版（3Dビュー・Move / Line）
+
+- [3Dビューと描画ツール](direct-painting-3d-tools.png)：1133×744、0°／45°の四角形Ringと直線、左下の回転ボックス。
+- [直線の初回](direct-painting-line-first-cycle.png) / [次周回](direct-painting-line-next-cycle.png)：2つのRingから全長の直線へ切り替え。
+- [3D姿勢の出力](direct-painting-3d-output.png) / [50%表示](direct-painting-3d-fit-50.png)。
+- [描画比較JSON](3d-tools-render-checks.json)：33項目成功。
+- [画面操作の確認JSON](3d-tools-ui-checks.json)：500%／50%、傾いた平面への入力座標誤差0px、直線の開始時刻を記録。
+
+詳細は[3Dツールの記録](../docs/3d-tools.md)を参照してください。
+
+## 以前の中央表示・Trail負荷対策
 
 - [中央100%](direct-painting-center-100.png)：iPad mini相当の1133×744で、4K中央1920×1080に描画。
 - [中央10%](direct-painting-center-10.png)：4K全体を中央に縮小し、描画範囲の枠を表示。
