@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-25T10:55:51.194Z",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "space": {
+    "width": 3840,
+    "height": 3480,
+    "depth": 3480
+  },
+  "checks": [
+    {
+      "name": "Volume composition uses Full HD targets; live Move never allocates a 4K mask",
+      "passed": true
+    },
+    {
+      "name": "Rectangle defaults are 1600 x 1600",
+      "passed": true
+    },
+    {
+      "name": "Pressure Ring starts at the recorded small size with an empty center",
+      "passed": true
+    },
+    {
+      "name": "Pressure Ring expands with the same recorded pressure as Move",
+      "passed": true
+    },
+    {
+      "name": "Initial line Ring disappears after its inherited release fade",
+      "passed": true
+    },
+    {
+      "name": "Line previews exactly match the Circle Ring Move tool across pressure and fade",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "Drawing faces the screen at yaw 0, pitch 0",
+      "passed": true,
+      "expected": {
+        "x": 1180,
+        "y": 660
+      },
+      "world": [
+        220,
+        120,
+        0
+      ]
+    },
+    {
+      "name": "Drawing faces the screen at yaw 90, pitch 0",
+      "passed": true,
+      "expected": {
+        "x": 1180,
+        "y": 660
+      },
+      "world": [
+        1.3471114790620885e-14,
+        120,
+        220
+      ]
+    },
+    {
+      "name": "Drawing faces the screen at yaw 180, pitch 0",
+      "passed": true,
+      "expected": {
+        "x": 1180,
+        "y": 660
+      },
+      "world": [
+        -220,
+        120,
+        -2.694222958124177e-14
+      ]
+    },
+    {
+      "name": "Drawing faces the screen at yaw 137, pitch -80",
+      "passed": true,
+      "expected": {
+        "x": 1180,
+        "y": 660
+      },
+      "world": [
+        -163.40723998992956,
+        -4.8427994767603835,
+        189.93320197401366
+      ]
+    },
+    {
+      "name": "A stroke retains depth instead of being flattened onto the original canvas",
+      "passed": true
+    },
+    {
+      "name": "A completed line connects endpoints in different drawing planes",
+      "passed": true
+    },
+    {
+      "name": "A view-aligned 3D line retains a visible round end cap",
+      "passed": true
+    },
+    {
+      "name": "CPU fallback also renders a new front-facing plane after a 90-degree orbit",
+      "passed": true
+    },
+    {
+      "name": "Ten spatial Move layers reuse analytic geometry without allocating saved masks",
+      "passed": true
+    }
+  ],
+  "performance": {
+    "layers": 10,
+    "size": 1600,
+    "blur": 16,
+    "meanMs": 2.100000003973643,
+    "p95Ms": 4,
+    "stats": {
+      "backend": "webgl2",
+      "frames": 38,
+      "stamps": 0,
+      "maskPasses": 0,
+      "masksCreated": 0,
+      "maskBytes": 0,
+      "drawCalls": 60,
+      "copyPixels": 498960000,
+      "blurPixels": 64800000,
+      "maskRebuilds": 0,
+      "cpuPixelUploads": 0
+    }
+  },
+  "passed": true
+}

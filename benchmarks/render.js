@@ -77,12 +77,12 @@ button.onclick = async () => {
     const far = clip('4k-viewport', 'return', { samples: [{ x: 3500, y: 1980, size: 80, t: 0 }, { x: 3500, y: 1980, size: 80, t: 200 }] });
     gpu.setProject(project([far])); gpu.draw(0, 50);
     if (gpu.canvas.width !== VW || gpu.canvas.height !== VH || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] !== 0) throw new Error('Default output is not the center Full HD region');
-    gpu.setView({ scale: .1, x: 200, y: 200 }); gpu.draw(0, 50);
+    gpu.setView({ scale: .1, x: 200, y: 0 }); gpu.draw(0, 50);
     if (gpu.view.scale !== .5 || gpu.view.x !== 0 || gpu.view.y !== 0 || presentedPixel(gpu.readPixels({ presented: true }), 1750, 990)[2] < 200) throw new Error('Fitting 4K hides the far edge or exceeds bounds');
     gpu.setView({ scale: 1, x: -99999, y: -99999 }); gpu.draw(0, 50);
-    if (gpu.view.x !== -1920 || gpu.view.y !== -1080 || presentedPixel(gpu.readPixels({ presented: true }), 1580, 900)[2] < 200) throw new Error('Panning does not reach the far 4K region');
+    if (gpu.view.x !== -1920 || gpu.view.y !== -1740 || presentedPixel(gpu.readPixels({ presented: true }), 1580, 240)[2] < 200) throw new Error('Panning does not reach the far 4K region');
     gpu.setView({ scale: 8, x: 5000, y: -99999 });
-    if (gpu.view.scale !== 5 || gpu.view.x !== 0 || gpu.view.y !== -9720) throw new Error('Zoom exceeds the 4K bounds');
+    if (gpu.view.scale !== 5 || gpu.view.x !== 0 || gpu.view.y !== -13020) throw new Error('Zoom exceeds the 4K bounds');
     gpu.setView(DEFAULT_VIEW);
     const centerClip = clip('center-viewport', 'return', { samples: [{ x: 1920, y: 1080, size: 80, t: 0 }, { x: 1920, y: 1080, size: 80, t: 200 }] });
     gpu.setProject(project([centerClip])); gpu.draw(0, 50);

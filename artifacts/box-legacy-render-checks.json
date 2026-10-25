@@ -1,0 +1,201 @@
+{
+  "resolution": "3840x2160",
+  "viewport": "1920x1080",
+  "zoomRange": [
+    0.5,
+    5
+  ],
+  "targetFPS": 60,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "checks": [
+    {
+      "name": "return",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "trail",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "long trail window",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "rectangle",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "gradient",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "ring move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "rectangle outline move",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "rectangle outline cached",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "line first frame",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "line initial endpoint rings",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "line wide-width endpoint rings",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "line incomplete first ring",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "ring trail",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "opacity",
+      "passed": true,
+      "maxChannelError": 1
+    },
+    {
+      "name": "4K far edge",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog over black",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "analog",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "two analog layers",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "place legacy",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "Blur defaults to 16px, toggles reversibly and reuses masks",
+      "passed": true
+    },
+    {
+      "name": "Zoom in/out and reset transform presentation without rebuilding source geometry",
+      "passed": true
+    },
+    {
+      "name": "4K far-edge painting, 50–500% bounds and centered Full HD default output",
+      "passed": true
+    },
+    {
+      "name": "Perspective camera, tilted plane and combined roll project the recorded point correctly",
+      "passed": true
+    },
+    {
+      "name": "Effects are isolated per layer",
+      "passed": true
+    },
+    {
+      "name": "3000px brushes render across the Full HD canvas in every motion mode",
+      "passed": true
+    },
+    {
+      "name": "Region copies and Blur match full-frame passes at overlaps, edges, seeks and growing live strokes",
+      "passed": true,
+      "maxChannelError": 0
+    },
+    {
+      "name": "10-layer warm playback reuses GPU masks",
+      "passed": true
+    },
+    {
+      "name": "color edits reuse existing geometry and masks",
+      "passed": true
+    },
+    {
+      "name": "late live packets preserve the whole path",
+      "passed": true
+    },
+    {
+      "name": "WebGL context loss recovers painting from source data",
+      "passed": true
+    },
+    {
+      "name": "WebGL2-unavailable devices use a working CPU fallback",
+      "passed": true
+    }
+  ],
+  "benchmark": {
+    "cpuColdMs": 2485.2,
+    "cpuSamples": 6,
+    "cpu": {
+      "meanMs": 1413.33,
+      "p95Ms": 1648.2
+    },
+    "gpuColdMs": 7,
+    "gpu": {
+      "meanMs": 1.27,
+      "p95Ms": 3.4
+    },
+    "gpuFirstPointWith10LayersMs": 1.1,
+    "gpu10LayersBlur": {
+      "meanMs": 1.33,
+      "p95Ms": 2.9
+    },
+    "gpuFirstPointWith10BlurLayersMs": 6,
+    "gpuStats": {
+      "backend": "webgl2",
+      "frames": 195,
+      "stamps": 60471,
+      "maskPasses": 738,
+      "masksCreated": 48,
+      "maskBytes": 11816000,
+      "drawCalls": 30,
+      "copyPixels": 213207040,
+      "blurPixels": 16319280,
+      "maskRebuilds": 103,
+      "cpuPixelUploads": 0,
+      "cachedMaskMiB": 11.27
+    },
+    "speedup": 1112.9
+  },
+  "passed": true
+}

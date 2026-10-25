@@ -1,0 +1,119 @@
+{
+  "viewport": [
+    1133,
+    744
+  ],
+  "space": {
+    "width": 3840,
+    "height": 3480,
+    "depth": 3480
+  },
+  "rectangleDefaults": {
+    "width": 1600,
+    "height": 1600
+  },
+  "rotationDock": "bottom controls",
+  "presetButtons": [
+    "Front"
+  ],
+  "drawAtNewFront": {
+    "view": {
+      "scale": 0.5,
+      "x": 0,
+      "y": 0,
+      "yaw": 89.7
+    },
+    "recordedPlane": [
+      0.005235963831418871,
+      0,
+      -0.9999862922474267,
+      0,
+      1,
+      0,
+      0.9999862922474267,
+      0,
+      0.005235963831418871
+    ],
+    "world": [
+      2.8360946947613384,
+      62.23289315726288,
+      541.6492377695546
+    ],
+    "expectedScreen": {
+      "x": 820,
+      "y": 300
+    },
+    "actualScreen": {
+      "x": 820,
+      "y": 300
+    },
+    "errorPx": 0
+  },
+  "line": {
+    "points3D": [
+      [
+        -2.95677957538948,
+        -260.4561824729892,
+        -564.6981415044293
+      ],
+      [
+        590.627718820878,
+        292.7250900360143,
+        336.88810300133986
+      ]
+    ],
+    "linePending": false,
+    "markers": [
+      {
+        "shape": "ring",
+        "mode": "move",
+        "duration": 158,
+        "ringWidth": 20,
+        "sampleCount": 10,
+        "sizeRange": [
+          400,
+          400
+        ],
+        "plane": [
+          0.005235963831418871,
+          0,
+          -0.9999862922474267,
+          0,
+          1,
+          0,
+          0.9999862922474267,
+          0,
+          0.005235963831418871
+        ]
+      },
+      {
+        "shape": "ring",
+        "mode": "move",
+        "duration": 163.7000002861023,
+        "ringWidth": 20,
+        "sampleCount": 11,
+        "sizeRange": [
+          400,
+          400
+        ],
+        "plane": [
+          0.8686315144381909,
+          0,
+          -0.49545866843240827,
+          0,
+          1,
+          0,
+          0.49545866843240827,
+          0,
+          0.8686315144381909
+        ]
+      }
+    ],
+    "fadeCheck": {
+      "fadeMsDuringCheck": 1000,
+      "markerVisibleAtPhase": 250,
+      "markerAbsentAtPhase": 1500
+    }
+  },
+  "note": "Desktop Chrome at iPad mini viewport size. Pressure changes separately verified with recorded pressure samples; physical iPad/Pencil input not measured."
+}
