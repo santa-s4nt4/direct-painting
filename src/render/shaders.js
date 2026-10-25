@@ -96,7 +96,7 @@ vec4 layerColor() {
 export const normalFragment = `${layerSource}
 void main() { vec4 paint=layerColor(); result=vec4(paint.rgb*paint.a,paint.a); }
 `;
-const analogComposite = `
+export const analogComposite = `
 uniform sampler2D belowTexture;
 uniform float mixAmount;
 ${spectral}

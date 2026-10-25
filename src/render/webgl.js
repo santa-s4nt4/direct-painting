@@ -17,11 +17,11 @@ import { stampVertex, stampFragment, layerVertex, normalFragment, analogFragment
 
 const FULL = { x: 0, y: 0, width: W, height: H };
 const CAPACITY = 4096;
-function target(width, height, linear = false) {
+export function target(width, height, linear = false) {
   const rt = new WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false, minFilter: linear ? LinearFilter : NearestFilter, magFilter: linear ? LinearFilter : NearestFilter });
   rt.texture.colorSpace = NoColorSpace; rt.texture.generateMipmaps = false; return rt;
 }
-function material(vertexShader, fragmentShader, uniforms, blending = NoBlending) {
+export function material(vertexShader, fragmentShader, uniforms, blending = NoBlending) {
   return new RawShaderMaterial({ glslVersion: GLSL3, vertexShader, fragmentShader, uniforms, blending, depthTest: false, depthWrite: false, toneMapped: false, side: DoubleSide, transparent: blending !== NoBlending, blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor, blendEquation: AddEquation });
 }
 function color(vector, hex) { const value = Number.parseInt(hex.slice(1), 16); vector.set((value >> 16) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255); }
@@ -29,7 +29,8 @@ function color(vector, hex) { const value = Number.parseInt(hex.slice(1), 16); v
 export class WebGLPaintingRenderer {
   backend = 'webgl2'; items = []; duration = 10000; live = new LiveStroke(); frame = 0; view = canvasView();
   stats = { backend: 'webgl2', frames: 0, stamps: 0, maskPasses: 0, masksCreated: 0, maskBytes: 0, drawCalls: 0, copyPixels: 0, blurPixels: 0, maskRebuilds: 0, cpuPixelUploads: 0 };
-  constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024 } = {}) {
+  constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024, volume = false } = {}) {
+    this.volume = volume; this.targetWidth = volume ? VW : W; this.targetHeight = volume ? VH : H;
     this.canvas = canvas; this.onBackendChange = onBackendChange; this.cacheBytes = cacheBytes;
     this.renderer = new WebGLRenderer({ canvas, alpha: false, antialias: false, depth: true, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1); this.renderer.setSize(VW, VH, false); this.renderer.autoClear = false;
@@ -38,8 +39,8 @@ export class WebGLPaintingRenderer {
     this.quad = new PlaneGeometry(1, 1);
     this.camera = new PerspectiveCamera(2 * Math.atan(VH / (2 * CAMERA_DISTANCE)) * 180 / Math.PI, VW / VH, 1, 20000); this.camera.position.z = CAMERA_DISTANCE;
     this.passScene = new Scene(); this.passMesh = new Mesh(this.quad); this.passMesh.frustumCulled = false; this.passScene.add(this.passMesh);
-    this.accumulator = target(W, H);
-    this.liveTarget = target(W, H); // Allocate once at startup, never at Pencil down.
+    this.accumulator = target(this.targetWidth, this.targetHeight);
+    this.liveTarget = target(volume ? 1 : W, volume ? 1 : H); // Allocate once at startup, never at Pencil down.
     this.stampGeometry = new InstancedBufferGeometry(); this.stampGeometry.index = this.quad.index; this.stampGeometry.attributes.position = this.quad.attributes.position;
     this.brushData = new Float32Array(CAPACITY * 4); this.appearanceData = new Float32Array(CAPACITY * 3);
     this.stampGeometry.setAttribute('brush', new InstancedBufferAttribute(this.brushData, 4).setUsage(DynamicDrawUsage));

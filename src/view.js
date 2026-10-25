@@ -1,33 +1,33 @@
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from './canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, BOX_SPEC } from './canvas.js';
 
 export const DEFAULT_VIEW = Object.freeze({ scale: 1, x: (VW - W) / 2, y: (VH - H) / 2 });
 export const MIN_ZOOM = .5, MAX_ZOOM = 5;
-export const CAMERA_DISTANCE = 5000, MAX_TILT = 75;
+export const CAMERA_DISTANCE = 5000, MAX_TILT = 180;
 const radians = angle => angle * Math.PI / 180;
 export const wrapAngle = angle => ((angle + 180) % 360 + 360) % 360 - 180;
 export function viewBounds(scale) {
-  const x = VW - W * scale, y = VH - H * scale;
-  return { minX: x, minY: y, maxX: 0, maxY: 0 };
+  const x = VW - W * scale;
+  return { minX: x, minY: VH - (BOX_SPEC.height + H) * scale / 2, maxX: 0, maxY: (BOX_SPEC.height - H) * scale / 2 };
 }
 export function validateView(view) {
   if (view === undefined) return;
   if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < MIN_ZOOM || view.scale > MAX_ZOOM) throw new Error('Invalid canvas view');
   for (const [key, limit] of [['rotation', 180], ['pitch', MAX_TILT], ['yaw', MAX_TILT]]) if (view[key] !== undefined && (!Number.isFinite(view[key]) || Math.abs(view[key]) > limit)) throw new Error('Invalid view rotation');
   const b = viewBounds(view.scale), epsilon = 1e-6;
-  if (view.x < b.minX - epsilon || view.x > epsilon || view.y < b.minY - epsilon || view.y > epsilon) throw new Error('View exceeds canvas bounds');
+  if (view.x < b.minX - epsilon || view.x > epsilon || view.y < b.minY - epsilon || view.y > b.maxY + epsilon) throw new Error('View exceeds canvas bounds');
 }
 export function canvasView(value) {
   const scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value?.scale ?? 1)), b = viewBounds(scale);
-  const view = { scale, x: Math.max(b.minX, Math.min(0, value?.x ?? b.minX / 2)), y: Math.max(b.minY, Math.min(0, value?.y ?? b.minY / 2)) };
+  const view = { scale, x: Math.max(b.minX, Math.min(0, value?.x ?? b.minX / 2)), y: Math.max(b.minY, Math.min(b.maxY, value?.y ?? (b.minY + b.maxY) / 2)) };
   for (const key of ['rotation', 'pitch', 'yaw']) {
-    const angle = key === 'rotation' ? wrapAngle(value?.[key] ?? 0) : Math.max(-MAX_TILT, Math.min(MAX_TILT, value?.[key] ?? 0));
+    const angle = wrapAngle(value?.[key] ?? 0);
     if (angle) view[key] = angle;
   }
   return view;
 }
 export function importedView(view, canvas, version) {
   if (view === undefined) return { ...DEFAULT_VIEW };
-  if (version === 3) { validateView(view); return canvasView(view); }
+  if (version === 3 || version === 4) { validateView(view); return canvasView(view); }
   // Older files used 10–800%. Migrate their camera without moving the artwork.
   if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < .1 || view.scale > 8 || Math.abs(view.x) > VW * 8 || Math.abs(view.y) > VH * 8) throw new Error('Invalid legacy canvas view');
   if (version === undefined && canvas?.width === W && canvas?.height === H && view.scale === 1 && view.x === 0 && view.y === 0) return { ...DEFAULT_VIEW };
@@ -66,9 +66,11 @@ function transform(p, m) {
 export const screenToWorld = (p, view) => transform(p, matrices(view).inverse);
 export const worldToScreen = (p, view) => transform(p, matrices(view).forward);
 export function transformAt(view, updates, anchor, destination = anchor) {
-  const world = screenToWorld(anchor, view), next = canvasView({ ...view, ...updates });
-  const projected = worldToScreen(world, next);
-  return canvasView({ ...next, x: next.x + destination.x - projected.x, y: next.y + destination.y - projected.y });
+  const r=viewRotation(view),local=[(anchor.x-view.x-W*view.scale/2)/view.scale,(anchor.y-view.y-H*view.scale/2)/view.scale,0];
+  const world=[r[0]*local[0]+r[3]*local[1],r[1]*local[0]+r[4]*local[1],r[2]*local[0]+r[5]*local[1]];
+  const next=canvasView({...view,...updates}),n=viewRotation(next);
+  const projected=[n[0]*world[0]+n[1]*world[1]+n[2]*world[2],n[3]*world[0]+n[4]*world[1]+n[5]*world[2],n[6]*world[0]+n[7]*world[1]+n[8]*world[2]],k=next.scale*CAMERA_DISTANCE/(CAMERA_DISTANCE-projected[2]);
+  return canvasView({...next,x:destination.x-W*next.scale/2-projected[0]*k,y:destination.y-H*next.scale/2-projected[1]*k});
 }
 export const zoomAt = (view, scale, anchor, destination = anchor) => transformAt(view, { scale }, anchor, destination);
 
