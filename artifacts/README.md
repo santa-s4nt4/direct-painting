@@ -1,6 +1,16 @@
 # 画面と描画検証の記録
 
-## 現行版（4K対応）
+## 現行版（中央表示・Trail負荷対策）
+
+- [中央100%](direct-painting-center-100.png)：iPad mini相当の1133×744で、4K中央1920×1080に描画。
+- [中央10%](direct-painting-center-10.png)：4K全体を中央に縮小し、描画範囲の枠を表示。
+- [10%の出力同期](direct-painting-output-10.png)：出力canvasは1920×1080、同じ表示変換を適用。
+- [画素比較と回帰検証](center-trail-render-checks.json)：26項目成功。
+- [Trail変更前](trail-before.json) / [Trail変更後](trail-after.json)：M4 Max / Chromeの28条件と長い筆跡のシーク計測。iPad実測ではありません。
+
+原因と推定本数の条件は[Trail負荷調査](../docs/trail-performance.md)を参照してください。
+
+## 以前の4K対応時
 
 - [4K全体表示](direct-painting-4k-overview.jpg)：内部3840×2160を50%で表示。右下のFull HD範囲外にも描画しています。
 - [初期Full HD表示](direct-painting-4k-default.jpg)：100%・初期位置で1920×1080の範囲を表示します。

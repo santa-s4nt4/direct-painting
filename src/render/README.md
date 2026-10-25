@@ -12,9 +12,10 @@ interactive rendering never reads GPU pixels back into CPU memory.
 
 The painting coordinate system and raster targets are 3840×2160 (UHD). The
 editor and `/output` canvases remain 1920×1080. At the default view (scale 1,
-offset 0), the first Full HD region is displayed without rescaling old strokes.
-Scale 0.5 fits the entire 4K painting; scale 2 is the maximum zoom. Translation
-is clamped so the visible rectangle always stays inside the painting.
+offset -960,-540), the center Full HD region is displayed at original size.
+Scale 0.5 fits the entire 4K painting; scale 0.1 is the minimum, with centered
+margins, and scale 2 is the maximum zoom. At/above fit, translation stays inside
+the painting. Unversioned UHD top-left defaults migrate once; versioned pans persist.
 
 The presentation shader receives separate viewport and painting resolutions.
 Input coordinates map through the Full HD viewport and inverse view transform;
@@ -47,7 +48,15 @@ GPU across strokes, loops, color/timing/visibility changes and layer reordering.
 Only source geometry or ring-width changes invalidate a layer mask. Unused
 masks are evicted above a 96 MiB cache budget; currently active masks are retained
 so a dense visible scene cannot cause repeated eviction/reallocation each frame.
-GPU context restoration rebuilds masks from original samples.
+GPU context restoration rebuilds masks from original samples. Trail rebuilds skip
+source segments older than the 1800ms visible window. Source data is retained.
+
+Accumulation targets differ only in the last composited region, so only that
+region is copied before the next layer. Quarter-resolution Blur passes use an
+outward-rounded scissor over the brush bounds plus its halo, with cleared scratch
+targets. Live masks stay full size but maintain incremental painting bounds.
+`maskBounds` stays separate from the visible quad so cropping never stretches UVs.
+Large full-canvas marks still consume full-canvas fill and mask memory.
 
 ## Future 3D
 
@@ -70,6 +79,11 @@ The benchmark reports wall-clock render time with a GPU synchronization in the
 GPU measurement. It does not measure total browser UI latency or guarantee a
 particular device's frame rate. Save the page's JSON report with the test's
 browser/OS details when comparing changes.
+
+`/benchmarks/trail.html` measures device-specific layer counts, cold masks, warm
+playback, live painting, seeks, loop reentry/eviction and a 60-second Trail. It
+does not access editor storage or the relay. See
+[measurements and iPad estimates](../../docs/trail-performance.md).
 
 Three.js APIs: https://threejs.org/docs/pages/WebGLRenderer
 and https://threejs.org/docs/pages/OrthographicCamera.html

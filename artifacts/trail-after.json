@@ -1,0 +1,830 @@
+{
+  "date": "2026-10-25T08:42:44.891Z",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "canvas": [
+    3840,
+    2160
+  ],
+  "viewport": [
+    1920,
+    1080
+  ],
+  "budgetMs": 12,
+  "samplesPerCase": 24,
+  "cases": [
+    {
+      "size": 96,
+      "blur": false,
+      "count": 1,
+      "coldMs": 10,
+      "warm": {
+        "meanMs": 0.88,
+        "p95Ms": 2.4,
+        "maxMs": 4.3
+      },
+      "seekMs": 2.8,
+      "restartMs": 0.2,
+      "firstPointMs": 1.2,
+      "live": {
+        "meanMs": 1.01,
+        "p95Ms": 3.5,
+        "maxMs": 3.5
+      },
+      "maskMiB": 2.81,
+      "warmCopyPixels": 0,
+      "warmBlurPixels": 0,
+      "seekStamps": 1033,
+      "loopReentryMs": 0.2,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 3
+    },
+    {
+      "size": 96,
+      "blur": false,
+      "count": 4,
+      "coldMs": 5.1,
+      "warm": {
+        "meanMs": 1.52,
+        "p95Ms": 2.9,
+        "maxMs": 4.4
+      },
+      "seekMs": 2.6,
+      "restartMs": 0.3,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.08,
+        "p95Ms": 1.7,
+        "maxMs": 1.7
+      },
+      "maskMiB": 11.23,
+      "warmCopyPixels": 2208000,
+      "warmBlurPixels": 0,
+      "seekStamps": 4259,
+      "loopReentryMs": 0.4,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 12
+    },
+    {
+      "size": 96,
+      "blur": false,
+      "count": 8,
+      "coldMs": 13.2,
+      "warm": {
+        "meanMs": 1.34,
+        "p95Ms": 2.7,
+        "maxMs": 2.9
+      },
+      "seekMs": 4.8,
+      "restartMs": 0.3,
+      "firstPointMs": 0.3,
+      "live": {
+        "meanMs": 1.27,
+        "p95Ms": 2.4,
+        "maxMs": 2.4
+      },
+      "maskMiB": 22.46,
+      "warmCopyPixels": 5152000,
+      "warmBlurPixels": 0,
+      "seekStamps": 8544,
+      "loopReentryMs": 0.3,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 24
+    },
+    {
+      "size": 96,
+      "blur": false,
+      "count": 10,
+      "coldMs": 10.3,
+      "warm": {
+        "meanMs": 1.19,
+        "p95Ms": 2.5,
+        "maxMs": 3.4
+      },
+      "seekMs": 6.6,
+      "restartMs": 0.4,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.44,
+        "p95Ms": 3.6,
+        "maxMs": 3.6
+      },
+      "maskMiB": 28.08,
+      "warmCopyPixels": 6624000,
+      "warmBlurPixels": 0,
+      "seekStamps": 10738,
+      "loopReentryMs": 0.5,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 30
+    },
+    {
+      "size": 96,
+      "blur": false,
+      "count": 16,
+      "coldMs": 20.5,
+      "warm": {
+        "meanMs": 1.76,
+        "p95Ms": 3.6,
+        "maxMs": 4.7
+      },
+      "seekMs": 6.8,
+      "restartMs": 0.8,
+      "firstPointMs": 0.3,
+      "live": {
+        "meanMs": 1.51,
+        "p95Ms": 2.9,
+        "maxMs": 2.9
+      },
+      "maskMiB": 44.92,
+      "warmCopyPixels": 11040000,
+      "warmBlurPixels": 0,
+      "seekStamps": 17200,
+      "loopReentryMs": 0.8,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 48
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "count": 1,
+      "coldMs": 3.8,
+      "warm": {
+        "meanMs": 0.75,
+        "p95Ms": 1.6,
+        "maxMs": 1.8
+      },
+      "seekMs": 0.9,
+      "restartMs": 0.3,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.31,
+        "p95Ms": 3.7,
+        "maxMs": 3.7
+      },
+      "maskMiB": 2.81,
+      "warmCopyPixels": 52864,
+      "warmBlurPixels": 105728,
+      "seekStamps": 1033,
+      "loopReentryMs": 0.1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 7
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "count": 4,
+      "coldMs": 9.1,
+      "warm": {
+        "meanMs": 1.67,
+        "p95Ms": 4,
+        "maxMs": 4
+      },
+      "seekMs": 4,
+      "restartMs": 0.2,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.08,
+        "p95Ms": 2.4,
+        "maxMs": 2.4
+      },
+      "maskMiB": 11.23,
+      "warmCopyPixels": 2723008,
+      "warmBlurPixels": 422912,
+      "seekStamps": 4259,
+      "loopReentryMs": 0.3,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 28
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "count": 8,
+      "coldMs": 11.1,
+      "warm": {
+        "meanMs": 1.47,
+        "p95Ms": 2.6,
+        "maxMs": 3.4
+      },
+      "seekMs": 5.6,
+      "restartMs": 2.5,
+      "firstPointMs": 0.8,
+      "live": {
+        "meanMs": 1.84,
+        "p95Ms": 4.8,
+        "maxMs": 4.8
+      },
+      "maskMiB": 22.46,
+      "warmCopyPixels": 6283200,
+      "warmBlurPixels": 845824,
+      "seekStamps": 8544,
+      "loopReentryMs": 0.5,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 56
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "count": 10,
+      "coldMs": 10.3,
+      "warm": {
+        "meanMs": 1.83,
+        "p95Ms": 4.6,
+        "maxMs": 4.6
+      },
+      "seekMs": 8.8,
+      "restartMs": 1.6,
+      "firstPointMs": 0.4,
+      "live": {
+        "meanMs": 1.49,
+        "p95Ms": 2.3,
+        "maxMs": 2.3
+      },
+      "maskMiB": 28.08,
+      "warmCopyPixels": 8063296,
+      "warmBlurPixels": 1057280,
+      "seekStamps": 10738,
+      "loopReentryMs": 2.2,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 70
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "count": 16,
+      "coldMs": 21.3,
+      "warm": {
+        "meanMs": 2.13,
+        "p95Ms": 3.5,
+        "maxMs": 4.2
+      },
+      "seekMs": 9.8,
+      "restartMs": 1.7,
+      "firstPointMs": 4.2,
+      "live": {
+        "meanMs": 2.69,
+        "p95Ms": 6.7,
+        "maxMs": 6.7
+      },
+      "maskMiB": 44.92,
+      "warmCopyPixels": 13403584,
+      "warmBlurPixels": 1691648,
+      "seekStamps": 17200,
+      "loopReentryMs": 1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 112
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "count": 1,
+      "coldMs": 1.6,
+      "warm": {
+        "meanMs": 0.4,
+        "p95Ms": 0.9,
+        "maxMs": 1
+      },
+      "seekMs": 0.1,
+      "restartMs": 0.1,
+      "firstPointMs": 0.1,
+      "live": {
+        "meanMs": 0.45,
+        "p95Ms": 1.2,
+        "maxMs": 1.2
+      },
+      "maskMiB": 7.74,
+      "warmCopyPixels": 0,
+      "warmBlurPixels": 0,
+      "seekStamps": 218,
+      "loopReentryMs": 0,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 3
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "count": 4,
+      "coldMs": 4.7,
+      "warm": {
+        "meanMs": 0.62,
+        "p95Ms": 1.2,
+        "maxMs": 1.6
+      },
+      "seekMs": 1.6,
+      "restartMs": 1.9,
+      "firstPointMs": 0.1,
+      "live": {
+        "meanMs": 1.36,
+        "p95Ms": 4.2,
+        "maxMs": 4.2
+      },
+      "maskMiB": 30.95,
+      "warmCopyPixels": 6084768,
+      "warmBlurPixels": 0,
+      "seekStamps": 900,
+      "loopReentryMs": 0.1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 12
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "count": 8,
+      "coldMs": 9.2,
+      "warm": {
+        "meanMs": 1.07,
+        "p95Ms": 1.7,
+        "maxMs": 3.1
+      },
+      "seekMs": 1.4,
+      "restartMs": 0.5,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.27,
+        "p95Ms": 3.3,
+        "maxMs": 3.3
+      },
+      "maskMiB": 61.9,
+      "warmCopyPixels": 14197792,
+      "warmBlurPixels": 0,
+      "seekStamps": 1807,
+      "loopReentryMs": 1.3,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 24
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "count": 10,
+      "coldMs": 7.4,
+      "warm": {
+        "meanMs": 1.55,
+        "p95Ms": 3.6,
+        "maxMs": 3.9
+      },
+      "seekMs": 2.2,
+      "restartMs": 0.3,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 1.55,
+        "p95Ms": 4.2,
+        "maxMs": 4.2
+      },
+      "maskMiB": 77.37,
+      "warmCopyPixels": 18254304,
+      "warmBlurPixels": 0,
+      "seekStamps": 2271,
+      "loopReentryMs": 0.4,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 30
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "count": 16,
+      "coldMs": 14.8,
+      "warm": {
+        "meanMs": 1.44,
+        "p95Ms": 3.7,
+        "maxMs": 4.1
+      },
+      "seekMs": 3.7,
+      "restartMs": 0.3,
+      "firstPointMs": 0.4,
+      "live": {
+        "meanMs": 1.12,
+        "p95Ms": 2.2,
+        "maxMs": 2.2
+      },
+      "maskMiB": 123.79,
+      "warmCopyPixels": 30423840,
+      "warmBlurPixels": 0,
+      "seekStamps": 3633,
+      "loopReentryMs": 0.9,
+      "loopAllocations": 4,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 48
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "count": 1,
+      "coldMs": 2.3,
+      "warm": {
+        "meanMs": 0.66,
+        "p95Ms": 1.4,
+        "maxMs": 1.9
+      },
+      "seekMs": 0.4,
+      "restartMs": 0.1,
+      "firstPointMs": 0,
+      "live": {
+        "meanMs": 0.77,
+        "p95Ms": 1.4,
+        "maxMs": 1.4
+      },
+      "maskMiB": 7.74,
+      "warmCopyPixels": 136906,
+      "warmBlurPixels": 273812,
+      "seekStamps": 218,
+      "loopReentryMs": 0.1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 7
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "count": 4,
+      "coldMs": 3.1,
+      "warm": {
+        "meanMs": 1.04,
+        "p95Ms": 2,
+        "maxMs": 4.2
+      },
+      "seekMs": 2.1,
+      "restartMs": 0.3,
+      "firstPointMs": 0.4,
+      "live": {
+        "meanMs": 1.25,
+        "p95Ms": 3.6,
+        "maxMs": 3.6
+      },
+      "maskMiB": 30.95,
+      "warmCopyPixels": 7081096,
+      "warmBlurPixels": 1095248,
+      "seekStamps": 900,
+      "loopReentryMs": 0.3,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 28
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "count": 8,
+      "coldMs": 11,
+      "warm": {
+        "meanMs": 2.04,
+        "p95Ms": 5.5,
+        "maxMs": 6.2
+      },
+      "seekMs": 2.5,
+      "restartMs": 1.2,
+      "firstPointMs": 0.9,
+      "live": {
+        "meanMs": 1.66,
+        "p95Ms": 2.8,
+        "maxMs": 2.8
+      },
+      "maskMiB": 61.9,
+      "warmCopyPixels": 16340016,
+      "warmBlurPixels": 2190496,
+      "seekStamps": 1807,
+      "loopReentryMs": 1.1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 56
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "count": 10,
+      "coldMs": 7.8,
+      "warm": {
+        "meanMs": 1.69,
+        "p95Ms": 4,
+        "maxMs": 4.4
+      },
+      "seekMs": 5.4,
+      "restartMs": 0.5,
+      "firstPointMs": 2.6,
+      "live": {
+        "meanMs": 1.55,
+        "p95Ms": 5.6,
+        "maxMs": 5.6
+      },
+      "maskMiB": 77.37,
+      "warmCopyPixels": 20969476,
+      "warmBlurPixels": 2738120,
+      "seekStamps": 2271,
+      "loopReentryMs": 1.3,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 70
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "count": 16,
+      "coldMs": 23.7,
+      "warm": {
+        "meanMs": 1.92,
+        "p95Ms": 4.2,
+        "maxMs": 4.6
+      },
+      "seekMs": 5.8,
+      "restartMs": 0.8,
+      "firstPointMs": 1,
+      "live": {
+        "meanMs": 2.3,
+        "p95Ms": 5.2,
+        "maxMs": 5.2
+      },
+      "maskMiB": 123.79,
+      "warmCopyPixels": 34857856,
+      "warmBlurPixels": 4380992,
+      "seekStamps": 3633,
+      "loopReentryMs": 1.9,
+      "loopAllocations": 4,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 112
+    },
+    {
+      "size": 3000,
+      "blur": false,
+      "count": 1,
+      "coldMs": 2.2,
+      "warm": {
+        "meanMs": 0.53,
+        "p95Ms": 1.9,
+        "maxMs": 2.8
+      },
+      "seekMs": 0.2,
+      "restartMs": 0,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 0.7,
+        "p95Ms": 2.9,
+        "maxMs": 2.9
+      },
+      "maskMiB": 31.64,
+      "warmCopyPixels": 0,
+      "warmBlurPixels": 0,
+      "seekStamps": 108,
+      "loopReentryMs": 0.2,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 3
+    },
+    {
+      "size": 3000,
+      "blur": false,
+      "count": 4,
+      "coldMs": 3,
+      "warm": {
+        "meanMs": 1.1,
+        "p95Ms": 2.7,
+        "maxMs": 3.5
+      },
+      "seekMs": 0.6,
+      "restartMs": 0.4,
+      "firstPointMs": 0.3,
+      "live": {
+        "meanMs": 0.68,
+        "p95Ms": 1,
+        "maxMs": 1
+      },
+      "maskMiB": 126.56,
+      "warmCopyPixels": 24883200,
+      "warmBlurPixels": 0,
+      "seekStamps": 432,
+      "loopReentryMs": 0.3,
+      "loopAllocations": 1,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 12
+    },
+    {
+      "size": 3000,
+      "blur": false,
+      "count": 8,
+      "coldMs": 4.8,
+      "warm": {
+        "meanMs": 1.19,
+        "p95Ms": 2.2,
+        "maxMs": 3
+      },
+      "seekMs": 1.1,
+      "restartMs": 0.5,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 0.77,
+        "p95Ms": 2.4,
+        "maxMs": 2.4
+      },
+      "maskMiB": 253.13,
+      "warmCopyPixels": 58060800,
+      "warmBlurPixels": 0,
+      "seekStamps": 864,
+      "loopReentryMs": 0.9,
+      "loopAllocations": 5,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 24
+    },
+    {
+      "size": 3000,
+      "blur": false,
+      "count": 10,
+      "coldMs": 3,
+      "warm": {
+        "meanMs": 1.12,
+        "p95Ms": 2.7,
+        "maxMs": 2.9
+      },
+      "seekMs": 1.2,
+      "restartMs": 0.3,
+      "firstPointMs": 0.3,
+      "live": {
+        "meanMs": 0.82,
+        "p95Ms": 2.5,
+        "maxMs": 2.5
+      },
+      "maskMiB": 316.41,
+      "warmCopyPixels": 74649600,
+      "warmBlurPixels": 0,
+      "seekStamps": 1080,
+      "loopReentryMs": 0.7,
+      "loopAllocations": 7,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 30
+    },
+    {
+      "size": 3000,
+      "blur": true,
+      "count": 1,
+      "coldMs": 0.6,
+      "warm": {
+        "meanMs": 0.57,
+        "p95Ms": 1.3,
+        "maxMs": 2.7
+      },
+      "seekMs": 0.6,
+      "restartMs": 0.1,
+      "firstPointMs": 0.2,
+      "live": {
+        "meanMs": 0.48,
+        "p95Ms": 0.7,
+        "maxMs": 0.7
+      },
+      "maskMiB": 31.64,
+      "warmCopyPixels": 518400,
+      "warmBlurPixels": 1036800,
+      "seekStamps": 108,
+      "loopReentryMs": 0.1,
+      "loopAllocations": 0,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 7
+    },
+    {
+      "size": 3000,
+      "blur": true,
+      "count": 4,
+      "coldMs": 2.2,
+      "warm": {
+        "meanMs": 0.84,
+        "p95Ms": 1.6,
+        "maxMs": 2.5
+      },
+      "seekMs": 0.5,
+      "restartMs": 0.2,
+      "firstPointMs": 0.5,
+      "live": {
+        "meanMs": 0.75,
+        "p95Ms": 1.3,
+        "maxMs": 1.3
+      },
+      "maskMiB": 126.56,
+      "warmCopyPixels": 26956800,
+      "warmBlurPixels": 4147200,
+      "seekStamps": 432,
+      "loopReentryMs": 0.5,
+      "loopAllocations": 1,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 28
+    },
+    {
+      "size": 3000,
+      "blur": true,
+      "count": 8,
+      "coldMs": 1.6,
+      "warm": {
+        "meanMs": 1.01,
+        "p95Ms": 2.1,
+        "maxMs": 2.8
+      },
+      "seekMs": 1.4,
+      "restartMs": 2.8,
+      "firstPointMs": 0.7,
+      "live": {
+        "meanMs": 1.07,
+        "p95Ms": 2.8,
+        "maxMs": 2.8
+      },
+      "maskMiB": 253.13,
+      "warmCopyPixels": 62208000,
+      "warmBlurPixels": 8294400,
+      "seekStamps": 864,
+      "loopReentryMs": 0.7,
+      "loopAllocations": 5,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 56
+    },
+    {
+      "size": 3000,
+      "blur": true,
+      "count": 10,
+      "coldMs": 3,
+      "warm": {
+        "meanMs": 1.61,
+        "p95Ms": 3.9,
+        "maxMs": 4.2
+      },
+      "seekMs": 2.7,
+      "restartMs": 0.7,
+      "firstPointMs": 0.4,
+      "live": {
+        "meanMs": 1.42,
+        "p95Ms": 4.1,
+        "maxMs": 4.1
+      },
+      "maskMiB": 316.41,
+      "warmCopyPixels": 79833600,
+      "warmBlurPixels": 10368000,
+      "seekStamps": 1080,
+      "loopReentryMs": 0.6,
+      "loopAllocations": 7,
+      "allocationsDuringPlayback": 0,
+      "drawCalls": 70
+    }
+  ],
+  "device": {
+    "vendor": "WebKit",
+    "renderer": "WebKit WebGL",
+    "maxTextureSize": 16384
+  },
+  "longSeek": {
+    "layers": 10,
+    "size": 96,
+    "sourceMs": 60000,
+    "seekToMs": 57000,
+    "renderMs": 3.9,
+    "stamps": 6280
+  },
+  "recommended": [
+    {
+      "size": 96,
+      "blur": false,
+      "testedLayers": 16,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    },
+    {
+      "size": 96,
+      "blur": true,
+      "testedLayers": 16,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    },
+    {
+      "size": 600,
+      "blur": false,
+      "testedLayers": 16,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    },
+    {
+      "size": 600,
+      "blur": true,
+      "testedLayers": 16,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    },
+    {
+      "size": 3000,
+      "blur": false,
+      "testedLayers": 10,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    },
+    {
+      "size": 3000,
+      "blur": true,
+      "testedLayers": 10,
+      "criterion": "warm and live p95 <= 12ms; cold/seek spikes reported separately; not a thermal endurance test"
+    }
+  ],
+  "passed": true,
+  "host": {
+    "model": "Mac Studio",
+    "chip": "Apple M4 Max",
+    "memoryGB": 48
+  },
+  "rendererRevision": "working tree with bounded copy/Blur and visible-window Trail rebuild"
+}
