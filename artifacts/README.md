@@ -1,6 +1,11 @@
 # 画面と描画検証の記録
 
 
+## 現行の描画ツール
+
+[Ellipse / Rectangle / Line｜Ring](direct-painting-shape-tools.png)：Move表示を廃止し、Lineは30px固定。1133×744と744×1133で配置を確認しました。以下の過去画像には変更前のMoveボタンが含まれます。
+
+
 ## 現行：3DボックスとMIDI同期
 
 - [MIDI設定・固定16秒・下部回転UI](direct-painting-midi.png)：1133×744、実MIDI入力の接続状態。
