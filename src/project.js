@@ -7,7 +7,7 @@ import { DEFAULT_P5_CODE, MAX_SNIPPET_LENGTH, MAX_P5_DURATION_MS, P5_PRESETS, up
 import { validateLEDOptions } from './p5-led.js';
 
 export const MAX_PROJECT_BYTES = 16 * 1024 * 1024;
-export const DEFAULT_SETTINGS = Object.freeze({ mode: 'trail', shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
+export const DEFAULT_SETTINGS = Object.freeze({ mode: 'trail', shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, viewVersion: 2, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
 
 export function normalizeProject(value) {
   if (value?.duration !== undefined && (!Number.isFinite(value.duration) || value.duration <= 0)) throw new Error('Invalid loop length');
@@ -35,7 +35,9 @@ export function normalizeProject(value) {
     if (supplied[key] !== undefined) { if (!Number.isInteger(supplied[key]) || supplied[key] < min || supplied[key] > max) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
   validateEffects(supplied.effects); settings.effects = layerEffects({ effects: supplied.effects });
-  settings.view = importedView(supplied.view, project.canvas);
+  if (supplied.viewVersion !== undefined && supplied.viewVersion !== 2) throw new Error('Invalid canvas view version');
+  settings.view = importedView(supplied.view, project.canvas, supplied.viewVersion);
+  settings.viewVersion = 2;
   if (supplied.opacity !== undefined) { if (!Number.isFinite(supplied.opacity) || supplied.opacity < 0 || supplied.opacity > 1) throw new Error('Invalid opacity'); settings.opacity = supplied.opacity; }
   validateLEDOptions({ single: settings.p5SingleRatio, climax: settings.p5ClimaxRatio, variation: settings.p5Variation });
   settings.followDirection = false; // Accept legacy JSON but always use the UI angle.

@@ -105,6 +105,8 @@ const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backe
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
 } });
 const canvases = [painting.canvas];
+const paintingBoundary = document.createElement('div'); paintingBoundary.className = 'painting-boundary'; paintingBoundary.hidden = true; paintingBoundary.setAttribute('aria-hidden', 'true');
+canvases[0].after(paintingBoundary);
 const layers = [{ circle: null, lastFrame: -Infinity }];
 const state = { ...DEFAULT_SETTINGS, effects: { ...DEFAULT_EFFECTS }, view: { ...DEFAULT_VIEW } };
 let colorContext = { id: null, field: 'fill' }, refreshSelectedLayer = () => {};
@@ -611,8 +613,10 @@ function endStroke(event) {
 function syncViewUI() {
   const percent = `${Math.round(state.view.scale * 100)}%`;
   $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
-  $('.canvas-state').textContent = `View ${Math.round(VIEWPORT_WIDTH / state.view.scale)} × ${Math.round(VIEWPORT_HEIGHT / state.view.scale)}`;
-  $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset zoom and position`;
+  $('.canvas-state').textContent = `View ${Math.round(Math.min(CANVAS_SPEC.width, VIEWPORT_WIDTH / state.view.scale))} × ${Math.round(Math.min(CANVAS_SPEC.height, VIEWPORT_HEIGHT / state.view.scale))}`;
+  $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
+  paintingBoundary.hidden = state.view.scale >= VIEWPORT_WIDTH / CANVAS_SPEC.width;
+  Object.assign(paintingBoundary.style, { left: `${state.view.x / VIEWPORT_WIDTH * 100}%`, top: `${state.view.y / VIEWPORT_HEIGHT * 100}%`, width: `${CANVAS_SPEC.width * state.view.scale / VIEWPORT_WIDTH * 100}%`, height: `${CANVAS_SPEC.height * state.view.scale / VIEWPORT_HEIGHT * 100}%` });
   painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
 }
 function changeView(view) {
@@ -638,9 +642,11 @@ canvases.forEach((canvas, index) => {
       if (pinch.blocked || !state.touch) return;
     }
     if (!ready || stroke || trimDrag || event.button !== 0) return;
+    const startPoint = point(event, canvas);
+    if (startPoint.x < 0 || startPoint.y < 0 || startPoint.x >= CANVAS_SPEC.width || startPoint.y >= CANVAS_SPEC.height) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: point(event, canvas), started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
     history.endGroup(); historyUI();
     if (stroke.mode === 'move') {

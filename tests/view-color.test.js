@@ -12,9 +12,9 @@ test('two-finger pinch keeps its anchor, pans with the midpoint and reserves the
   assert.equal(pinch.down(1, { x: 400, y: 300 }, DEFAULT_VIEW), false);
   assert.equal(pinch.down(2, { x: 600, y: 300 }, DEFAULT_VIEW), true);
   const zoomed = pinch.move(2, { x: 800, y: 300 });
-  assert.deepEqual(zoomed, { scale: 2, x: -400, y: -300 });
-  assert.deepEqual(worldToScreen({ x: 500, y: 300 }, zoomed), { x: 600, y: 300 });
-  assert.deepEqual(screenToWorld({ x: 600, y: 300 }, zoomed), { x: 500, y: 300 });
+  assert.deepEqual(zoomed, { scale: 2, x: -2320, y: -1380 });
+  assert.deepEqual(worldToScreen({ x: 1460, y: 840 }, zoomed), { x: 600, y: 300 });
+  assert.deepEqual(screenToWorld({ x: 600, y: 300 }, zoomed), { x: 1460, y: 840 });
   assert.equal(pinch.up(1), true); assert.equal(pinch.blocked, true);
   assert.equal(pinch.move(2, { x: 900, y: 300 }), null);
   assert.equal(pinch.up(2), true); assert.equal(pinch.blocked, false);
@@ -24,9 +24,9 @@ test('two-finger pinch keeps its anchor, pans with the midpoint and reserves the
 
 test('zoom limits and reset remain valid and preserve drawing coordinates', () => {
   assert.equal(zoomAt(DEFAULT_VIEW, 100, { x: 960, y: 540 }).scale, 2);
-  assert.equal(zoomAt(DEFAULT_VIEW, .001, { x: 960, y: 540 }).scale, .5);
+  assert.equal(zoomAt(DEFAULT_VIEW, .001, { x: 960, y: 540 }).scale, .1);
   for (const view of [null, {}, { scale: 0, x: 0, y: 0 }, { scale: 1, x: Infinity, y: 0 }, { scale: 2, x: 999999, y: 0 }]) assert.throws(() => validateView(view));
-  assert.deepEqual(screenToWorld({ x: 200, y: 300 }, DEFAULT_VIEW), { x: 200, y: 300 });
+  assert.deepEqual(screenToWorld({ x: 200, y: 300 }, DEFAULT_VIEW), { x: 1160, y: 840 });
 });
 
 test('color wheel, brightness and HSV conversions reproduce primary colors and hex round trips', () => {
@@ -55,17 +55,23 @@ test('3000px sizes, brush Blur, opacity and output view survive files and live r
 test('UHD painting bounds keep the Full HD default and clamp every zoom and pan', () => {
   assert.deepEqual(CANVAS_SPEC, { width: 3840, height: 2160 });
   assert.deepEqual([VIEWPORT_WIDTH, VIEWPORT_HEIGHT], [1920, 1080]);
-  assert.deepEqual([MIN_ZOOM, MAX_ZOOM], [.5, 2]);
+  assert.deepEqual([MIN_ZOOM, MAX_ZOOM], [.1, 2]);
   assert.deepEqual(viewBounds(.5), { minX: 0, minY: 0, maxX: 0, maxY: 0 });
   assert.deepEqual(canvasView({ scale: 8, x: 99999, y: -99999 }), { scale: 2, x: 0, y: -3240 });
-  assert.deepEqual(canvasView({ scale: .1, x: -500, y: 400 }), { scale: .5, x: 0, y: 0 });
+  assert.deepEqual(canvasView({ scale: .1, x: -500, y: 400 }), { scale: .1, x: 768, y: 432 });
   for (const scale of [.5, .75, 1, 1.5, 2]) for (const destination of [{ x: -99999, y: -99999 }, { x: 99999, y: 99999 }]) {
     const view = zoomAt(DEFAULT_VIEW, scale, { x: 600, y: 400 }, destination); validateView(view);
     const top = screenToWorld({ x: 0, y: 0 }, view), bottom = screenToWorld({ x: 1920, y: 1080 }, view);
     assert.ok(top.x >= 0 && top.y >= 0 && bottom.x <= 3840 && bottom.y <= 2160);
   }
-  for (const view of [{ scale: .49, x: 0, y: 0 }, { scale: 2.01, x: 0, y: 0 }, { scale: 1, x: 1, y: 0 }, { scale: 1, x: -1921, y: 0 }, { scale: .5, x: -1, y: 0 }]) assert.throws(() => validateView(view));
-  assert.deepEqual(screenToWorld({ x: 1920, y: 1080 }, DEFAULT_VIEW), { x: 1920, y: 1080 });
+  for (const view of [{ scale: .09, x: 0, y: 0 }, { scale: 2.01, x: 0, y: 0 }, { scale: 1, x: 1, y: 0 }, { scale: 1, x: -1921, y: 0 }, { scale: .5, x: -1, y: 0 }]) assert.throws(() => validateView(view));
+  assert.deepEqual(screenToWorld({ x: 1920, y: 1080 }, DEFAULT_VIEW), { x: 2880, y: 1620 });
+  assert.deepEqual(screenToWorld({ x: 0, y: 0 }, DEFAULT_VIEW), { x: 960, y: 540 });
+  assert.deepEqual(canvasView(), DEFAULT_VIEW);
+  const tiny = canvasView({ scale: .1 });
+  assert.deepEqual(tiny, { scale: .1, x: 768, y: 432 });
+  validateView(tiny);
+  assert.deepEqual(worldToScreen({ x: 1920, y: 1080 }, tiny), { x: 960, y: 540 });
 });
 
 test('old Full HD projects and server snapshots retain coordinates while limiting legacy cameras', async () => {
@@ -74,10 +80,23 @@ test('old Full HD projects and server snapshots retain coordinates while limitin
   assert.deepEqual(migrated.canvas, CANVAS_SPEC); assert.deepEqual(migrated.clips[0].samples, old.clips[0].samples);
   assert.deepEqual(migrated.settings.view, { scale: 2, x: 0, y: -3240 });
   assert.deepEqual(parseProject(serializeProject(migrated, { playing: false, phase: 10 })).project, migrated);
-  assert.deepEqual(importedView({ scale: .1, x: 0, y: 0 }, old.canvas), { scale: .5, x: 0, y: 0 });
+  assert.deepEqual(importedView({ scale: .1, x: 0, y: 0 }, old.canvas), { scale: .1, x: 768, y: 432 });
   assert.throws(() => normalizeProject({ ...migrated, settings: { view: { scale: 8, x: 0, y: 0 } } }));
   const { validateSnapshot } = await import('../server/loop-relay.js');
   const snapshot = validateSnapshot({ project: old, playback: { playing: false, phase: 10 } }, 1000);
   assert.deepEqual(snapshot.project.settings.view, migrated.settings.view);
   assert.deepEqual(snapshot.project.canvas, CANVAS_SPEC); assert.deepEqual(snapshot.project.clips[0].samples, old.clips[0].samples);
+});
+
+test('former UHD top-left default migrates once; a versioned deliberate pan is preserved', async () => {
+  const view = { scale: 1, x: 0, y: 0 }, old = { version: 1, canvas: CANVAS_SPEC, duration: 10000, clips: [], settings: { view } };
+  const migrated = normalizeProject(old);
+  assert.deepEqual(migrated.settings.view, DEFAULT_VIEW);
+  assert.equal(migrated.settings.viewVersion, 2);
+  const panned = normalizeProject({ ...migrated, settings: { ...migrated.settings, view } });
+  assert.deepEqual(panned.settings.view, view);
+  assert.deepEqual(parseProject(serializeProject(panned, { playing: false, phase: 0 })).project.settings.view, view);
+  const { validateSnapshot } = await import('../server/loop-relay.js');
+  assert.deepEqual(validateSnapshot({ project: old, playback: { playing: false, phase: 0 } }, 0).project.settings.view, DEFAULT_VIEW);
+  assert.deepEqual(validateSnapshot({ project: panned, playback: { playing: false, phase: 0 } }, 0).project.settings.view, view);
 });
