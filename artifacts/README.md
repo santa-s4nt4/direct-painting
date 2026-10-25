@@ -3,7 +3,7 @@
 
 ## MIDI入力の切替
 
-[MIDIタブ](direct-painting-midi-tab.png)：左パネルで独立したタブから入力デバイスを切り替えられます。接続手順と受信状態、頭出しノート12固定を日本語で表示します。カラーパネルは外側タッチで閉じます。
+[MIDIタブ](direct-painting-midi-tab.png)：左パネルで独立したタブから入力デバイスを切り替えられます。接続手順と受信状態、頭出しノート24固定を日本語で表示します。カラーパネルは外側タッチで閉じます。
 
 
 ## 現行の描画ツール
@@ -19,7 +19,7 @@
 - [既存描画の回帰33項目](box-legacy-render-checks.json)：旧GPU／CPUの画素比較、キャッシュ、復帰とフォールバック。
 - [3D描画15項目・10レイヤー計測](volume-render-checks.json)：全レイヤーを表示したまま測定。
 - [入力座標と保存平面・奥行き](box-volume-ui-checks.json)：再投影の誤差0。
-- [実CoreMIDI仮想入力4項目](midi-native-checks.json)：MIDI24／36、Note Off等の無視、切断。
+- [実CoreMIDI仮想入力4項目](midi-native-checks.json)：MIDI24、旧12／36やNote Off等の無視、切断。
 
 
 ## 現行版（3Dビュー・Move / Line）

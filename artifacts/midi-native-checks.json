@@ -1,10 +1,10 @@
 {
-  "date": "2026-10-25T12:23:54.670Z",
+  "date": "2026-10-25T12:33:08.109Z",
   "backend": "CoreMIDI",
   "checks": [
-    "A real CoreMIDI virtual source triggers Note 12 and starts the fixed 16-second timeline",
+    "A real CoreMIDI virtual source triggers Note 24 and starts the fixed 16-second timeline",
     "Other notes, velocity-zero Note On and Note Off keep paused playback unchanged",
-    "Note 12 on MIDI channel 16 retriggers from the beginning",
+    "Note 24 on MIDI channel 16 retriggers from the beginning",
     "Removing the selected source disconnects input without retriggering"
   ],
   "passed": true
