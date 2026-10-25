@@ -1,3 +1,5 @@
+import { setupOrientationCube } from './orientation-cube.js';
+import { LineSchedule } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
 import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, screenToWorld, worldToScreen, zoomAt, PinchGesture } from './view.js';
 import './style.css';
@@ -22,18 +24,17 @@ const icons = {
   eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>',
   undo: '<path d="m8 4-5 5 5 5M3 9h11a7 7 0 0 1 0 14"/>',
   redo: '<path d="m16 4 5 5-5 5M21 9H10a7 7 0 0 0 0 14"/>',
-  trail: '<path d="M3 17c4 0 3-10 8-10h6"/><circle cx="19" cy="7" r="3"/>',
-  return: '<path d="M5 8h10a6 6 0 0 1 0 12h-3M8 4 4 8l4 4"/>',
   ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="5"/>',
+  line: '<path d="M5 19 19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/>',
   move: '<circle cx="12" cy="12" r="5"/>',
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
-const modes = ['trail', 'return', 'move'];
-const modeHints = { trail: 'A continuous trail that gradually fades away', return: 'Draw a continuous path and fade after release', move: 'Move a smoothed shape and fade after release' };
+const modes = ['move', 'line'];
+const modeHints = { line: 'Tap two points. The line appears at the first point’s time on the next loop.', move: 'Move a smoothed shape and fade after release' };
 
 document.querySelector('#app').innerHTML = `
   <main>
-    <section class="studio" data-mode="trail" aria-label="Motion canvases">
+    <section class="studio" data-mode="move" aria-label="Motion canvases">
       <aside class="toolbar" aria-label="Drawing and loop controls">
           <button id="save-project" class="secondary-button">SAVE JSON</button>
           <button id="import-project" class="secondary-button">IMPORT JSON</button>
@@ -42,7 +43,7 @@ document.querySelector('#app').innerHTML = `
         <button class="clear-button" id="clear" aria-label="Clear canvas">${icon('trash')}<span>CLEAR</span></button>
         <div class="control-section effect-controls">
           <span class="section-label">RELEASE FADE</span>
-          <div class="effect-value"><label for="fade-seconds">TIME</label><input id="fade-seconds" type="number" min="0.1" max="10" step="0.1" value="2" inputmode="decimal" aria-label="RETURN and MOVE fade time in seconds"><span>s</span></div>
+          <div class="effect-value"><label for="fade-seconds">TIME</label><input id="fade-seconds" type="number" min="0.1" max="10" step="0.1" value="2" inputmode="decimal" aria-label="Release fade time in seconds"><span>s</span></div>
           <input id="fade-range" type="range" min="0.1" max="10" step="0.1" value="2" aria-label="Release fade duration slider">
         </div>
         <div class="control-section">
@@ -61,9 +62,9 @@ document.querySelector('#app').innerHTML = `
         <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="${MAX_RING_WIDTH}" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
         <div class="control-section" id="rectangle-controls" hidden>
           ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
-          <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div>
+          <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div><div class="angle-presets"><button type="button" data-draw-angle="0">0°</button><button type="button" data-draw-angle="45">45°</button></div>
         </div>
-        <div class="input-controls">
+        <div id="line-tool-controls" class="line-tool-controls" hidden><p id="line-hint">Tap the first point, then the second point.</p><div class="effect-value"><label for="line-width">Width</label><input id="line-width" type="number" min="1" max="1500" step="1" value="5" aria-label="Line width in pixels"><span>px</span></div><button id="cancel-line" class="secondary-button" disabled>Cancel first point</button></div><div class="input-controls">
           <label class="checkbox-control"><input type="checkbox" id="pressure" checked><span>PRESSURE</span></label>
           <label class="checkbox-control"><input type="checkbox" id="touch"><span>TOUCH</span></label>
         </div>
@@ -105,7 +106,7 @@ const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backe
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
 } });
 const canvases = [painting.canvas];
-const paintingBoundary = document.createElement('div'); paintingBoundary.className = 'painting-boundary'; paintingBoundary.hidden = true; paintingBoundary.setAttribute('aria-hidden', 'true');
+const paintingBoundary = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); paintingBoundary.classList.add('painting-boundary'); paintingBoundary.setAttribute('viewBox', `0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`); paintingBoundary.setAttribute('aria-hidden', 'true'); paintingBoundary.innerHTML = '<polygon fill="none" stroke="#555" stroke-width="1" vector-effect="non-scaling-stroke" />';
 canvases[0].after(paintingBoundary);
 const layers = [{ circle: null, lastFrame: -Infinity }];
 const state = { ...DEFAULT_SETTINGS, effects: { ...DEFAULT_EFFECTS }, view: { ...DEFAULT_VIEW } };
@@ -121,6 +122,8 @@ let cacheFailed = false;
 const liveSession = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let liveRevision = 0, viewRevision = 0;
 const pinch = new PinchGesture();
+const lineSchedule = new LineSchedule();
+let lineTap = null;
 let zoomSaveTimer, viewDirty = false;
 $('.sidebar-scroll').inert = true; $('.loop-controls').inert = true;
 const outputStatus = connected => { $('#output-status').textContent = connected ? 'Live output connected' : 'Output offline'; $('#output-status').dataset.connected = String(connected); };
@@ -134,6 +137,7 @@ const livePublisher = createLivePublisher(from => {
 }, outputStatus);
 
 const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view }), outputStatus);
+const orientation = setupOrientationCube(canvases[0].parentElement, { getView: () => state.view, onChange: view => { if (ready) changeView(view); }, onStart: () => { lineTap = null; endStroke(null); }, onFinish: () => { if (ready) finishView(); } });
 
 function fitLoop() {
   const required = Math.ceil(minimumLoop(clips) / 500) * 500;
@@ -169,7 +173,9 @@ $('#fold-layers').addEventListener('click', () => {
   for (const card of cards) { card.open = open; layerDisclosure.set(`${card.closest('.cached-layer').dataset.layerId}:card`, open); }
   syncLayerDisclosure();
 });
+function layerName(clip) { return clip.mode === 'line' ? clip.lineIncomplete ? 'LINE · FIRST POINT' : clip.linePending ? 'LINE · NEXT LOOP' : 'LINE' : clip.mode === 'place' ? 'STATIC' : clip.mode.toUpperCase(); }
 function rebuildCache() {
+  syncLineUI();
   const listScrollTop = $('#layer-list').scrollTop;
   for (const row of document.querySelectorAll('.cached-layer')) for (const details of row.querySelectorAll('details[data-fold]')) layerDisclosure.set(`${row.dataset.layerId}:${details.dataset.fold}`, details.open);
   trimTrackObserver?.disconnect();
@@ -196,7 +202,7 @@ function rebuildCache() {
         rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
       });
       const identity = document.createElement('span'); identity.className = 'layer-identity';
-      const name = document.createElement('span'); name.textContent = `${String(index + 1).padStart(2, '0')} ${clip.procedural?.label ?? (clip.mode === 'place' ? 'STATIC' : clip.mode.toUpperCase())}`;
+      const name = document.createElement('span'); name.textContent = `${String(index + 1).padStart(2, '0')} ${clip.procedural?.label ?? layerName(clip)}`;
       const timing = document.createElement('span'); timing.className = 'layer-timing'; timing.textContent = `AT ${((clip.start ?? 0) / 1000).toFixed(2)}s`; identity.append(name, timing);
       const remove = document.createElement('button'); remove.className = 'layer-remove'; remove.innerHTML = icon('trash'); remove.setAttribute('aria-label', `Delete layer ${index + 1}`);
       remove.addEventListener('click', event => {
@@ -244,7 +250,7 @@ function rebuildCache() {
     const toggle = document.createElement('button'); toggle.className = 'layer-toggle';
     toggle.setAttribute('aria-label', `Layer ${index + 1}: toggle visibility `);
     const visibility = document.createElement('span'); visibility.className = 'layer-visibility'; visibility.innerHTML = icon('eye');
-    const label = document.createElement('span'); label.textContent = `${String(index + 1).padStart(2, '0')} ${clip.mode.toUpperCase()}`;
+    const label = document.createElement('span'); label.textContent = `${String(index + 1).padStart(2, '0')} ${layerName(clip)}`;
     toggle.append(visibility);
     toggle.title = 'Toggle layer visibility';
     toggle.addEventListener('click', () => update(item => ({ ...item, enabled: !current().enabled }), true));
@@ -401,14 +407,18 @@ function rebuildCache() {
     });
     const geometry = section('SHAPE');
     const shape = document.createElement('select'); shape.className = 'layer-shape'; shape.setAttribute('aria-label', `Layer ${index + 1} shape`);
-    for (const [value, text] of [['circle', 'CIRCLE'], ['ring', 'RING · OUTLINE'], ['rect', 'RECTANGLE']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; shape.append(option); }
+    for (const [value, text] of [['circle', 'CIRCLE'], ['ring', 'RING · OUTLINE'], ['rect', 'RECTANGLE'], ['rect-ring', 'RECTANGLE · OUTLINE']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; shape.append(option); }
     shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => ({ ...item, shape: shape.value }), true)); geometry.append(shape);
-    const sizes = section(shape.value === 'rect' ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
-    if (shape.value === 'rect') {
+    const sizes = section(clip.mode === 'line' ? 'LINE' : ['rect', 'rect-ring'].includes(shape.value) ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
+    geometry.hidden = clip.mode === 'line';
+    if (clip.mode === 'line') { number(sizes, 'WIDTH', 'line width in pixels', item => item.ringWidth ?? 5, 1, MAX_RING_WIDTH, 1, (item,value) => ({ ...item, ringWidth: value })); }
+    else if (['rect', 'rect-ring'].includes(shape.value)) {
       for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeDimension(item, axis, bound, value));
       number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => ({ ...item, angle: value, followDirection: false }), '°');
+      const presets = document.createElement('div'); presets.className = 'angle-presets';
+      for (const angle of [0,45]) { const button = document.createElement('button'); button.textContent = `${angle}°`; button.setAttribute('aria-label', `Layer ${index + 1} angle ${angle} degrees`); button.addEventListener('click', () => update(item => ({ ...item, angle }))); presets.append(button); } sizes.append(presets);
     } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeGesture(item, bound, value));
-    if (shape.value === 'ring') number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
+    if (['ring', 'rect-ring'].includes(shape.value)) number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
@@ -555,8 +565,8 @@ function selectCanvas() {
 function setSync() { state.sync = false; selectCanvas(); }
 function setMode(mode, restoring = false) {
   if (!modes.includes(mode) || !restoring && (!ready || trimDrag)) return;
-  endStroke(null);
-  state.mode = mode;
+  endStroke(null); lineTap = null;
+  state.mode = mode; syncShapeUI(); syncLineUI();
   $('.studio').dataset.mode = mode;
   shell.setMode(mode);
   layers.forEach(layer => layer.circle = null);
@@ -578,6 +588,8 @@ function animate(now) {
   const frame = frameNumber(now);
   if (frame !== animationFrame) {
     animationFrame = frame;
+    const revealed = lineSchedule.advance(clips, clock.phase(now), clock.duration, now, clock.playing);
+    if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
     if (stroke) livePublisher.publish(now);
     if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
     for (let i = 0; i < canvases.length; i++) if ((clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
@@ -588,7 +600,7 @@ function animate(now) {
 renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas) {
   const pressure = state.pressure && event.pointerType === 'pen' ? (Number.isFinite(event.pressure) ? Math.max(0, Math.min(1, event.pressure)) : 0.5) : 1;
-  const geometry = state.shape === 'rect' ? { shape: 'rect', width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
+  const geometry = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? { shape: state.shape, ringWidth: state.ringWidth, width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
   return { ...screenToWorld(canvasPoint(event, canvas.getBoundingClientRect()), state.view), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
 }
 function drawPoint(pointValue) {
@@ -596,7 +608,7 @@ function drawPoint(pointValue) {
   dirty = true;
 }
 function samplePoint(next) {
-  if (stroke.shape === 'rect') next = { ...next, angle: stroke.angle, heading: 0 };
+  if (['rect', 'rect-ring'].includes(stroke.shape)) next = { ...next, angle: stroke.angle, heading: 0 };
   drawPoint(next);
   stroke.last = next;
   stroke.samples.push({ ...next, t: Math.max(stroke.samples.at(-1).t + 0.01, performance.now() - stroke.started) });
@@ -615,8 +627,8 @@ function syncViewUI() {
   $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
   $('.canvas-state').textContent = `View ${Math.round(Math.min(CANVAS_SPEC.width, VIEWPORT_WIDTH / state.view.scale))} × ${Math.round(Math.min(CANVAS_SPEC.height, VIEWPORT_HEIGHT / state.view.scale))}`;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
-  paintingBoundary.hidden = state.view.scale >= VIEWPORT_WIDTH / CANVAS_SPEC.width;
-  Object.assign(paintingBoundary.style, { left: `${state.view.x / VIEWPORT_WIDTH * 100}%`, top: `${state.view.y / VIEWPORT_HEIGHT * 100}%`, width: `${CANVAS_SPEC.width * state.view.scale / VIEWPORT_WIDTH * 100}%`, height: `${CANVAS_SPEC.height * state.view.scale / VIEWPORT_HEIGHT * 100}%` });
+  orientation.update(state.view);
+  paintingBoundary.querySelector('polygon').setAttribute('points', [{x:0,y:0},{x:CANVAS_SPEC.width,y:0},{x:CANVAS_SPEC.width,y:CANVAS_SPEC.height},{x:0,y:CANVAS_SPEC.height}].map(p => { const q = worldToScreen(p,state.view); return `${q.x},${q.y}`; }).join(' '));
   painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
 }
 function changeView(view) {
@@ -624,6 +636,7 @@ function changeView(view) {
 }
 function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
 function cancelTouchStroke() {
+  if (lineTap?.pointerType === 'touch') { if (!lineTap.wasPlaying) { const now = performance.now(); clock.seek(lineTap.phase, now); clock.pause(now); playbackUI(); publisher.publish(true); } lineTap = null; }
   if (!stroke || stroke.pointerType !== 'touch') { endStroke(null); return; }
   const current = stroke; stroke = null; liveRevision++;
   current.targets.forEach(index => layers[index].circle = null);
@@ -643,8 +656,9 @@ canvases.forEach((canvas, index) => {
     }
     if (!ready || stroke || trimDrag || event.button !== 0) return;
     const startPoint = point(event, canvas);
-    if (startPoint.x < 0 || startPoint.y < 0 || startPoint.x >= CANVAS_SPEC.width || startPoint.y >= CANVAS_SPEC.height) return;
+    if (!Number.isFinite(startPoint.x) || !Number.isFinite(startPoint.y) || startPoint.x < 0 || startPoint.y < 0 || startPoint.x >= CANVAS_SPEC.width || startPoint.y >= CANVAS_SPEC.height) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
+    if (state.mode === 'line') { const contact = performance.now(), wasPlaying = clock.playing; clock.play(contact); playbackUI(); publisher.publish(); lineTap = { wasPlaying, phase: clock.phase(contact), id: event.pointerId, pointerType: event.pointerType, point: startPoint, screen: { x: event.clientX, y: event.clientY } }; return; }
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
     stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
@@ -661,6 +675,7 @@ canvases.forEach((canvas, index) => {
       if (view) changeView(view);
       if (pinch.blocked || !state.touch) { event.preventDefault(); return; }
     }
+    if (lineTap?.id === event.pointerId && Math.hypot(event.clientX - lineTap.screen.x, event.clientY - lineTap.screen.y) > 12) lineTap = null;
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
     const scale = canvas.getBoundingClientRect().width / VIEWPORT_WIDTH * state.view.scale;
@@ -668,8 +683,8 @@ canvases.forEach((canvas, index) => {
     cursor.style.left = `${cursorScreen.x / VIEWPORT_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / VIEWPORT_HEIGHT * 100}%`;
     cursor.style.width = `${Math.max(3, (cursorPoint.width ?? cursorPoint.size) * scale)}px`;
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
-    cursor.style.borderRadius = state.shape === 'rect' ? '0' : '50%';
-    cursor.style.transform = `translate(-50%, -50%) rotate(${cursorPoint.angle ?? 0}deg)`;
+    cursor.style.borderRadius = ['rect', 'rect-ring'].includes(state.shape) ? '0' : '50%';
+    cursor.style.transform = `translate(-50%, -50%) rotate(${(cursorPoint.angle ?? 0) + (state.view.rotation ?? 0)}deg)`;
     if (!stroke || event.pointerId !== stroke.pointerId) return;
     event.preventDefault();
     const coalesced = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
@@ -678,6 +693,7 @@ canvases.forEach((canvas, index) => {
   });
   const finishPointer = event => {
     if (event.pointerType === 'touch' && pinch.up(event.pointerId)) { if (!pinch.points.size) finishView(); return; }
+    if (lineTap?.id === event.pointerId) { const tap = lineTap; lineTap = null; if (event.type === 'pointerup') recordLinePoint(tap.point, tap.phase); }
     endStroke(event);
   };
   canvas.addEventListener('pointerup', finishPointer); canvas.addEventListener('pointercancel', finishPointer); canvas.addEventListener('lostpointercapture', finishPointer);
@@ -708,11 +724,13 @@ function updateSize(bound, rawValue) {
 });
 function syncShapeUI() {
   $('#shape').value = state.shape;
-  $('#circle-controls').hidden = state.shape === 'rect'; $('#ring-controls').hidden = state.shape !== 'ring'; $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.shape !== 'rect';
+  $('#line-tool-controls').hidden = state.mode !== 'line';
+  $('#circle-controls').hidden = state.mode === 'line' || ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode === 'line' || !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
   for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) { $(`#${axis}-${bound}`).value = $(`#${axis}-range-${bound}`).value = state[`${axis}${bound}`]; }
-  $('#shape-angle').value = state.angle;
+  $('#shape-angle').value = state.angle; $('#shape').disabled = state.mode === 'line';
 }
 function setShape(shape) { if (!ready || trimDrag) return; endStroke(null); state.shape = shape; syncShapeUI(); queueSave(); }
+for (const button of document.querySelectorAll('[data-draw-angle]')) button.addEventListener('click', () => { endStroke(null); state.angle = Number(button.dataset.drawAngle); syncShapeUI(); queueSave(); });
 $('#shape').addEventListener('change', event => setShape(event.target.value));
 $('#ring-width').addEventListener('input', event => { if (!event.target.value) return; state.ringWidth = Math.max(1, Math.min(MAX_RING_WIDTH, Math.round(Number(event.target.value)))); syncShapeUI(); queueSave(); });
 for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) {
@@ -764,10 +782,10 @@ $('#loop-progress').addEventListener('pointerdown', event => {
 $('#loop-progress').addEventListener('input', event => {
   if (!ready) return;
   endStroke(null);
-  const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now);
+  const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { endStroke(null); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
 $('#loop-duration').addEventListener('change', event => {
   endStroke(null);
   const seconds = Number(event.target.value);
@@ -787,7 +805,7 @@ $('#draw-blur-radius').addEventListener('input', setBrushBlur); $('#draw-blur-ra
 function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
-  clips = clips.map(clip => editLayer(clip, 'all', item => ['return', 'move'].includes(item.mode) ? fitGestureTrim({ ...item, fadeMs: state.fadeMs }, clock.duration) : item));
+  clips = clips.map(clip => editLayer(clip, 'all', item => ['return', 'move', 'line'].includes(item.mode) ? fitGestureTrim({ ...item, fadeMs: state.fadeMs }, clock.duration) : item));
   const required = Math.ceil(minimumLoop(clips) / 500) * 500;
   if (clock.duration < required) clock.resize(required, performance.now());
   syncEffectsUI(); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
@@ -803,6 +821,25 @@ $('#clear').addEventListener('click', () => {
   clips = clips.map(clip => removeLayerSides(clip, targets)).filter(clip => clip.targets.length);
   rebuildCache(); renderTargets(targets, performance.now(), true); queueSave();
 });
+
+function syncLineUI() {
+  const draft = clips.find(c => c.mode === 'line' && c.lineIncomplete);
+  $('#line-width').value = state.lineWidth;
+  $('#cancel-line').disabled = !draft;
+  $('#line-hint').textContent = draft ? '2点目をタップしてください。次の周回から直線になります。' : '2点をタップ。最初はRing、次の周回の1点目の時刻に直線が現れます。';
+}
+function recordLinePoint(point, contactPhase) {
+  const now = performance.now(); clock.play(now); playbackUI();
+  const p = { x: point.x, y: point.y, size: Math.max(64, Math.min(160, point.size)), pressure: point.pressure, t: 0 };
+  const draft = clips.find(c => c.mode === 'line' && c.lineIncomplete);
+  history.endGroup();
+  if (draft) clips = clips.map(c => c.id === draft.id ? { ...c, samples: [c.samples[0], p], lineIncomplete: false } : c);
+  else { liveRevision++; clips = [...clips, { id: `${liveSession}-line-${liveRevision}`, mode: 'line', shape: 'circle', color: state.color, opacity: state.opacity, effects: { ...state.effects }, ringWidth: state.lineWidth, targets: [0], samples: [p], duration: 0, start: contactPhase, fadeMs: state.fadeMs, enabled: true, blendMode: 'analog', linePending: true, lineIncomplete: true }]; }
+  fitLoop(); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
+  rebuildCache(); renderTargets([0], now, true); queueSave(); publisher.publish(true);
+}
+$('#line-width').addEventListener('input', event => { if (!event.target.value) return; state.lineWidth = Math.max(1, Math.min(MAX_RING_WIDTH, Math.round(Number(event.target.value)))); syncLineUI(); queueSave(); });
+$('#cancel-line').addEventListener('click', () => { clips = clips.filter(c => !(c.mode === 'line' && c.lineIncomplete)); rebuildCache(); renderTargets([0], performance.now(), true); queueSave(); });
 
 function download(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -853,6 +890,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
+    lineTap = null; lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
     viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);
     syncSizeUI(); syncShapeUI(); syncEffectsUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;

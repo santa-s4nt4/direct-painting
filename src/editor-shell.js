@@ -46,11 +46,11 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
     if (hint) { const note = document.createElement('p'); note.className = 'control-hint'; note.textContent = hint; content.append(note); }
     details.append(summary, content); toolbar.append(details); return details;
   };
-  const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls')]);
+  const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls'), $('#line-tool-controls')]);
   const blur = section('Blur', [$('#draw-blur-controls')], true, 'Applied to new strokes. Edit existing strokes in Layer.');
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
-  $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option>';
+  $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option><option value="rect-ring">Rectangle · outline</option>';
   toolbar.replaceChildren(shape, blur, input, fades);
   for (const label of toolbar.querySelectorAll('label > span')) {
     const names = { PRESSURE: 'Apple Pencil pressure', TOUCH: 'Draw with touch' };
@@ -75,8 +75,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   projectFiles.append(save, importButton, importFile);
   const connection = document.createElement('div'); connection.className = 'connection-status'; connection.append(outputStatus);
   panels.files.append(projectFiles, connection);
-  const performanceLink = document.createElement('a'); performanceLink.className = 'control-hint'; performanceLink.href = '/benchmarks/trail.html'; performanceLink.textContent = 'Trail performance · この端末で本数を計測';
-  panels.files.append(performanceLink);
+
 
   history.className = 'history-actions';
   clear.innerHTML = `${icon('trash')}<span>Clear canvas</span>`;
@@ -86,9 +85,9 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   const controls = document.createElement('div'); controls.className = 'canvas-controls';
   controls.innerHTML = '<button id="toggle-sidebar" class="icon-button" title="Toggle left panel" aria-label="Toggle left panel" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>';
   const floating = document.createElement('div'); floating.className = 'canvas-tools'; floating.setAttribute('role', 'group'); floating.setAttribute('aria-label', 'Motion mode');
-  floating.innerHTML = modes.map(mode => `<button data-paint-mode="${mode}" aria-label="${mode[0].toUpperCase() + mode.slice(1)} mode" aria-pressed="${mode === 'trail'}" title="${modeHints[mode]}">${icon(mode)}<span>${mode[0].toUpperCase() + mode.slice(1)}</span></button>`).join('');
+  floating.innerHTML = modes.map(mode => `<button data-paint-mode="${mode}" aria-label="${mode[0].toUpperCase() + mode.slice(1)} mode" aria-pressed="${mode === modes[0]}" title="${modeHints[mode]}">${icon(mode)}<span>${mode[0].toUpperCase() + mode.slice(1)}</span></button>`).join('');
   for (const button of floating.querySelectorAll('button')) button.addEventListener('click', () => onMode(button.dataset.paintMode));
-  const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Draw an outline circle'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(ring.getAttribute('aria-pressed') === 'true' ? 'circle' : 'ring')); floating.append(ring);
+  const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Toggle circle or rectangle outline'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(({ circle: 'ring', ring: 'circle', rect: 'rect-ring', 'rect-ring': 'rect' })[$('#shape').value])); floating.append(ring);
   const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = `${FPS} fps`;
   const view = document.createElement('div'); view.className = 'view-tools';
   view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
@@ -102,8 +101,8 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   window.addEventListener('resize', syncSidebar); syncSidebar();
 
   return {
-    setMode(mode) { for (const button of floating.querySelectorAll('[data-paint-mode]')) button.setAttribute('aria-pressed', String(button.dataset.paintMode === mode)); },
-    setShape(shape) { ring.setAttribute('aria-pressed', String(shape === 'ring')); },
+    setMode(mode) { ring.disabled = mode === 'line'; for (const button of floating.querySelectorAll('[data-paint-mode]')) button.setAttribute('aria-pressed', String(button.dataset.paintMode === mode)); },
+    setShape(shape) { ring.setAttribute('aria-pressed', String(['ring', 'rect-ring'].includes(shape))); },
     clearSelectionProperties() { selected = null; noSelection(); },
     showLayer(id, body, activate = true) {
       if (selected) { const previous = properties.querySelector('.layer-body'); const owner = [...document.querySelectorAll('.cached-layer')].find(row => row.dataset.layerId === selected); if (previous && owner) owner.append(previous); }

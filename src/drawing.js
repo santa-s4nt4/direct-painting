@@ -13,15 +13,15 @@ export function canvasPoint(event, rect) {
 // Keep small strokes dense; large footprints need fewer overlapping stamps.
 export function strokePoints(from, to) {
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
-  const rect = to.shape === 'rect';
+  const rect = ['rect', 'rect-ring'].includes(to.shape);
   const rotation = rect ? angleDelta(from.angle ?? 0, to.angle ?? 0) : 0;
   const diameter = Math.min(from.size, to.size, ...(rect ? [from.width ?? from.size, from.height ?? from.size, to.width ?? to.size, to.height ?? to.size] : []));
-  const spacing = Math.max(1, Math.min(diameter > 320 ? diameter / 100 : 1, to.shape === 'ring' ? (to.ringWidth ?? DEFAULT_RING_WIDTH) / 2 : Infinity));
+  const spacing = Math.max(1, Math.min(diameter > 320 ? diameter / 100 : 1, ['ring', 'rect-ring'].includes(to.shape) ? (to.ringWidth ?? DEFAULT_RING_WIDTH) / 2 : Infinity));
   const steps = Math.ceil(Math.max(distance, Math.abs(to.size - from.size), rect ? Math.abs((to.width ?? to.size) - (from.width ?? from.size)) : 0, rect ? Math.abs((to.height ?? to.size) - (from.height ?? from.size)) : 0, rect ? Math.abs(rotation) * Math.max(to.width ?? to.size, to.height ?? to.size) * Math.PI / 180 : 0) / spacing);
   if (!steps) return [];
   return Array.from({ length: steps }, (_, i) => {
     const t = (i + 1) / steps;
-    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, size: Math.round(from.size + (to.size - from.size) * t), ...(to.shape === 'ring' ? { shape: 'ring', ringWidth: to.ringWidth ?? DEFAULT_RING_WIDTH } : {}), ...(rect ? { shape: 'rect', width: (from.width ?? from.size) + ((to.width ?? to.size) - (from.width ?? from.size)) * t, height: (from.height ?? from.size) + ((to.height ?? to.size) - (from.height ?? from.size)) * t, angle: (from.angle ?? 0) + rotation * t } : {}) };
+    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, size: Math.round(from.size + (to.size - from.size) * t), ...(['ring', 'rect-ring'].includes(to.shape) ? { shape: to.shape, ringWidth: to.ringWidth ?? DEFAULT_RING_WIDTH } : {}), ...(rect ? { shape: to.shape, width: (from.width ?? from.size) + ((to.width ?? to.size) - (from.width ?? from.size)) * t, height: (from.height ?? from.size) + ((to.height ?? to.size) - (from.height ?? from.size)) * t, angle: (from.angle ?? 0) + rotation * t } : {}) };
   });
 }
 export const angleDelta = (from, to) => ((to - from) % 360 + 540) % 360 - 180;
@@ -64,10 +64,13 @@ export function visitShape(point, writeRow) {
       if (right < end) writeRow(Math.max(start, right), end);
     });
   }
-  if (point.shape !== 'rect') return visitDisk(point, writeRow);
+  if (!['rect', 'rect-ring'].includes(point.shape)) return visitDisk(point, writeRow);
   const w = Math.max(1, Math.min(MAX_BRUSH_SIZE, point.width ?? point.size)) / 2, h = Math.max(1, Math.min(MAX_BRUSH_SIZE, point.height ?? point.size)) / 2;
   const angle = (point.angle ?? 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle), cx = Math.floor(point.x), cy = Math.floor(point.y);
   const corners = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => ({ x: cx + x * cos - y * sin, y: cy + x * sin + y * cos }));
+  const outline = point.shape === 'rect-ring', inner = new Map();
+  const edge = point.ringWidth ?? DEFAULT_RING_WIDTH;
+  if (outline && w > edge && h > edge) visitShape({ ...point, shape: 'rect', width: (w - edge) * 2, height: (h - edge) * 2 }, (a,b) => inner.set(Math.floor(a / CANVAS_WIDTH), [a,b]));
   const first = Math.max(0, Math.floor(Math.min(...corners.map(p => p.y)))), end = Math.min(CANVAS_HEIGHT, Math.ceil(Math.max(...corners.map(p => p.y))));
   for (let y = first; y < end; y++) {
     const scan = y + .5, intersections = [];
@@ -77,13 +80,17 @@ export function visitShape(point, writeRow) {
     }
     if (intersections.length < 2) continue;
     const left = Math.max(0, Math.ceil(Math.min(...intersections) - .5)), right = Math.min(CANVAS_WIDTH, Math.ceil(Math.max(...intersections) - .5));
-    if (right > left) writeRow(y * CANVAS_WIDTH + left, y * CANVAS_WIDTH + right);
+    if (right > left) {
+      const a = y * CANVAS_WIDTH + left, b = y * CANVAS_WIDTH + right, hole = inner.get(y);
+      if (!hole) writeRow(a,b);
+      else { if (hole[0] > a) writeRow(a, Math.min(b, hole[0])); if (hole[1] < b) writeRow(Math.max(a, hole[1]), b); }
+    }
   }
 }
 // The main fill color paints the entire footprint. Ring is an annulus and
 // always leaves its center transparent, even where stamps overlap.
 export function visitPaint(point, color, style, writeRow) {
-  visitShape(point.shape === 'ring' ? { ...point, ringWidth: style?.ringWidth ?? point.ringWidth } : point, (start, end) => writeRow(start, end, color, false));
+  visitShape(['ring', 'rect-ring'].includes(point.shape) ? { ...point, ringWidth: style?.ringWidth ?? point.ringWidth } : point, (start, end) => writeRow(start, end, color, false));
 }
 
 export function stamp(ctx, point, color, opacity = 1, style = {}) {

@@ -26,8 +26,8 @@ test('small view updates reach SSE and late outputs, reject stale snapshots, sav
     state = await (await fetch(base + '/api/loop')).json(); assert.deepEqual(state.state.project.settings.view, zoomed);
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).project.settings.view, zoomed);
     assert.equal((await post('/api/view', { ...viewState, revision: 3, view: { scale: 99, x: 0, y: 0 } })).status, 400);
-    for (const view of [{ scale: .09, x: 0, y: 0 }, { scale: 2.01, x: 0, y: 0 }, { scale: 1, x: 1, y: 0 }, { scale: 1, x: -1921, y: 0 }, { scale: .5, x: -1, y: 0 }]) assert.equal((await post('/api/view', { ...viewState, revision: 3, view })).status, 400);
-    const tiny = { scale: .1, x: 768, y: 432 };
+    for (const view of [{ scale: .49, x: 0, y: 0 }, { scale: 5.01, x: 0, y: 0 }, { scale: 1, x: 1, y: 0 }, { scale: 1, x: -1921, y: 0 }, { scale: .5, x: -1, y: 0 }]) assert.equal((await post('/api/view', { ...viewState, revision: 3, view })).status, 400);
+    const tiny = { scale: .5, x: 0, y: 0, rotation: 25, yaw: -30, pitch: 15 };
     assert.equal((await post('/api/view', { ...viewState, revision: 3, view: tiny })).status, 200);
     assert.deepEqual((await event('view')).view, tiny);
     await post('/api/view', { ...viewState, revision: 4 }); await post('/api/loop', { ...snapshot, viewState: { ...viewState, revision: 4 } });

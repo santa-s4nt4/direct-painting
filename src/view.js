@@ -1,46 +1,78 @@
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from './canvas.js';
 
 export const DEFAULT_VIEW = Object.freeze({ scale: 1, x: (VW - W) / 2, y: (VH - H) / 2 });
-export const MIN_ZOOM = .1, MAX_ZOOM = W / VW;
-// Below "fit", center the painting in the viewport. Above it, pan only inside
-// the painting. Drawing coordinates always remain in the same 4K world.
+export const MIN_ZOOM = .5, MAX_ZOOM = 5;
+export const CAMERA_DISTANCE = 5000, MAX_TILT = 75;
+const radians = angle => angle * Math.PI / 180;
+export const wrapAngle = angle => ((angle + 180) % 360 + 360) % 360 - 180;
 export function viewBounds(scale) {
   const x = VW - W * scale, y = VH - H * scale;
-  return { minX: x > 0 ? x / 2 : x, minY: y > 0 ? y / 2 : y, maxX: x > 0 ? x / 2 : 0, maxY: y > 0 ? y / 2 : 0 };
+  return { minX: x, minY: y, maxX: 0, maxY: 0 };
 }
 export function validateView(view) {
   if (view === undefined) return;
   if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < MIN_ZOOM || view.scale > MAX_ZOOM) throw new Error('Invalid canvas view');
+  for (const [key, limit] of [['rotation', 180], ['pitch', MAX_TILT], ['yaw', MAX_TILT]]) if (view[key] !== undefined && (!Number.isFinite(view[key]) || Math.abs(view[key]) > limit)) throw new Error('Invalid view rotation');
   const b = viewBounds(view.scale), epsilon = 1e-6;
-  if (view.x < b.minX - epsilon || view.x > b.maxX + epsilon || view.y < b.minY - epsilon || view.y > b.maxY + epsilon) throw new Error('View exceeds 4K canvas');
+  if (view.x < b.minX - epsilon || view.x > epsilon || view.y < b.minY - epsilon || view.y > epsilon) throw new Error('View exceeds canvas bounds');
 }
 export function canvasView(value) {
   const scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value?.scale ?? 1)), b = viewBounds(scale);
-  return { scale, x: Math.max(b.minX, Math.min(b.maxX, value?.x ?? (b.minX + b.maxX) / 2)), y: Math.max(b.minY, Math.min(b.maxY, value?.y ?? (b.minY + b.maxY) / 2)) };
+  const view = { scale, x: Math.max(b.minX, Math.min(0, value?.x ?? b.minX / 2)), y: Math.max(b.minY, Math.min(0, value?.y ?? b.minY / 2)) };
+  for (const key of ['rotation', 'pitch', 'yaw']) {
+    const angle = key === 'rotation' ? wrapAngle(value?.[key] ?? 0) : Math.max(-MAX_TILT, Math.min(MAX_TILT, value?.[key] ?? 0));
+    if (angle) view[key] = angle;
+  }
+  return view;
 }
-// Older projects allowed 10–800% and unbounded margins. Preserve the recorded
-// stroke coordinates while fitting that old camera into the new UHD bounds.
 export function importedView(view, canvas, version) {
   if (view === undefined) return { ...DEFAULT_VIEW };
-  if (canvas?.width === W && canvas?.height === H) {
-    validateView(view);
-    // Upgrade the former top-left default once. Versioned projects retain any
-    // deliberate pan, including a later move back to the top-left corner.
-    if (version === undefined && view.scale === 1 && view.x === 0 && view.y === 0) return { ...DEFAULT_VIEW };
-    return canvasView(view);
-  }
+  if (version === 3) { validateView(view); return canvasView(view); }
+  // Older files used 10–800%. Migrate their camera without moving the artwork.
   if (!view || typeof view !== 'object' || Array.isArray(view) || !['scale', 'x', 'y'].every(key => Number.isFinite(view[key])) || view.scale < .1 || view.scale > 8 || Math.abs(view.x) > VW * 8 || Math.abs(view.y) > VH * 8) throw new Error('Invalid legacy canvas view');
-  return canvasView(view);
+  if (version === undefined && canvas?.width === W && canvas?.height === H && view.scale === 1 && view.x === 0 && view.y === 0) return { ...DEFAULT_VIEW };
+  const migrated = canvasView(view); validateView(migrated); return migrated;
 }
-export const screenToWorld = (p, view) => ({ x: (p.x - view.x) / view.scale, y: (p.y - view.y) / view.scale });
-export const worldToScreen = (p, view) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
-export function zoomAt(view, scale, anchor, destination = anchor) {
-  const world = screenToWorld(anchor, view), next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale));
-  return canvasView({ scale: next, x: destination.x - world.x * next, y: destination.y - world.y * next });
+// Rz(roll) Rx(pitch) Ry(yaw), in painting coordinates (+Y points down).
+// The renderer uses the same matrix on a real Three.js plane in a perspective camera.
+export function viewRotation(view) {
+  const z = radians(view.rotation ?? 0), x = radians(view.pitch ?? 0), y = radians(view.yaw ?? 0);
+  const c = Math.cos(z), s = Math.sin(z), cp = Math.cos(x), sp = Math.sin(x), cy = Math.cos(y), sy = Math.sin(y);
+  return [c * cy - s * sp * sy, -s * cp, c * sy + s * sp * cy, s * cy + c * sp * sy, c * cp, s * sy - c * sp * cy, -cp * sy, sp, cp * cy];
 }
+export function viewHomography(view) {
+  const r = viewRotation(view), cx = view.x + W * view.scale / 2, cy = view.y + H * view.scale / 2;
+  const a = view.scale * r[0] - cx * r[6] / CAMERA_DISTANCE, b = view.scale * r[1] - cx * r[7] / CAMERA_DISTANCE;
+  const d = view.scale * r[3] - cy * r[6] / CAMERA_DISTANCE, e = view.scale * r[4] - cy * r[7] / CAMERA_DISTANCE;
+  const g = -r[6] / CAMERA_DISTANCE, h = -r[7] / CAMERA_DISTANCE;
+  return [a, b, cx - a * W / 2 - b * H / 2, d, e, cy - d * W / 2 - e * H / 2, g, h, 1 - g * W / 2 - h * H / 2];
+}
+export function invertHomography(m) {
+  const [a,b,c,d,e,f,g,h,i] = m;
+  const q = [e*i-f*h,c*h-b*i,b*f-c*e,f*g-d*i,a*i-c*g,c*d-a*f,d*h-e*g,b*g-a*h,a*e-b*d];
+  const determinant = a*q[0]+b*q[3]+c*q[6];
+  return q.map(value => value / determinant);
+}
+const transforms = new WeakMap();
+function matrices(view) {
+  let pair = transforms.get(view);
+  if (!pair) { const forward = viewHomography(view); pair = { forward, inverse: invertHomography(forward) }; transforms.set(view, pair); }
+  return pair;
+}
+function transform(p, m) {
+  const w = m[6] * p.x + m[7] * p.y + m[8];
+  return { x: (m[0] * p.x + m[1] * p.y + m[2]) / w, y: (m[3] * p.x + m[4] * p.y + m[5]) / w };
+}
+export const screenToWorld = (p, view) => transform(p, matrices(view).inverse);
+export const worldToScreen = (p, view) => transform(p, matrices(view).forward);
+export function transformAt(view, updates, anchor, destination = anchor) {
+  const world = screenToWorld(anchor, view), next = canvasView({ ...view, ...updates });
+  const projected = worldToScreen(world, next);
+  return canvasView({ ...next, x: next.x + destination.x - projected.x, y: next.y + destination.y - projected.y });
+}
+export const zoomAt = (view, scale, anchor, destination = anchor) => transformAt(view, { scale }, anchor, destination);
 
-// Pointer positions use native canvas coordinates. After a pinch, the remaining
-// finger stays reserved for navigation until both fingers have lifted.
+// After navigation, the remaining finger stays reserved until every finger lifts.
 export class PinchGesture {
   points = new Map(); blocked = false; initial = null;
   down(id, point, view) {
@@ -48,7 +80,7 @@ export class PinchGesture {
     if (this.points.size === 2) {
       this.blocked = true;
       const [a, b] = this.points.values();
-      this.initial = { view: { ...view }, distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+      this.initial = { view: { ...view }, angle: Math.atan2(b.y - a.y, b.x - a.x), distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
       return true;
     }
     return false;
@@ -57,13 +89,13 @@ export class PinchGesture {
     if (!this.points.has(id)) return null;
     this.points.set(id, point);
     if (this.points.size !== 2 || !this.initial) return null;
-    const [a, b] = this.points.values(), { view, distance, center } = this.initial;
-    return zoomAt(view, view.scale * Math.hypot(b.x - a.x, b.y - a.y) / distance, center, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const [a, b] = this.points.values(), { view, distance, center, angle } = this.initial;
+    const rotation = wrapAngle((view.rotation ?? 0) + (Math.atan2(b.y - a.y, b.x - a.x) - angle) * 180 / Math.PI);
+    return transformAt(view, { scale: view.scale * Math.hypot(b.x - a.x, b.y - a.y) / distance, rotation }, center, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   }
   up(id) {
     const navigation = this.blocked;
-    this.points.delete(id);
-    this.initial = null;
+    this.points.delete(id); this.initial = null;
     if (!this.points.size) this.blocked = false;
     return navigation;
   }

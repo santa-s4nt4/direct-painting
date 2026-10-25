@@ -27,7 +27,7 @@ test('live Pencil updates use the same 60fps grid without duplicate sends inside
 
 test('saved Place or p5 tool selections restore to an available Pencil drawing mode', () => {
   const restored = singleCanvasProject({ version: 1, clips: [], duration: 10000, settings: { mode: 'place', motionSource: 'p5' } });
-  assert.equal(restored.settings.mode, 'trail'); assert.equal(restored.settings.motionSource, 'pen');
+  assert.equal(restored.settings.mode, 'move'); assert.equal(restored.settings.motionSource, 'pen');
   const move = singleCanvasProject({ version: 1, clips: [], duration: 10000, settings: { mode: 'move' } });
   assert.equal(move.settings.mode, 'move');
 });

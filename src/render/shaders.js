@@ -10,7 +10,7 @@ out vec2 localPoint;
 flat out vec2 brushSize;
 flat out vec3 info;
 void main() {
-  bool rect = appearance.y > .5 && appearance.y < 1.5;
+  bool rect = appearance.y == 1. || appearance.y == 3.;
   vec2 center = floor(brush.xy) + (rect ? vec2(0.) : mod(brush.zw, 2.) * .5);
   vec2 extent = rect ? vec2(length(brush.zw) * .5 + 1.) : brush.zw * .5;
   localPoint = position.xy * extent * 2.;
@@ -34,11 +34,11 @@ uniform float edgeSize;
 out vec4 result;
 ${footprint}
 void main() {
-  bool rect = info.y > .5 && info.y < 1.5;
+  bool rect = info.y == 1. || info.y == 3.;
   float c = cos(info.x), s = sin(info.x);
   vec2 p = rect ? vec2(c*localPoint.x+s*localPoint.y, -s*localPoint.x+c*localPoint.y) : localPoint;
   if (footprint(p,brushSize,rect) < .5) discard;
-  if (info.y > 1.5 && footprint(p, brushSize - edgeSize*2., false) > .5) discard;
+  if (info.y > 1.5 && footprint(p, brushSize - edgeSize*2., rect) > .5) discard;
   float time = min(16777215., floor(max(0.,info.z)*4.+.5)+1.);
   vec3 encoded = vec3(floor(time/65536.), floor(mod(time,65536.)/256.), mod(time,256.));
   result = vec4(encoded/255., 1.);
@@ -74,13 +74,13 @@ ${footprint}
 vec4 layerColor() {
   float alpha = layerOpacity;
   if (directShape > 0) {
-    bool rect = directShape == 2;
+    bool rect = directShape == 2 || directShape == 4;
     vec2 center = floor(directBrush.xy) + (rect ? vec2(0.) : mod(directBrush.zw,2.)*.5);
     vec2 p = pixel - center;
     float c = cos(directAngle), s = sin(directAngle);
     if (rect) p = vec2(c*p.x+s*p.y,-s*p.x+c*p.y);
     if (footprint(p,directBrush.zw,rect) < .5) return vec4(0.);
-    if (directShape == 3 && footprint(p,directBrush.zw-edgeSize*2.,false) > .5) return vec4(0.);
+    if ((directShape == 3 || directShape == 4) && footprint(p,directBrush.zw-edgeSize*2.,rect) > .5) return vec4(0.);
   } else {
     vec2 uv = (pixel-maskBounds.xy)/maskBounds.zw; uv.y=1.-uv.y;
     vec4 mask = texture(maskTexture,uv);
@@ -152,14 +152,7 @@ precision highp float;
 in vec2 texCoord;
 uniform sampler2D image;
 out vec4 result;
-uniform vec2 resolution;
-uniform vec2 canvasResolution;
-uniform vec3 view; // scale, native x/y translation
-void main() {
-  vec2 p=(vec2(texCoord.x,1.-texCoord.y)*resolution-view.yz)/view.x;
-  if (any(lessThan(p,vec2(0.))) || any(greaterThanEqual(p,canvasResolution))) { result=vec4(0.,0.,0.,1.); return; }
-  result=vec4(texture(image,vec2(p.x/canvasResolution.x,1.-p.y/canvasResolution.y)).rgb,1.);
-}
+void main() { result=vec4(texture(image,texCoord).rgb,1.); }
 `;
 export const blurFragment = `
 precision highp float;

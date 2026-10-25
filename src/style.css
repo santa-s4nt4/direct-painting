@@ -186,7 +186,17 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
 .zoom-controls button { background: transparent; border: 0; min-width: 24px; min-height: 32px; padding: 2px 5px; color: #bbb; font-size: 13px; }
 .zoom-controls button:hover { background: #3a3a3a; color: white; }#reset-view { min-width: 48px; font-size: 10px; }
 .canvas-frame { overflow: hidden; }
-.painting-boundary { position: absolute; outline: 1px solid #626262; pointer-events: none; }
+.painting-boundary { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 @media (max-width: 1100px) { .view-tools { gap: 5px; }.view-tools .fps-label { display: none; } }
 @media (max-width: 600px) { .canvas-tools button { min-width: 32px; padding: 0 6px; }.canvas-tools button span { display: none; }.canvas-tools { gap: 0; }.floating-color { width: 196px; top: 8px; right: 8px; }#floating-color-panel { padding: 8px; } }
 @media (pointer: coarse) { .color-panel-toggle, .zoom-controls button { min-height: 38px; }#floating-color-panel input[type=range] { margin-top: 8px; margin-bottom: 10px; } }
+.orientation-control { position: absolute; left: 12px; bottom: 28px; width: 116px; padding: 3px; border: 1px solid #555; border-radius: 9px; background: #252525df; z-index: 4; user-select: none; -webkit-user-select: none; }
+.orientation-cube { display: block; width: 108px; height: 100px; touch-action: none; cursor: grab; }
+.orientation-cube:active { cursor: grabbing; }.orientation-cube:focus-visible { outline: 2px solid #168cff; border-radius: 6px; }
+.orientation-actions { display: flex; gap: 3px; }.orientation-actions button { flex: 1; min-width: 0; min-height: 28px; padding: 2px; font-size: 10px; background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; }
+.angle-presets { display: flex; gap: 6px; }.angle-presets button { min-height: 32px; flex: 1; background: #353535; border: 1px solid #555; color: #ddd; border-radius: 4px; }
+.line-tool-controls { display: grid; gap: 9px; }.line-tool-controls p { color: #aaa; font-size: 11px; line-height: 1.5; margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 600px) { .orientation-control { width: 88px; left: 8px; bottom: 26px; }.orientation-cube { width: 80px; height: 74px; }.orientation-actions button { min-height: 28px; } }
+
+.orientation-readout { display: block; font-size: 8px; color: #aaa; text-align: center; margin-bottom: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }

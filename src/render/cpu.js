@@ -1,4 +1,4 @@
-import { canvasView } from '../view.js';
+import { canvasView, viewHomography, invertHomography } from '../view.js';
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from '../canvas.js';
 import { RGBAScene } from '../rgba.js';
 import { LiveDrawing } from '../live.js';
@@ -31,6 +31,19 @@ export class CPUPaintingRenderer {
     }
     for (let p = 0; p < pixels.length; p += 4) { const a = pixels[p + 3] / 255; this.opaque[p] = pixels[p] * a; this.opaque[p + 1] = pixels[p + 1] * a; this.opaque[p + 2] = pixels[p + 2] * a; this.opaque[p + 3] = 255; }
     const { scale, x, y } = this.view;
+    if (this.view.rotation || this.view.pitch || this.view.yaw) {
+      this.projected ??= new ImageData(VW, VH);
+      const out = this.projected.data, m = invertHomography(viewHomography(this.view));
+      for (let row = 0; row < VH; row++) {
+        let u = m[0] * .5 + m[1] * (row + .5) + m[2], v = m[3] * .5 + m[4] * (row + .5) + m[5], w = m[6] * .5 + m[7] * (row + .5) + m[8];
+        for (let col = 0; col < VW; col++, u += m[0], v += m[3], w += m[6]) {
+          const wx = Math.floor(u / w), wy = Math.floor(v / w), to = (row * VW + col) * 4;
+          const from = (wy * W + wx) * 4, inside = wx >= 0 && wy >= 0 && wx < W && wy < H;
+          out[to] = inside ? this.opaque[from] : 0; out[to + 1] = inside ? this.opaque[from + 1] : 0; out[to + 2] = inside ? this.opaque[from + 2] : 0; out[to + 3] = 255;
+        }
+      }
+      this.ctx.putImageData(this.projected, 0, 0); return;
+    }
     if (scale === 1 && x === 0 && y === 0) this.ctx.putImageData(this.image, 0, 0);
     else {
       if (!this.viewCanvas) { this.viewCanvas = document.createElement('canvas'); this.viewCanvas.width = W; this.viewCanvas.height = H; this.viewContext = this.viewCanvas.getContext('2d'); }

@@ -4,7 +4,7 @@ import { sampleAt } from '../loop.js';
 
 // Geometry has no Canvas/WebGL dependency. The saved x/y/pressure/t data remains
 // the source of truth; a future 3D renderer can consume it without UI changes.
-const GEOMETRY_KEYS = ['mode', 'shape', 'angle', 'duration', 'ringWidth'];
+const GEOMETRY_KEYS = ['mode', 'shape', 'angle', 'duration', 'ringWidth', 'linePending', 'lineIncomplete'];
 const POINT_KEYS = ['x', 'y', 'size', 't', 'shape', 'width', 'height', 'ringWidth', 'angle', 'step', 'active', 'opacity', 'color', 'colorProgress'];
 export function sameGeometry(a, b) {
   if (!a || !b || GEOMETRY_KEYS.some(key => a[key] !== b[key]) || a.procedural?.kind !== b.procedural?.kind) return false;
@@ -14,7 +14,7 @@ export function sameGeometry(a, b) {
 export function strokeBounds(clip) {
   let left = CANVAS_WIDTH, top = CANVAS_HEIGHT, right = 0, bottom = 0;
   for (const point of clip.samples) {
-    const rect = clip.shape === 'rect' || point.shape === 'rect';
+    const rect = ['rect', 'rect-ring'].includes(clip.shape) || ['rect', 'rect-ring'].includes(point.shape);
     const radius = rect ? Math.hypot(point.width ?? point.size, point.height ?? point.size) / 2 + 2 : point.size / 2 + 2;
     left = Math.min(left, point.x - radius); top = Math.min(top, point.y - radius);
     right = Math.max(right, point.x + radius); bottom = Math.max(bottom, point.y + radius);

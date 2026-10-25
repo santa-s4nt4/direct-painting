@@ -69,6 +69,7 @@ export function fitGestureTrim(clip, loopDuration = DEFAULT_LOOP_MS) {
   return { ...clip, start: wrap((clip.start ?? 0) + start - range.in, loopDuration), trimIn: start, ...(clip.trimOut != null ? { trimOut: out } : {}) };
 }
 export function gestureOpacity(clip, time) {
+  if (clip.mode === 'line' && clip.linePending) return 1;
   if (clip.mode === 'place') {
     const fadeIn = clip.fadeInMs ?? 300, hold = clip.holdMs ?? 1000, fadeOut = clip.fadeOutMs ?? 1000;
     if (time < fadeIn) return (Math.max(0, time) / fadeIn) ** 2;
@@ -88,6 +89,7 @@ export function gestureTime(clip, phase, loopDuration) {
 }
 
 export function gestureVisible(clip, phase, loopDuration) {
+  if (clip.mode === 'line' && clip.linePending) return true;
   return gestureTime(clip, phase, loopDuration) < trimRange(clip).out;
 }
 
@@ -110,7 +112,7 @@ export function sampleAt(samples, time) {
     }
   }
   if (a.step || a.active === false || b.active === false) return { ...a, ...appearance, t: time };
-  return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, size: a.size + (b.size - a.size) * fraction, t: time, ...appearance, ...(a.active !== undefined ? { active: a.active } : {}), ...(a.shape === 'ring' ? { shape: 'ring', ringWidth: a.ringWidth } : {}), ...(a.shape === 'rect' ? { shape: 'rect', width: a.width + (b.width - a.width) * fraction, height: a.height + (b.height - a.height) * fraction, angle: a.angle + angleDelta(a.angle, b.angle) * fraction } : {}) };
+  return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, size: a.size + (b.size - a.size) * fraction, t: time, ...appearance, ...(a.active !== undefined ? { active: a.active } : {}), ...(a.shape === 'ring' ? { shape: 'ring', ringWidth: a.ringWidth } : {}), ...(['rect', 'rect-ring'].includes(a.shape) ? { shape: a.shape, width: a.width + (b.width - a.width) * fraction, height: a.height + (b.height - a.height) * fraction, angle: a.angle + angleDelta(a.angle, b.angle) * fraction } : {}) };
 }
 
 function addSegment(field, a, b, color, style) {
@@ -127,7 +129,7 @@ export class CachedGesture {
     clip = prepareShapeClip(clip);
     this.clip = clip; this.lastTime = -1; this.lastFrame = -1;
     if (clip.mode === 'place' || clip.mode === 'move' && clip.procedural?.kind === 'p5') { this.positions = clip.samples; return; }
-    if (clip.mode === 'return' || clip.mode === 'trail') return;
+    if (clip.mode === 'return' || clip.mode === 'trail' || clip.mode === 'line') return;
     else {
       const circle = new SmoothedCircle(clip.samples[0], clip.color, 0);
       this.positions = [{ ...circle.point, t: 0 }];
@@ -148,11 +150,16 @@ export class CachedGesture {
 
   render(time) {
     if (this.clip.mode === 'move' || this.clip.mode === 'place') return sampleAt(this.positions, time);
-    this.field ??= this.clip.mode === 'return' ? new PersistentField(hasColorGradient(this.clip)) : new TrailField(hasColorGradient(this.clip));
+    this.field ??= ['return', 'line'].includes(this.clip.mode) ? new PersistentField(hasColorGradient(this.clip)) : new TrailField(hasColorGradient(this.clip));
     if (time === this.lastFrame) return this.colorizedField(time);
-    const { samples, duration, color } = this.clip;
+    const { samples, color } = this.clip;
+    if (this.clip.mode === 'line' && this.clip.linePending) {
+      if (this.lastTime < 0) for (const point of samples) this.field.add(point, color, 0, { ...this.clip, ringWidth: Math.min(this.clip.ringWidth ?? 5, 12, Math.floor(point.size / 4)) });
+      this.lastTime = time; this.lastFrame = time; return this.colorizedField(time);
+    }
+    const duration = this.clip.mode === 'line' ? 1 : this.clip.duration;
     if (time < this.lastTime || this.lastTime < 0) { this.field.clear(); this.lastTime = -1; }
-    const until = Math.min(time, duration);
+    const until = this.clip.mode === 'line' ? 1 : Math.min(time, duration);
     if (this.lastTime < duration) {
       if (this.lastTime < 0) this.field.add(samples[0], color, 0, this.clip);
       let previous = sampleAt(samples, Math.max(0, this.lastTime));
@@ -186,7 +193,9 @@ export function validateProject(project) {
   if (!project || project.version !== 1 || !Array.isArray(project.clips)) throw new Error('Invalid local project');
   const ids = new Set();
   const clips = project.clips.map(clip => {
-    if (!clip || typeof clip.id !== 'string' || ids.has(clip.id) || !['trail', 'return', 'move', 'place'].includes(clip.mode) || !/^#[0-9a-f]{6}$/i.test(clip.color) || !Array.isArray(clip.samples) || !clip.samples.length || !Array.isArray(clip.targets) || !clip.targets.length || clip.targets.length > 2 || clip.targets.some(index => index !== 0 && index !== 1) || !Number.isFinite(clip.duration) || clip.duration < 0) throw new Error('Invalid cached gesture');
+    if (!clip || typeof clip.id !== 'string' || ids.has(clip.id) || !['trail', 'return', 'move', 'place', 'line'].includes(clip.mode) || !/^#[0-9a-f]{6}$/i.test(clip.color) || !Array.isArray(clip.samples) || !clip.samples.length || !Array.isArray(clip.targets) || !clip.targets.length || clip.targets.length > 2 || clip.targets.some(index => index !== 0 && index !== 1) || !Number.isFinite(clip.duration) || clip.duration < 0) throw new Error('Invalid cached gesture');
+    if (clip.mode === 'line' && (clip.duration !== 0 || clip.samples.length !== (clip.lineIncomplete ? 1 : 2) || typeof clip.linePending !== 'boolean' || clip.lineIncomplete && !clip.linePending)) throw new Error('Invalid line');
+    for (const key of ['linePending', 'lineIncomplete']) if (clip[key] !== undefined && (clip.mode !== 'line' || typeof clip[key] !== 'boolean')) throw new Error('Invalid line state');
     if (new Set(clip.targets).size !== clip.targets.length) throw new Error('Duplicate drawing targets');
     if (clip.enabled !== undefined && typeof clip.enabled !== 'boolean') throw new Error('Invalid layer visibility');
     if (clip.blendMode !== undefined && !['normal', 'analog'].includes(clip.blendMode)) throw new Error('Invalid blend mode');
@@ -198,7 +207,7 @@ export function validateProject(project) {
     if (clip.opacity !== undefined && (!Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) throw new Error('Invalid layer opacity');
     validateEffects(clip.effects); validateRingWidth(clip.ringWidth);
     const start = clip.start ?? 0;
-    if (clip.shape !== undefined && !['circle', 'rect', 'ring'].includes(clip.shape)) throw new Error('Invalid shape');
+    if (clip.shape !== undefined && !['circle', 'rect', 'ring', 'rect-ring'].includes(clip.shape)) throw new Error('Invalid shape');
     if (clip.angle !== undefined && (!Number.isFinite(clip.angle) || Math.abs(clip.angle) > 360)) throw new Error('Invalid angle');
     if (clip.followDirection !== undefined && typeof clip.followDirection !== 'boolean') throw new Error('Invalid direction setting');
     if (clip.editScope !== undefined && (!['all', '0', '1'].includes(clip.editScope) || (clip.editScope !== 'all' && !clip.targets.includes(Number(clip.editScope))))) throw new Error('Invalid edit scope');
@@ -233,7 +242,7 @@ export function validateProject(project) {
       for (const key of ['active', 'step']) if (sample[key] !== undefined && (typeof sample[key] !== 'boolean' || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       for (const key of ['opacity', 'colorProgress']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1 || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       if (sample.color !== undefined && (typeof sample.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(sample.color) || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error('Invalid sample color');
-      if (sample.shape !== undefined && !['circle', 'rect', 'ring'].includes(sample.shape)) throw new Error('Invalid sample shape');
+      if (sample.shape !== undefined && !['circle', 'rect', 'ring', 'rect-ring'].includes(sample.shape)) throw new Error('Invalid sample shape');
       validateRingWidth(sample.ringWidth);
       for (const key of ['width', 'height']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 1 || sample[key] > MAX_BRUSH_SIZE)) throw new Error('Invalid rectangle dimensions');
       for (const key of ['angle', 'heading']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || Math.abs(sample[key]) > 720)) throw new Error('Invalid sample angle');

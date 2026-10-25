@@ -13,9 +13,10 @@ export function resizeDimension(clip, axis, bound, value) {
   return { ...clip, [`${axis}Range`]: range, samples: clip.samples.map((sample, index) => ({ ...sample, [key]: positions[index], [axis]: Math.round(range.min + (range.max - range.min) * positions[index]) })) };
 }
 export function prepareShapeClip(clip) {
+  if (clip.mode === 'line') return { ...clip, shape: clip.linePending ? 'ring' : 'circle', samples: clip.samples.map(sample => ({ ...sample, shape: clip.linePending ? 'ring' : 'circle', ringWidth: clip.ringWidth ?? 5, size: clip.linePending ? sample.size : clip.ringWidth ?? 5 })) };
   if (!clip.shape) return clip;
-  return { ...clip, samples: clip.samples.map(sample => ({ ...sample, shape: clip.shape, ...(clip.shape === 'rect' ? { width: sample.width ?? sample.size, height: sample.height ?? sample.size, angle: clip.angle ?? 0 } : clip.shape === 'ring' ? { ringWidth: clip.ringWidth ?? 5 } : {}) })) };
+  return { ...clip, samples: clip.samples.map(sample => ({ ...sample, shape: clip.shape, ...(['rect', 'rect-ring'].includes(clip.shape) ? { width: sample.width ?? sample.size, height: sample.height ?? sample.size, angle: clip.angle ?? 0, ringWidth: clip.ringWidth ?? 5 } : clip.shape === 'ring' ? { ringWidth: clip.ringWidth ?? 5 } : {}) })) };
 }
 export function renderSignature(clip) {
-  return JSON.stringify([clip.mode, clip.procedural?.kind, clip.shape, clip.ringWidth, clip.color, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
+  return JSON.stringify([clip.mode, clip.linePending, clip.lineIncomplete, clip.procedural?.kind, clip.shape, clip.ringWidth, clip.color, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
 }

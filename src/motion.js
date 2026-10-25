@@ -117,6 +117,6 @@ export class SmoothedCircle {
   displayPoint() {
     // Round instead of flooring so tiny filtered changes near integer positions
     // do not toggle the rasterized circle between neighboring pixels.
-    return { ...this.point, x: Math.round(this.point.x), y: Math.round(this.point.y), size: Math.max(1, Math.round(this.point.size)), ...(this.point.shape === 'rect' ? { width: Math.max(1, Math.round(this.point.width)), height: Math.max(1, Math.round(this.point.height)) } : {}) };
+    return { ...this.point, x: Math.round(this.point.x), y: Math.round(this.point.y), size: Math.max(1, Math.round(this.point.size)), ...(['rect', 'rect-ring'].includes(this.point.shape) ? { width: Math.max(1, Math.round(this.point.width)), height: Math.max(1, Math.round(this.point.height)) } : {}) };
   }
 }

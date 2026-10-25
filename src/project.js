@@ -7,14 +7,14 @@ import { DEFAULT_P5_CODE, MAX_SNIPPET_LENGTH, MAX_P5_DURATION_MS, P5_PRESETS, up
 import { validateLEDOptions } from './p5-led.js';
 
 export const MAX_PROJECT_BYTES = 16 * 1024 * 1024;
-export const DEFAULT_SETTINGS = Object.freeze({ mode: 'trail', shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, viewVersion: 2, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
+export const DEFAULT_SETTINGS = Object.freeze({ mode: 'move', lineWidth: 5, shape: 'circle', color: '#ffffff', opacity: 1, colorPanelVisible: true, effects: DEFAULT_EFFECTS, view: DEFAULT_VIEW, viewVersion: 3, minSize: 15, maxSize: 100, widthMin: 20, widthMax: 100, heightMin: 20, heightMax: 100, angle: 0, followDirection: false, pressure: true, touch: false, sync: false, active: 0, ringWidth: DEFAULT_RING_WIDTH, fadeMs: 2000, fadeInMs: 300, holdMs: 1000, fadeOutMs: 1000, motionSource: 'pen', p5Code: DEFAULT_P5_CODE, p5Seed: 1, p5DurationMs: 10000, p5Mode: 'move', p5Target: 'left', p5Preset: 'orbit', p5SingleRatio: 3, p5ClimaxRatio: 2, p5Variation: 75, p5AutoSeed: true, p5RainColorHoldMs: 2000, p5FireworkColorA: null, p5FireworkColorB: null });
 
 export function normalizeProject(value) {
   if (value?.duration !== undefined && (!Number.isFinite(value.duration) || value.duration <= 0)) throw new Error('Invalid loop length');
   const project = validateProject(value), supplied = project.settings ?? {};
   if (typeof supplied !== 'object' || Array.isArray(supplied)) throw new Error('Invalid drawing settings');
   const settings = { ...DEFAULT_SETTINGS };
-  const choices = { mode: ['trail', 'return', 'move', 'place'], shape: ['circle', 'rect', 'ring'], active: [0, 1], motionSource: ['pen', 'p5'], p5Mode: ['move', 'trail', 'return'], p5Target: ['left', 'right', 'both'], p5Preset: ['custom', ...Object.keys(P5_PRESETS)] };
+  const choices = { mode: ['trail', 'return', 'move', 'place', 'line'], shape: ['circle', 'rect', 'ring', 'rect-ring'], active: [0, 1], motionSource: ['pen', 'p5'], p5Mode: ['move', 'trail', 'return'], p5Target: ['left', 'right', 'both'], p5Preset: ['custom', ...Object.keys(P5_PRESETS)] };
   for (const [key, allowed] of Object.entries(choices)) {
     if (supplied[key] !== undefined) { if (!allowed.includes(supplied[key])) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
@@ -31,13 +31,13 @@ export function normalizeProject(value) {
     settings.p5Code = upgradeP5Code(supplied.p5Code);
   }
   if (supplied.p5Preset === undefined) settings.p5Preset = Object.keys(P5_PRESETS).find(key => P5_PRESETS[key] === settings.p5Code) ?? 'custom';
-  for (const [key, min, max] of [['p5Seed', 0, 4294967295], ['p5DurationMs', 100, MAX_P5_DURATION_MS], ['p5SingleRatio', 0, 1000], ['p5ClimaxRatio', 0, 1000], ['p5Variation', 0, 100], ['p5RainColorHoldMs', 0, 600000], ['minSize', 1, MAX_BRUSH_SIZE], ['maxSize', 1, MAX_BRUSH_SIZE], ['widthMin', 1, MAX_BRUSH_SIZE], ['widthMax', 1, MAX_BRUSH_SIZE], ['heightMin', 1, MAX_BRUSH_SIZE], ['heightMax', 1, MAX_BRUSH_SIZE], ['angle', -180, 180], ['ringWidth', 1, MAX_RING_WIDTH], ['fadeMs', 100, 10000], ['fadeInMs', 0, 10000], ['holdMs', 100, 600000], ['fadeOutMs', 0, 10000]]) {
+  for (const [key, min, max] of [['p5Seed', 0, 4294967295], ['p5DurationMs', 100, MAX_P5_DURATION_MS], ['p5SingleRatio', 0, 1000], ['p5ClimaxRatio', 0, 1000], ['p5Variation', 0, 100], ['p5RainColorHoldMs', 0, 600000], ['minSize', 1, MAX_BRUSH_SIZE], ['maxSize', 1, MAX_BRUSH_SIZE], ['widthMin', 1, MAX_BRUSH_SIZE], ['widthMax', 1, MAX_BRUSH_SIZE], ['heightMin', 1, MAX_BRUSH_SIZE], ['heightMax', 1, MAX_BRUSH_SIZE], ['angle', -180, 180], ['ringWidth', 1, MAX_RING_WIDTH], ['lineWidth', 1, MAX_RING_WIDTH], ['fadeMs', 100, 10000], ['fadeInMs', 0, 10000], ['holdMs', 100, 600000], ['fadeOutMs', 0, 10000]]) {
     if (supplied[key] !== undefined) { if (!Number.isInteger(supplied[key]) || supplied[key] < min || supplied[key] > max) throw new Error(`Invalid ${key}`); settings[key] = supplied[key]; }
   }
   validateEffects(supplied.effects); settings.effects = layerEffects({ effects: supplied.effects });
-  if (supplied.viewVersion !== undefined && supplied.viewVersion !== 2) throw new Error('Invalid canvas view version');
+  if (supplied.viewVersion !== undefined && supplied.viewVersion !== 2 && supplied.viewVersion !== 3) throw new Error('Invalid canvas view version');
   settings.view = importedView(supplied.view, project.canvas, supplied.viewVersion);
-  settings.viewVersion = 2;
+  settings.viewVersion = 3;
   if (supplied.opacity !== undefined) { if (!Number.isFinite(supplied.opacity) || supplied.opacity < 0 || supplied.opacity > 1) throw new Error('Invalid opacity'); settings.opacity = supplied.opacity; }
   validateLEDOptions({ single: settings.p5SingleRatio, climax: settings.p5ClimaxRatio, variation: settings.p5Variation });
   settings.followDirection = false; // Accept legacy JSON but always use the UI angle.
@@ -61,7 +61,7 @@ export function singleCanvasProject(value) {
     const { eyeOverrides, ...single } = clip;
     return [{ ...single, targets: [0], editScope: 'all' }];
   });
-  return { ...project, clips, canvas: { ...CANVAS_SPEC }, settings: { ...settings, active: 0, sync: false, p5Target: 'left', motionSource: 'pen', mode: ['trail', 'return', 'move'].includes(settings.mode) ? settings.mode : 'trail' } };
+  return { ...project, clips, canvas: { ...CANVAS_SPEC }, settings: { ...settings, active: 0, sync: false, p5Target: 'left', motionSource: 'pen', mode: ['move', 'line'].includes(settings.mode) ? settings.mode : 'move' } };
 }
 
 export function serializeProject(project, playback) {
