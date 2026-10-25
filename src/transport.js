@@ -4,7 +4,7 @@ export const BARS = 8;
 export const LOOP_MS = 60000 / BPM * BEATS_PER_BAR * BARS;
 
 // Use the exact MIDI note number, independent of device octave naming.
-export const RESTART_NOTE = 12;
+export const RESTART_NOTE = 24;
 export function isRestartNote(message) {
   return message.length === 3 && (message[0] & 0xf0) === 0x90 && message[1] === RESTART_NOTE && message[2] > 0;
 }

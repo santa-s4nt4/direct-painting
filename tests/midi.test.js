@@ -16,30 +16,30 @@ test('120 BPM, 4/4, eight bars stays fixed at 16s through resize, import and lon
  const clip={id:'long',mode:'move',color:'#ffffff',targets:[0],enabled:true,start:0,duration:20000,fadeMs:10000,samples:[{x:1920,y:1080,size:20,t:0},{x:1920,y:1080,size:20,t:20000}]};
  for(const duration of [200,10000,60000])assert.equal(normalizeProject({version:1,duration,clips:[clip]}).duration,16000);
 });
-test('MIDI parser restarts only on note 12 across packets, running status, realtime bytes and channels', () => {
+test('MIDI parser restarts only on note 24 across packets, running status, realtime bytes and channels', () => {
  const messages=[], decoder=new MidiDecoder(m=>messages.push(m));
- decoder.push([0x93,12]);decoder.push([0xf8,127,12,0,24,100,0x83,12,127,0xc0,5,0xf0,1,12,100,0xf8,0xf7,0x90,12,100]);
- assert.deepEqual(messages,[[0x93,12,127],[0x93,12,0],[0x93,24,100],[0x83,12,127],[0xc0,5],[0x90,12,100]]);
- assert.equal(RESTART_NOTE,12);assert.equal(messages.filter(m=>isRestartNote(m)).length,2);assert.equal(isRestartNote([0x9f,12,1]),true);
- for(const message of [[0x90,12,0],[0x80,12,100],[0x90,24,100],[0x90,36,100]])assert.equal(isRestartNote(message),false);
- decoder.push([0x90,12]);decoder.reset();decoder.push([127]);assert.equal(messages.length,6);
+ decoder.push([0x93,24]);decoder.push([0xf8,127,24,0,12,100,0x83,24,127,0xc0,5,0xf0,1,24,100,0xf8,0xf7,0x90,24,100]);
+ assert.deepEqual(messages,[[0x93,24,127],[0x93,24,0],[0x93,12,100],[0x83,24,127],[0xc0,5],[0x90,24,100]]);
+ assert.equal(RESTART_NOTE,24);assert.equal(messages.filter(m=>isRestartNote(m)).length,2);assert.equal(isRestartNote([0x9f,24,1]),true);
+ for(const message of [[0x90,24,0],[0x80,24,100],[0x90,12,100],[0x90,36,100]])assert.equal(isRestartNote(message),false);
+ decoder.push([0x90,24]);decoder.reset();decoder.push([127]);assert.equal(messages.length,6);
 });
-test('MIDI device selection persists and legacy note 24/36 preferences migrate to fixed note 12', async () => {
+test('MIDI device selection persists and legacy note 12/36 preferences migrate to fixed note 24', async () => {
  const folder=await mkdtemp(join(tmpdir(),'direct-midi-')),file=join(folder,'midi.json');let count=0;
  const input=await createMidiInput({configFile:file,autoStart:false,onRestart:()=>count++});
  try {
   input.receive({type:'devices',devices:[{id:'a',name:'Interface A'},{id:'b',name:'Interface B'}],selected:'',connected:false});
   await input.configure({selected:'a'}); input.receive({type:'devices',devices:[{id:'a',name:'Interface A'}],selected:'a',connected:true});
-  input.receive({type:'data',id:'b',bytes:[0x90,12,100]});input.receive({type:'data',id:'a',bytes:[0x90,24,100,36,100,12,0,12,100]});assert.equal(count,1);
-  input.receive({type:'data',id:'a',bytes:[0x91,12,110]});assert.equal(count,2);
-  input.receive({type:'devices',devices:[],selected:'a',connected:false});input.receive({type:'data',id:'a',bytes:[0x90,12,100]});assert.equal(count,2);
-  assert.deepEqual(JSON.parse(await readFile(file,'utf8')),{selected:'a',note:12});
-  for(const legacyNote of [24,36]){
+  input.receive({type:'data',id:'b',bytes:[0x90,24,100]});input.receive({type:'data',id:'a',bytes:[0x90,12,100,36,100,24,0,24,100]});assert.equal(count,1);
+  input.receive({type:'data',id:'a',bytes:[0x91,24,110]});assert.equal(count,2);
+  input.receive({type:'devices',devices:[],selected:'a',connected:false});input.receive({type:'data',id:'a',bytes:[0x90,24,100]});assert.equal(count,2);
+  assert.deepEqual(JSON.parse(await readFile(file,'utf8')),{selected:'a',note:24});
+  for(const legacyNote of [12,36]){
    await writeFile(file,JSON.stringify({selected:'a',note:legacyNote}));
-   const restored=await createMidiInput({configFile:file,autoStart:false});assert.equal(restored.snapshot().selected,'a');assert.equal(restored.snapshot().note,12);restored.dispose();
+   const restored=await createMidiInput({configFile:file,autoStart:false});assert.equal(restored.snapshot().selected,'a');assert.equal(restored.snapshot().note,24);restored.dispose();
   }
-  await assert.rejects(input.configure({selected:'missing',note:12}));
-  for(const note of [24,36,60])await assert.rejects(input.configure({selected:'a',note}));
+  await assert.rejects(input.configure({selected:'missing',note:24}));
+  for(const note of [12,36,60])await assert.rejects(input.configure({selected:'a',note}));
  }finally{input.dispose();await rm(folder,{recursive:true});}
 });
 test('MIDI restart plays from zero, releases completed lines, rejects stale transport snapshots and retriggers', async () => {

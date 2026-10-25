@@ -25,7 +25,7 @@ export async function createMidiInput({ configFile, onRestart, platform = proces
     else if (value.type === 'error') { state.error = value.message; state.starting = false; state.connected = false; }
   };
   const configure = async value => {
-    if (!value || typeof value.selected !== 'string' || (value.note !== undefined && value.note !== RESTART_NOTE)) throw new Error('Select a MIDI input; the restart note is fixed at 12');
+    if (!value || typeof value.selected !== 'string' || (value.note !== undefined && value.note !== RESTART_NOTE)) throw new Error(`Select a MIDI input; the restart note is fixed at ${RESTART_NOTE}`);
     if (value.selected && value.selected !== state.selected && !state.devices.some(d => d.id === value.selected)) throw new Error('MIDI input is no longer available');
     const changed = state.selected !== value.selected;
     state.selected = value.selected; state.note = RESTART_NOTE; if (changed) { state.connected = false; state.lastNote = null; } decoder.reset();
