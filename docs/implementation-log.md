@@ -116,3 +116,13 @@ iPad実機でのマルチタッチとTouchDesigner本体での動作確認は含
 ソース、依存関係のロックファイル、ライセンス、テスト、設定、TouchDesigner用ファイル、画面・計測記録をGitに含めています。`node_modules`、`dist`、`.direct-painting`、旧`.imagraph`などのローカル保存データは`.gitignore`で除外しています。
 
 起動・操作方法は[README](../README.md)、GPU構成は[描画基盤の説明](../src/render/README.md)、TouchDesigner設定は[接続手順](../TD/README.md)を参照してください。
+
+## 2026-10-25：3Dボックス、Line Ring、MIDI頭出し
+
+描画を3840×3480×3480の3D空間へ移し、各入力の画面正面の平面を保持するようにしました。Lineの初回表示はMove Ringの筆圧・追従・サイズ・フェードをそのまま使い、完成後は異なる平面の終点も3D線分で結びます。矩形の初期Maxは1600×1600、回転ボックスは下部UIへ移動し、プリセットは正面だけにしました。
+
+GPUは保存済みMove／Lineを解析的な図形として描き、合成先をFull HDにしました。10枚の1600px矩形Ring＋Blur16pxの全レイヤーを表示した計測は平均2.10ms、p95 4.00ms、描画マスクの追加生成・CPU画像転送0でした。iPad実機の計測ではありません。
+
+タイムラインは120 BPM・4/4・8小節＝16秒に固定しました。FilesにMacのMIDI入力選択とC1番号24／36を追加し、Note Onで停止中を含め先頭から再生します。CoreMIDIで受けるのでiPadのHTTP接続でも使えます。古いスナップショットによる頭出しの取り消しを防ぐtransport revisionを追加しました。
+
+操作・実装・検証は[3Dボックス](box-canvas.md)と[MIDI同期](midi-sync.md)に記録しています。`npm test`153件、3Dブラウザー検証15件、既存描画の回帰検証33件、実CoreMIDI仮想入力による4件が成功しています。ビルド成功（既存のThree.jsチャンクサイズ警告あり）。実機の演奏入力、iPad実機のマルチタッチ、TouchDesigner本体は今回の確認対象に含めません。

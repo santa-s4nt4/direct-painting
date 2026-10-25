@@ -1,5 +1,17 @@
 # 画面と描画検証の記録
 
+
+## 現行：3DボックスとMIDI同期
+
+- [MIDI設定・固定16秒・下部回転UI](direct-painting-midi.png)：1133×744、実MIDI入力の接続状態。
+- [3D空間の編集画面](box-volume-editor.png)／[映像出力](box-volume-output.png)：異なる向きの平面と3D Line。編集画面の旧スクリーンショットは16秒固定前の表示です。
+- [初回Ring](box-line-ring-active.png)／[リリース後の消失](box-line-ring-faded.png)。
+- [既存描画の回帰33項目](box-legacy-render-checks.json)：旧GPU／CPUの画素比較、キャッシュ、復帰とフォールバック。
+- [3D描画15項目・10レイヤー計測](volume-render-checks.json)：全レイヤーを表示したまま測定。
+- [入力座標と保存平面・奥行き](box-volume-ui-checks.json)：再投影の誤差0。
+- [実CoreMIDI仮想入力4項目](midi-native-checks.json)：MIDI24／36、Note Off等の無視、切断。
+
+
 ## 現行版（3Dビュー・Move / Line）
 
 - [3Dビューと描画ツール](direct-painting-3d-tools.png)：1133×744、0°／45°の四角形Ringと直線、左下の回転ボックス。
