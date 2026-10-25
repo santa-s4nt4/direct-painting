@@ -5,16 +5,16 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
-import { MidiDecoder, isRestartNote } from '../src/transport.js';
+import { MidiDecoder, isRestartNote, RESTART_NOTE } from '../src/transport.js';
 
 export async function createMidiInput({ configFile, onRestart, platform = process.platform, launch = spawn, autoStart = true } = {}) {
-  const state = { available: false, starting: true, devices: [], selected: '', connected: false, note: 24, lastNote: null, triggers: 0, error: '' };
+  const state = { available: false, starting: true, devices: [], selected: '', connected: false, note: RESTART_NOTE, lastNote: null, triggers: 0, error: '' };
   let child, disposed = false, writes = Promise.resolve();
-  try { const saved = JSON.parse(await readFile(configFile, 'utf8')); if (typeof saved.selected === 'string') state.selected = saved.selected; if ([24, 36].includes(saved.note)) state.note = saved.note; } catch { /* First use. */ }
+  try { const saved = JSON.parse(await readFile(configFile, 'utf8')); if (typeof saved.selected === 'string') state.selected = saved.selected; } catch { /* First use. */ }
   const decoder = new MidiDecoder(message => {
     if ((message[0] & 0xf0) !== 0x90 || message[2] === 0) return;
     state.lastNote = { number: message[1], channel: (message[0] & 15) + 1, at: Date.now() };
-    if (isRestartNote(message, state.note)) { state.triggers++; onRestart?.(Date.now()); }
+    if (isRestartNote(message)) { state.triggers++; onRestart?.(Date.now()); }
   });
   const receive = value => {
     if (value.type === 'devices') {
@@ -25,10 +25,10 @@ export async function createMidiInput({ configFile, onRestart, platform = proces
     else if (value.type === 'error') { state.error = value.message; state.starting = false; state.connected = false; }
   };
   const configure = async value => {
-    if (!value || typeof value.selected !== 'string' || ![24, 36].includes(value.note)) throw new Error('Select a MIDI input and C1 note 24 or 36');
+    if (!value || typeof value.selected !== 'string' || (value.note !== undefined && value.note !== RESTART_NOTE)) throw new Error('Select a MIDI input; the restart note is fixed at 12');
     if (value.selected && value.selected !== state.selected && !state.devices.some(d => d.id === value.selected)) throw new Error('MIDI input is no longer available');
     const changed = state.selected !== value.selected;
-    state.selected = value.selected; state.note = value.note; if (changed) { state.connected = false; state.lastNote = null; } decoder.reset();
+    state.selected = value.selected; state.note = RESTART_NOTE; if (changed) { state.connected = false; state.lastNote = null; } decoder.reset();
     if (changed) child?.stdin.write(`${JSON.stringify({ id: state.selected })}\n`);
     if (configFile) {
       const saved = JSON.stringify({ selected: state.selected, note: state.note });

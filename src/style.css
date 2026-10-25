@@ -223,3 +223,4 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
   .canvas-tools button svg { width: 14px; height: 14px; }
 }
 .orientation-details button { white-space: nowrap; }
+#midi-note { display: block; padding: 8px 10px; border: 1px solid #444; border-radius: 4px; color: #eee; background: #2d2d2d; font-size: 12px; }

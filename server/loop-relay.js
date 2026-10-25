@@ -185,6 +185,6 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     } catch (error) { json(response, 400, { error: error.message }); }
   };
   handler.restartFromMidi = restartFromMidi;
-  handler.dispose = () => { midiInput?.dispose(); clearInterval(heartbeat); clearInterval(expiry); clearInterval(lineTicker); for (const response of clients) response.end(); clients.clear(); };
+  handler.dispose = () => { midiInput?.dispose(); clearInterval(heartbeat); clearInterval(expiry); clearInterval(lineTicker); for (const response of clients) response.end(); clients.clear(); return writes; };
   return handler;
 }
