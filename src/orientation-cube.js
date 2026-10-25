@@ -10,11 +10,11 @@ const faces = [
 ];
 export function setupOrientationCube(parent, { getView, onChange, onStart, onFinish }) {
   const root = document.createElement('div'); root.className = 'orientation-control'; root.setAttribute('aria-label', '3D view orientation');
-  root.innerHTML = '<svg viewBox="0 0 132 122" class="orientation-cube" tabindex="0" role="button" aria-label="Rotate 3D view" aria-describedby="cube-help"></svg><output class="orientation-readout"></output><div class="orientation-actions"><button type="button" aria-label="Front view">前</button><button type="button" aria-label="Isometric view">3D</button><button type="button" aria-label="Top view">上</button><button type="button" aria-label="Right view">右</button></div><span id="cube-help" class="sr-only">Drag with one finger. Arrow keys tilt; Shift and arrows rotate. Home returns to front.</span>';
+  root.innerHTML = '<svg viewBox="0 0 132 122" class="orientation-cube" tabindex="0" role="button" aria-label="Rotate 3D view" aria-describedby="cube-help"></svg><div class="orientation-details"><button type="button" aria-label="Front view">正面</button><output class="orientation-readout"></output></div><span id="cube-help" class="sr-only">Drag with one finger. Arrow keys orbit; Shift and arrows rotate. Home returns to front.</span>';
   parent.append(root);
   const svg = root.querySelector('svg'); let drag = null;
   const pose = updates => { onStart(); onChange(canvasView({ ...getView(), pitch: 0, yaw: 0, rotation: 0, ...updates })); onFinish(); };
-  for (const [i, button] of [...root.querySelectorAll('button')].entries()) button.addEventListener('click', () => pose([{}, { pitch: -25, yaw: -35 }, { pitch: -60 }, { yaw: -60 }][i]));
+  root.querySelector('button').addEventListener('click', () => pose({}));
   svg.addEventListener('pointerdown', event => {
     if (drag || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation(); onStart();
@@ -31,7 +31,6 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
     if (!drag || event.pointerId !== drag.id) return;
     const current = drag; drag = null;
     if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
-    if (event.type === 'pointerup' && !current.moved && current.face !== undefined) onChange(canvasView({ ...getView(), pitch: 0, yaw: 0, rotation: 0, ...faces[Number(current.face)].pose }));
     onFinish();
   };
   for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) svg.addEventListener(name, finish);

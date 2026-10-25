@@ -13,7 +13,7 @@ test('relay clocks use server time rather than the editor device wall clock', ()
   const clock = new LoopClock(100, 6000);
   const state = validateSnapshot({ project, playback: playbackSnapshot(clock, 2600) }, 100000);
   assert.equal(state.playback.anchor, 97500);
-  assert.equal(outputPhase(state, 104000), 500);
+  assert.equal(outputPhase(state, 104000), 6500);
   state.playback.playing = false; assert.equal(outputPhase(state, 104000), 2500);
   assert.throws(() => validateSnapshot({ project, playback: { playing: true, phase: NaN } }, 100000));
 
@@ -29,7 +29,7 @@ test('shared state reaches isolated browsers, persists on disk, and rejects malf
     const snapshot = { project, playback: { playing: false, phase: 1500 } };
     assert.equal((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snapshot) })).status, 200);
     const received = await (await fetch(url)).json(); assert.equal(received.state.playback.phase, 1500);
-    assert.deepEqual(received.state.project, project);
+    assert.deepEqual(received.state.project, { ...project, duration: 16000 });
     assert.equal((await (await fetch(`${url}?since=${received.version}`)).json()).state, null);
     assert.equal(JSON.parse(await readFile(file, 'utf8')).playback.phase, 1500);
     assert.equal((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' })).status, 400);

@@ -19,7 +19,7 @@ test('two-finger pinch keeps its anchor, pans with the midpoint and reserves the
   assert.equal(pinch.move(2, { x: 900, y: 300 }), null);
   assert.equal(pinch.up(2), true); assert.equal(pinch.blocked, false);
   pinch.down(1, { x: 400, y: 300 }, DEFAULT_VIEW); pinch.down(2, { x: 600, y: 300 }, DEFAULT_VIEW);
-  assert.deepEqual(pinch.move(2, { x: 500, y: 300 }), { scale: .5, x: 0, y: 0 });
+  assert.deepEqual(pinch.move(2, { x: 500, y: 300 }), { scale: .5, x: 0, y: -120 });
 });
 
 test('zoom limits and reset remain valid and preserve drawing coordinates', () => {
@@ -56,13 +56,13 @@ test('UHD painting bounds keep the Full HD default and clamp every zoom and pan'
   assert.deepEqual(CANVAS_SPEC, { width: 3840, height: 2160 });
   assert.deepEqual([VIEWPORT_WIDTH, VIEWPORT_HEIGHT], [1920, 1080]);
   assert.deepEqual([MIN_ZOOM, MAX_ZOOM], [.5, 5]);
-  assert.deepEqual(viewBounds(.5), { minX: 0, minY: 0, maxX: 0, maxY: 0 });
-  assert.deepEqual(canvasView({ scale: 8, x: 99999, y: -99999 }), { scale: 5, x: 0, y: -9720 });
-  assert.deepEqual(canvasView({ scale: .1, x: -500, y: 400 }), { scale: .5, x: 0, y: 0 });
+  assert.deepEqual(viewBounds(.5), { minX: 0, minY: -330, maxX: 0, maxY: 330 });
+  assert.deepEqual(canvasView({ scale: 8, x: 99999, y: -99999 }), { scale: 5, x: 0, y: -13020 });
+  assert.deepEqual(canvasView({ scale: .1, x: -500, y: 400 }), { scale: .5, x: 0, y: 330 });
   for (const scale of [.5, .75, 1, 1.5, 2]) for (const destination of [{ x: -99999, y: -99999 }, { x: 99999, y: 99999 }]) {
     const view = zoomAt(DEFAULT_VIEW, scale, { x: 600, y: 400 }, destination); validateView(view);
     const top = screenToWorld({ x: 0, y: 0 }, view), bottom = screenToWorld({ x: 1920, y: 1080 }, view);
-    assert.ok(top.x >= 0 && top.y >= 0 && bottom.x <= 3840 && bottom.y <= 2160);
+    assert.ok(top.x >= 0 && top.y >= -660 && bottom.x <= 3840 && bottom.y <= 2820);
   }
   for (const view of [{ scale: .49, x: 0, y: 0 }, { scale: 5.01, x: 0, y: 0 }, { scale: 1, x: 1, y: 0 }, { scale: 1, x: -1921, y: 0 }, { scale: .5, x: -1, y: 0 }]) assert.throws(() => validateView(view));
   assert.deepEqual(screenToWorld({ x: 1920, y: 1080 }, DEFAULT_VIEW), { x: 2880, y: 1620 });
@@ -92,7 +92,7 @@ test('former UHD top-left default migrates once; a versioned deliberate pan is p
   const view = { scale: 1, x: 0, y: 0 }, old = { version: 1, canvas: CANVAS_SPEC, duration: 10000, clips: [], settings: { view } };
   const migrated = normalizeProject(old);
   assert.deepEqual(migrated.settings.view, DEFAULT_VIEW);
-  assert.equal(migrated.settings.viewVersion, 3);
+  assert.equal(migrated.settings.viewVersion, 4);
   const panned = normalizeProject({ ...migrated, settings: { ...migrated.settings, view } });
   assert.deepEqual(panned.settings.view, view);
   assert.deepEqual(parseProject(serializeProject(panned, { playing: false, phase: 0 })).project.settings.view, view);

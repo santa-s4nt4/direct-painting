@@ -9,7 +9,7 @@ const outputPort = Number(process.env.DIRECT_PAINTING_OUTPUT_PORT || 5181);
 
 function outputs() {
   async function attach(server) {
-    const relay = await createLoopRelay(process.env.DIRECT_PAINTING_CACHE_FILE || resolve(server.config.root, '.direct-painting/loop.json'));
+    const relay = await createLoopRelay(process.env.DIRECT_PAINTING_CACHE_FILE || resolve(server.config.root, '.direct-painting/loop.json'), { midi: true });
     server.httpServer.once('close', () => relay.dispose());
     server.middlewares.use((request, response, next) => { relay(request, response, next).catch(next); });
     server.middlewares.use((request, response, next) => {
@@ -46,7 +46,7 @@ function outputs() {
 
 export default defineConfig({
   plugins: [outputs()],
-  build: { rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), renderChecks: resolve(import.meta.dirname, 'benchmarks/render.html'), trail: resolve(import.meta.dirname, 'benchmarks/trail.html') } } },
+  build: { rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), renderChecks: resolve(import.meta.dirname, 'benchmarks/render.html'), trail: resolve(import.meta.dirname, 'benchmarks/trail.html'), volume: resolve(import.meta.dirname, 'benchmarks/volume.html') } } },
   server: { host: '0.0.0.0', port: editorPort, strictPort: true, hmr: { clientPort: editorPort }, watch: { ignored: ['**/.direct-painting/**'] } },
   preview: { host: '0.0.0.0', port: 4180, strictPort: true },
 });

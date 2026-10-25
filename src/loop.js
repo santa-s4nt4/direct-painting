@@ -1,3 +1,4 @@
+import { validatePlane, insideBox, pointInSpace, BOX_SPEC } from './space.js';
 import { MAX_BRUSH_SIZE } from './canvas.js';
 import { validateEffects, validateRingWidth } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
@@ -7,7 +8,8 @@ import { layerVariants, EYE_FIELDS } from './layers.js';
 import { validateP5Source } from './p5-motion.js';
 import { hasColorGradient, colorAtTime } from './color.js';
 
-export const DEFAULT_LOOP_MS = 10000;
+export { LOOP_MS as DEFAULT_LOOP_MS } from './transport.js';
+import { LOOP_MS as DEFAULT_LOOP_MS } from './transport.js';
 
 export class LoopClock {
   constructor(now = 0, duration = DEFAULT_LOOP_MS) { this.duration = duration; this.origin = now; this.held = 0; this.playing = true; }
@@ -17,6 +19,12 @@ export class LoopClock {
   restart(now) { this.seek(0, now); }
   seek(phase, now) { this.held = ((phase % this.duration) + this.duration) % this.duration; this.origin = now - this.held; }
   resize(duration, now) { const phase = this.phase(now); this.duration = duration; this.held = phase % duration; this.origin = now - this.held; }
+}
+
+// The application clock cannot grow when layers or fades exceed the loop.
+export class FixedLoopClock extends LoopClock {
+  constructor(now = 0) { super(now, DEFAULT_LOOP_MS); }
+  resize(_duration, now) { super.resize(DEFAULT_LOOP_MS, now); }
 }
 
 export const DEFAULT_FADE_MS = 2000;
@@ -79,7 +87,7 @@ export function gestureOpacity(clip, time) {
   if (clip.mode === 'trail' || time <= clip.duration) return 1;
   return Math.max(0, 1 - (time - clip.duration) / fadeDuration(clip)) ** 2;
 }
-export function minimumLoop(clips) { return Math.max(1000, ...clips.flatMap(layerVariants).map(playbackLength)); }
+export function minimumLoop(clips) { return Math.max(1000, ...clips.flatMap(layerVariants).flatMap(clip=>[playbackLength(clip),...(clip.lineMarkers??[]).map(playbackLength)])); }
 
 // Keep source timing relative to its gesture, and place that gesture on the loop.
 // Taking modulo here lets a late-starting trail continue across the loop seam.
@@ -191,6 +199,7 @@ export class CachedGesture {
 
 export function validateProject(project) {
   if (!project || project.version !== 1 || !Array.isArray(project.clips)) throw new Error('Invalid local project');
+  if(project.space!==undefined&&(!project.space||Object.keys(BOX_SPEC).some(k=>project.space[k]!==BOX_SPEC[k])))throw new Error('Invalid 3D canvas space');
   const ids = new Set();
   const clips = project.clips.map(clip => {
     if (!clip || typeof clip.id !== 'string' || ids.has(clip.id) || !['trail', 'return', 'move', 'place', 'line'].includes(clip.mode) || !/^#[0-9a-f]{6}$/i.test(clip.color) || !Array.isArray(clip.samples) || !clip.samples.length || !Array.isArray(clip.targets) || !clip.targets.length || clip.targets.length > 2 || clip.targets.some(index => index !== 0 && index !== 1) || !Number.isFinite(clip.duration) || clip.duration < 0) throw new Error('Invalid cached gesture');
@@ -205,7 +214,13 @@ export function validateProject(project) {
       if (clip.mode === 'place') throw new Error('p5 motion cannot be a placed shape');
     }
     if (clip.opacity !== undefined && (!Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) throw new Error('Invalid layer opacity');
-    validateEffects(clip.effects); validateRingWidth(clip.ringWidth);
+    validateEffects(clip.effects); validateRingWidth(clip.ringWidth); validatePlane(clip.plane);
+    if(clip.origin!==undefined&&(!Array.isArray(clip.origin)||clip.origin.length!==3||!insideBox(clip.origin)))throw new Error('Invalid drawing plane origin');
+    if(clip.points3D!==undefined&&(clip.mode!=='line'||!Array.isArray(clip.points3D)||clip.points3D.length!==clip.samples.length||clip.points3D.some(p=>!Array.isArray(p)||p.length!==3||!insideBox(p))))throw new Error('Invalid spatial line points');
+    if(clip.lineMarkers!==undefined){
+      if(clip.mode!=='line'||!Array.isArray(clip.lineMarkers)||clip.lineMarkers.length!==clip.samples.length||clip.lineMarkers.some(m=>m.mode!=='move'||m.shape!=='ring'||m.lineMarkers!==undefined))throw new Error('Invalid line ring markers');
+      for(const marker of clip.lineMarkers)validateProject({version:1,duration:project.duration,clips:[marker]});
+    }
     const start = clip.start ?? 0;
     if (clip.shape !== undefined && !['circle', 'rect', 'ring', 'rect-ring'].includes(clip.shape)) throw new Error('Invalid shape');
     if (clip.angle !== undefined && (!Number.isFinite(clip.angle) || Math.abs(clip.angle) > 360)) throw new Error('Invalid angle');
@@ -239,6 +254,7 @@ export function validateProject(project) {
     let previous = -1;
     for (const sample of clip.samples) {
       if (!sample || !['x', 'y', 'size', 't'].every(key => Number.isFinite(sample[key])) || sample.size < 1 || sample.size > MAX_BRUSH_SIZE || sample.t < previous || sample.t < 0 || sample.t > clip.duration) throw new Error('Invalid gesture samples');
+      if(clip.plane&&!insideBox(pointInSpace(sample,clip.plane,clip.origin)))throw new Error('Sample exceeds 3D canvas');
       for (const key of ['active', 'step']) if (sample[key] !== undefined && (typeof sample[key] !== 'boolean' || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       for (const key of ['opacity', 'colorProgress']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1 || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       if (sample.color !== undefined && (typeof sample.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(sample.color) || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error('Invalid sample color');

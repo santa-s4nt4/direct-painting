@@ -20,7 +20,7 @@ test('IN and OUT trim non-destructively while keeping retained frames at their l
 });
 
 test('trim playback remains aligned across the loop seam and when shortening the global loop', () => {
-  const edited = trimGesture(trimGesture(source({ start: 9700 }), 'in', 500), 'out', 1400);
+  const edited = trimGesture(trimGesture(source({ start: 9700 }), 'in', 500, 10000), 'out', 1400, 10000);
   assert.equal(edited.start, 200); assert.equal(gestureTime(edited, 400, 10000), 700); assert.equal(gestureVisible(edited, 150, 10000), false); assert.equal(gestureVisible(edited, 1099, 10000), true); assert.equal(gestureVisible(edited, 1100, 10000), false);
   assert.equal(minimumLoop([edited]), 1000);
   assert.equal(gestureTime(edited, 400, 1000), 700); assert.equal(gestureVisible(edited, 150, 1000), false);

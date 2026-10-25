@@ -1,3 +1,4 @@
+import { LOOP_MS } from './transport.js';
 import './output.css';
 import { frameNumber } from './timing.js';
 import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT } from './canvas.js';
@@ -10,7 +11,7 @@ document.querySelector('#app').innerHTML = `<canvas id="output" width="${VIEWPOR
 const scene = createPaintingRenderer(document.querySelector('#output'));
 let snapshot = null, version = -1, liveVersion = -1, serverTime = 0, calibratedAt = performance.now(), renderedAt = -Infinity;
 let calibrated = false, connectedStream = false, polling = false, pollTimer;
-scene.setProject({ clips: [], duration: 10000 }); scene.draw(0, 0);
+scene.setProject({ clips: [], duration: LOOP_MS }); scene.draw(0, 0);
 function apply(update, now) {
   if (!calibrated && Number.isFinite(update.serverNow)) { serverTime = update.serverNow; calibratedAt = now; }
   if (update.state && update.version >= version) { snapshot = update.state; scene.setProject(snapshot.project); version = update.version; renderedAt = -Infinity; }

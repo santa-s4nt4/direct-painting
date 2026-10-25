@@ -11,7 +11,7 @@ test('relay reveals a completed line next loop without an editor, rejects stale 
   const server=createServer((req,res)=>handler(req,res,()=>{res.writeHead(404);res.end();}));await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base=`http://127.0.0.1:${server.address().port}`;
   const line={id:'line',mode:'line',color:'#ffffff',targets:[0],enabled:true,duration:0,start:20,fadeMs:100,ringWidth:5,linePending:true,lineIncomplete:false,samples:[{x:100,y:100,size:64,t:0},{x:200,y:100,size:64,t:0}]};
-  const snapshot={project:{version:1,duration:200,clips:[line]},playback:{playing:true,phase:40}};
+  const snapshot={project:{version:1,duration:200,clips:[line]},playback:{playing:true,phase:15940}};
   const post=async value=>assert.equal((await fetch(base+'/api/loop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)})).status,200);
   const state=async()=>(await(await fetch(base+'/api/loop')).json()).state;
   const waitUntil=async predicate=>{for(let i=0;i<100;i++){const s=await state();if(predicate(s))return s;await new Promise(r=>setTimeout(r,10));}assert.fail('Line gate did not release');};

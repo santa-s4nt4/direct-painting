@@ -50,9 +50,9 @@ test('old independent edge colors are removed when importing both common and sco
   }
 });
 
-test('new timelines default to ten seconds and explicit project lengths remain editable', () => {
-  assert.equal(DEFAULT_LOOP_MS, 10000); assert.equal(new LoopClock().duration, 10000);
-  assert.equal(normalizeProject({ version: 1, clips: [] }).duration, 10000);
-  assert.equal(normalizeProject({ version: 1, duration: 6000, clips: [] }).duration, 6000);
+test('application timelines are always sixteen seconds, including legacy imports', () => {
+  assert.equal(DEFAULT_LOOP_MS, 16000); assert.equal(new LoopClock().duration, 16000);
+  assert.equal(normalizeProject({ version: 1, clips: [] }).duration, 16000);
+  assert.equal(normalizeProject({ version: 1, duration: 6000, clips: [] }).duration, 16000);
   assert.equal(normalizeProject({ version: 1, clips: [], settings: { followDirection: true } }).settings.followDirection, false);
 });

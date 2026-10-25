@@ -190,13 +190,25 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
 @media (max-width: 1100px) { .view-tools { gap: 5px; }.view-tools .fps-label { display: none; } }
 @media (max-width: 600px) { .canvas-tools button { min-width: 32px; padding: 0 6px; }.canvas-tools button span { display: none; }.canvas-tools { gap: 0; }.floating-color { width: 196px; top: 8px; right: 8px; }#floating-color-panel { padding: 8px; } }
 @media (pointer: coarse) { .color-panel-toggle, .zoom-controls button { min-height: 38px; }#floating-color-panel input[type=range] { margin-top: 8px; margin-bottom: 10px; } }
-.orientation-control { position: absolute; left: 12px; bottom: 28px; width: 116px; padding: 3px; border: 1px solid #555; border-radius: 9px; background: #252525df; z-index: 4; user-select: none; -webkit-user-select: none; }
-.orientation-cube { display: block; width: 108px; height: 100px; touch-action: none; cursor: grab; }
-.orientation-cube:active { cursor: grabbing; }.orientation-cube:focus-visible { outline: 2px solid #168cff; border-radius: 6px; }
-.orientation-actions { display: flex; gap: 3px; }.orientation-actions button { flex: 1; min-width: 0; min-height: 28px; padding: 2px; font-size: 10px; background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; }
+.canvas-controls { min-height: 96px; }
+.navigation-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.orientation-control { display: flex; align-items: center; gap: 6px; min-width: 0; user-select: none; -webkit-user-select: none; }
+.orientation-cube { display: block; width: 88px; height: 82px; touch-action: none; cursor: grab; border: 1px solid #494949; border-radius: 6px; background: #282828; }
+.orientation-cube:active { cursor: grabbing; }.orientation-cube:focus-visible { outline: 2px solid #168cff; }
+.orientation-details { display: grid; gap: 6px; }
+.orientation-details button { min-height: 32px; padding: 4px 8px; background: #353535; color: #ddd; border: 1px solid #555; border-radius: 4px; font-size: 11px; }
 .angle-presets { display: flex; gap: 6px; }.angle-presets button { min-height: 32px; flex: 1; background: #353535; border: 1px solid #555; color: #ddd; border-radius: 4px; }
 .line-tool-controls { display: grid; gap: 9px; }.line-tool-controls p { color: #aaa; font-size: 11px; line-height: 1.5; margin: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (max-width: 600px) { .orientation-control { width: 88px; left: 8px; bottom: 26px; }.orientation-cube { width: 80px; height: 74px; }.orientation-actions button { min-height: 28px; } }
+@media (max-width: 800px) { .navigation-tools { gap: 3px; }.orientation-cube { width: 62px; height: 60px; }.orientation-details button { min-height: 32px; padding: 3px; font-size: 10px; }.orientation-readout { display: none !important; }.canvas-controls { min-height: 76px; gap: 3px; padding-left: 6px; padding-right: 6px; } }
+
 
 .orientation-readout { display: block; font-size: 8px; color: #aaa; text-align: center; margin-bottom: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.midi-panel { padding: 18px 16px; border-top: 1px solid var(--border, #383838); display: grid; gap: 10px; }
+.midi-panel h2 { margin: 0; font-size: 13px; }
+.midi-panel p { margin: 0; font-size: 11px; line-height: 1.6; color: #aaa; overflow-wrap: anywhere; }
+.midi-panel label { font-size: 11px; color: #ccc; }
+.midi-panel select { width: 100%; min-height: 34px; }
+.midi-panel .midi-status { color: #c9d9ec; }
+.loop-duration { display: flex; flex-direction: column; gap: 3px; white-space: nowrap; font-size: 10px; }

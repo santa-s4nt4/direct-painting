@@ -1,7 +1,9 @@
+import { setupMidiPanel } from './midi-panel.js';
+import { BOX_SPEC, workingPlane, drawingPoint, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
 import { LineSchedule } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
-import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, screenToWorld, worldToScreen, zoomAt, PinchGesture } from './view.js';
+import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, zoomAt, PinchGesture } from './view.js';
 import './style.css';
 import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
 import { FPS, FRAME_MS, frameNumber } from './timing.js';
@@ -10,7 +12,7 @@ import { brushSize, canvasPoint, timestamp } from './drawing.js';
 import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
 import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, MAX_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
-import { LoopClock, DEFAULT_LOOP_MS, minimumLoop, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
+import { FixedLoopClock, DEFAULT_LOOP_MS, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
 import { createPublisher, createLivePublisher, createViewPublisher, playbackSnapshot } from './relay.js';
 import { loadProject, saveProject } from './cache.js';
 import { DEFAULT_SETTINGS, MAX_PROJECT_BYTES, normalizeProject, singleCanvasProject, serializeProject, parseProject } from './project.js';
@@ -61,7 +63,7 @@ document.querySelector('#app').innerHTML = `
         </div>
         <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="${MAX_RING_WIDTH}" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
         <div class="control-section" id="rectangle-controls" hidden>
-          ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 100 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
+          ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
           <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div><div class="angle-presets"><button type="button" data-draw-angle="0">0°</button><button type="button" data-draw-angle="45">45°</button></div>
         </div>
         <div id="line-tool-controls" class="line-tool-controls" hidden><p id="line-hint">Tap the first point, then the second point.</p><div class="effect-value"><label for="line-width">Width</label><input id="line-width" type="number" min="1" max="1500" step="1" value="5" aria-label="Line width in pixels"><span>px</span></div><button id="cancel-line" class="secondary-button" disabled>Cancel first point</button></div><div class="input-controls">
@@ -71,14 +73,14 @@ document.querySelector('#app').innerHTML = `
       </aside>
       <div class="workspace">
       <div class="canvas-pair">
-        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="4K painting canvas with Full HD viewport" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">3840 × 2160 · 4K</span><span class="canvas-state">View 1920 × 1080</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
+        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="3D box painting canvas with Full HD viewport" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">3840 × 3480 × 3480 · 3D</span><span class="canvas-state">View 1920 × 1080</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
       </div>
         <div class="loop-controls">
           <span class="section-label">LOOP</span>
           <div class="playback-actions"><button id="play" class="secondary-button" aria-label="Pause loop">PAUSE</button><button id="restart" class="icon-button" aria-label="Restart loop" title="Restart loop">↺</button></div>
-          <div class="loop-duration"><label for="loop-duration">LENGTH</label><input id="loop-duration" type="number" min="1" step="0.5" value="${DEFAULT_LOOP_MS / 1000}" inputmode="decimal" aria-label="Loop length in seconds"><span>s</span></div>
-          <input id="loop-progress" class="loop-progress" type="range" min="0" max="${DEFAULT_LOOP_MS - 1}" step="1" value="0" aria-label="Loop position" aria-valuetext="0.00 of 10.00 seconds" title="Seek to pause and choose the start time.">
-          <span id="loop-time" class="time-readout">0.00 / 10.00s</span>
+          <div class="loop-duration" aria-label="Fixed timeline: 120 BPM, 8 bars, 16 seconds"><span>120 BPM</span><span>8 BARS · 16s</span></div>
+          <input id="loop-progress" class="loop-progress" type="range" min="0" max="${DEFAULT_LOOP_MS - 1}" step="1" value="0" aria-label="Loop position" aria-valuetext="0.00 of 16.00 seconds" title="Seek to pause and choose the start time.">
+          <span id="loop-time" class="time-readout">0.00 / 16.00s</span>
         </div>
       <div class="workspace-bottom">
         <section class="layers-panel" aria-label="Motion layer selection">
@@ -106,7 +108,7 @@ const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backe
   if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
 } });
 const canvases = [painting.canvas];
-const paintingBoundary = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); paintingBoundary.classList.add('painting-boundary'); paintingBoundary.setAttribute('viewBox', `0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`); paintingBoundary.setAttribute('aria-hidden', 'true'); paintingBoundary.innerHTML = '<polygon fill="none" stroke="#555" stroke-width="1" vector-effect="non-scaling-stroke" />';
+const paintingBoundary = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); paintingBoundary.classList.add('painting-boundary'); paintingBoundary.setAttribute('viewBox', `0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`); paintingBoundary.setAttribute('aria-hidden', 'true'); paintingBoundary.innerHTML = '';
 canvases[0].after(paintingBoundary);
 const layers = [{ circle: null, lastFrame: -Infinity }];
 const state = { ...DEFAULT_SETTINGS, effects: { ...DEFAULT_EFFECTS }, view: { ...DEFAULT_VIEW } };
@@ -114,35 +116,47 @@ let colorContext = { id: null, field: 'fill' }, refreshSelectedLayer = () => {};
 const colorPanel = setupColorPanel($('.canvas-stage'), { onChange: editFloatingColor, onVisibility: visible => { state.colorPanelVisible = visible; queueSave(); } });
 let stroke = null, trimDrag = null, toastTimer, dirty = false, selectedLayerId = null;
 const layerDisclosure = new Map();
-const clock = new LoopClock(performance.now());
+const clock = new FixedLoopClock(performance.now());
 const scene = painting;
 const history = new EditHistory();
 let clips = [], ready = false, cacheTimer, saveQueue = Promise.resolve(), revision = 0;
 let cacheFailed = false;
 const liveSession = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let liveRevision = 0, viewRevision = 0;
+let transportState = null;
 const pinch = new PinchGesture();
 const lineSchedule = new LineSchedule();
-let lineTap = null;
 let zoomSaveTimer, viewDirty = false;
 $('.sidebar-scroll').inert = true; $('.loop-controls').inert = true;
 const outputStatus = connected => { $('#output-status').textContent = connected ? 'Live output connected' : 'Output offline'; $('#output-status').dataset.connected = String(connected); };
-const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, clips, duration: clock.duration, settings: state }, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
+const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, clips, duration: clock.duration, settings: state }, transportState, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
 const livePublisher = createLivePublisher(from => {
   if (!stroke) return null;
   const elapsed = Math.max(performance.now() - stroke.started, stroke.samples.at(-1).t);
   const circle = layers[stroke.targets[0]].circle;
   if (circle) circle.update(performance.now());
-  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
+  return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, plane: stroke.plane, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
 }, outputStatus);
 
 const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view }), outputStatus);
-const orientation = setupOrientationCube(canvases[0].parentElement, { getView: () => state.view, onChange: view => { if (ready) changeView(view); }, onStart: () => { lineTap = null; endStroke(null); }, onFinish: () => { if (ready) finishView(); } });
+const orientation = setupOrientationCube($('.navigation-tools'), { getView: () => state.view, onChange: view => { if (ready) changeView(view); }, onStart: () => { endStroke(null); }, onFinish: () => { if (ready) finishView(); } });
 
-function fitLoop() {
-  const required = Math.ceil(minimumLoop(clips) / 500) * 500;
-  if (clock.duration < required) clock.resize(required, performance.now());
+let pendingTransport = null;
+function receiveTransport(token, playback, serverNow, latency = 0) {
+  const changed = !transportState || token.epoch !== transportState.epoch || token.revision > transportState.revision;
+  if (!changed) return;
+  transportState = token;
+  if (!playback || token.revision === 0) return;
+  if (!ready) { pendingTransport = { token, playback, serverNow, latency, received:performance.now() }; return; }
+  endStroke(null);
+  clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending:false } : c);
+  const now = performance.now(), phase = playback.playing ? serverNow - playback.anchor + latency : playback.phase;
+  clock.seek(phase, now); if (playback.playing) clock.play(now); else clock.pause(now);
+  lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
+  rebuildCache(); playbackUI(); renderTargets([0],now,true); queueSave(false,false);
 }
+setupMidiPanel($('#files-panel'), receiveTransport);
+
 const trimTrackObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
   for (const { target } of entries) {
     const handles = target.querySelectorAll('.layer-trim-handle');
@@ -225,7 +239,7 @@ function rebuildCache() {
     const update = (edit, rebuild = false, dragging = false) => {
       if (stroke || trimDrag && !dragging) return;
       clips = clips.map(item => item.id === clip.id ? editLayer(item, scope(), value => fitGestureTrim(edit(value), clock.duration)) : item);
-      fitLoop();
+
       if (rebuild) rebuildCache();
       else { scene.setProject({ clips, duration: clock.duration }); sync.forEach(fn => fn()); }
       playbackUI(); renderTargets([0], performance.now(), true); queueSave();
@@ -502,7 +516,6 @@ document.addEventListener('keydown', event => {
 function playbackUI() {
   $('#play').textContent = clock.playing ? 'PAUSE' : 'PLAY';
   $('#play').setAttribute('aria-label', clock.playing ? 'Pause loop' : 'Play loop');
-  $('#loop-duration').value = (clock.duration / 1000).toFixed(1).replace(/\.0$/, '');
   $('#loop-progress').max = clock.duration - 1;
   timelineUI(performance.now());
 }
@@ -542,12 +555,9 @@ function flushSave() {
 function cacheStroke(current, now) {
   const duration = Math.max(now - current.started, current.samples.at(-1).t);
   if (current.samples.at(-1).t < duration) current.samples.push({ ...current.last, t: duration });
-  clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, angle: current.angle, followDirection: false, color: current.color, opacity: current.opacity, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
-  const required = Math.ceil(minimumLoop(clips) / 1000) * 1000;
-  if (clock.duration < required) {
-    clock.resize(required, now);
-    clock.seek(current.start + duration, now);
-  }
+  if (current.tool === 'line') cacheLineGesture(current, duration);
+  else clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, plane: current.plane, angle: current.angle, followDirection: false, color: current.color, opacity: current.opacity, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
+  lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   $('.canvas-empty').hidden = true;
   current.targets.forEach(index => { layers[index].circle = null; });
   rebuildCache(); playbackUI(); queueSave();
@@ -565,7 +575,7 @@ function selectCanvas() {
 function setSync() { state.sync = false; selectCanvas(); }
 function setMode(mode, restoring = false) {
   if (!modes.includes(mode) || !restoring && (!ready || trimDrag)) return;
-  endStroke(null); lineTap = null;
+  endStroke(null);
   state.mode = mode; syncShapeUI(); syncLineUI();
   $('.studio').dataset.mode = mode;
   shell.setMode(mode);
@@ -600,14 +610,15 @@ function animate(now) {
 renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas) {
   const pressure = state.pressure && event.pointerType === 'pen' ? (Number.isFinite(event.pressure) ? Math.max(0, Math.min(1, event.pressure)) : 0.5) : 1;
-  const geometry = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? { shape: state.shape, ringWidth: state.ringWidth, width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
-  return { ...screenToWorld(canvasPoint(event, canvas.getBoundingClientRect()), state.view), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
+  const geometry = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? { shape: state.shape, ringWidth: state.ringWidth, width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.mode === 'line' || state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
+  return { ...drawingPoint(canvasPoint(event, canvas.getBoundingClientRect()), state.view), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
 }
 function drawPoint(pointValue) {
   if (stroke.mode === 'move') layers[0].circle.setTarget(pointValue);
   dirty = true;
 }
 function samplePoint(next) {
+  if (!insideBox(pointInSpace(next,stroke.plane))) return;
   if (['rect', 'rect-ring'].includes(stroke.shape)) next = { ...next, angle: stroke.angle, heading: 0 };
   drawPoint(next);
   stroke.last = next;
@@ -615,7 +626,7 @@ function samplePoint(next) {
 }
 function endStroke(event) {
   if (!stroke || (event && event.pointerId !== stroke.pointerId)) return;
-  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...screenToWorld(canvasPoint(event, stroke.canvas.getBoundingClientRect()), state.view) });
+  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...drawingPoint(canvasPoint(event, stroke.canvas.getBoundingClientRect()), state.view) });
   const current = stroke; stroke = null; liveRevision++;
   if (current.canvas.hasPointerCapture(current.pointerId)) current.canvas.releasePointerCapture(current.pointerId);
   const now = performance.now(); cacheStroke(current, now);
@@ -628,7 +639,7 @@ function syncViewUI() {
   $('.canvas-state').textContent = `View ${Math.round(Math.min(CANVAS_SPEC.width, VIEWPORT_WIDTH / state.view.scale))} × ${Math.round(Math.min(CANVAS_SPEC.height, VIEWPORT_HEIGHT / state.view.scale))}`;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
   orientation.update(state.view);
-  paintingBoundary.querySelector('polygon').setAttribute('points', [{x:0,y:0},{x:CANVAS_SPEC.width,y:0},{x:CANVAS_SPEC.width,y:CANVAS_SPEC.height},{x:0,y:CANVAS_SPEC.height}].map(p => { const q = worldToScreen(p,state.view); return `${q.x},${q.y}`; }).join(' '));
+  paintingBoundary.innerHTML = boxEdges(state.view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
   painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
 }
 function changeView(view) {
@@ -636,7 +647,6 @@ function changeView(view) {
 }
 function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
 function cancelTouchStroke() {
-  if (lineTap?.pointerType === 'touch') { if (!lineTap.wasPlaying) { const now = performance.now(); clock.seek(lineTap.phase, now); clock.pause(now); playbackUI(); publisher.publish(true); } lineTap = null; }
   if (!stroke || stroke.pointerType !== 'touch') { endStroke(null); return; }
   const current = stroke; stroke = null; liveRevision++;
   current.targets.forEach(index => layers[index].circle = null);
@@ -656,11 +666,10 @@ canvases.forEach((canvas, index) => {
     }
     if (!ready || stroke || trimDrag || event.button !== 0) return;
     const startPoint = point(event, canvas);
-    if (!Number.isFinite(startPoint.x) || !Number.isFinite(startPoint.y) || startPoint.x < 0 || startPoint.y < 0 || startPoint.x >= CANVAS_SPEC.width || startPoint.y >= CANVAS_SPEC.height) return;
+    if (!insideBox(pointInSpace(startPoint, workingPlane(state.view)))) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
-    if (state.mode === 'line') { const contact = performance.now(), wasPlaying = clock.playing; clock.play(contact); playbackUI(); publisher.publish(); lineTap = { wasPlaying, phase: clock.phase(contact), id: event.pointerId, pointerType: event.pointerType, point: startPoint, screen: { x: event.clientX, y: event.clientY } }; return; }
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, mode: state.mode, shape: state.shape, ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(state.view), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
     history.endGroup(); historyUI();
     if (stroke.mode === 'move') {
@@ -675,16 +684,15 @@ canvases.forEach((canvas, index) => {
       if (view) changeView(view);
       if (pinch.blocked || !state.touch) { event.preventDefault(); return; }
     }
-    if (lineTap?.id === event.pointerId && Math.hypot(event.clientX - lineTap.screen.x, event.clientY - lineTap.screen.y) > 12) lineTap = null;
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
     const scale = canvas.getBoundingClientRect().width / VIEWPORT_WIDTH * state.view.scale;
-    const cursorScreen = worldToScreen(cursorPoint, state.view);
+    const cursorScreen = projectSpace(pointInSpace(cursorPoint, workingPlane(state.view)), state.view);
     cursor.style.left = `${cursorScreen.x / VIEWPORT_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / VIEWPORT_HEIGHT * 100}%`;
     cursor.style.width = `${Math.max(3, (cursorPoint.width ?? cursorPoint.size) * scale)}px`;
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
-    cursor.style.borderRadius = ['rect', 'rect-ring'].includes(state.shape) ? '0' : '50%';
-    cursor.style.transform = `translate(-50%, -50%) rotate(${(cursorPoint.angle ?? 0) + (state.view.rotation ?? 0)}deg)`;
+    cursor.style.borderRadius = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? '0' : '50%';
+    cursor.style.transform = `translate(-50%, -50%) rotate(${cursorPoint.angle ?? 0}deg)`;
     if (!stroke || event.pointerId !== stroke.pointerId) return;
     event.preventDefault();
     const coalesced = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
@@ -693,7 +701,6 @@ canvases.forEach((canvas, index) => {
   });
   const finishPointer = event => {
     if (event.pointerType === 'touch' && pinch.up(event.pointerId)) { if (!pinch.points.size) finishView(); return; }
-    if (lineTap?.id === event.pointerId) { const tap = lineTap; lineTap = null; if (event.type === 'pointerup') recordLinePoint(tap.point, tap.phase); }
     endStroke(event);
   };
   canvas.addEventListener('pointerup', finishPointer); canvas.addEventListener('pointercancel', finishPointer); canvas.addEventListener('lostpointercapture', finishPointer);
@@ -723,9 +730,9 @@ function updateSize(bound, rawValue) {
   $(`#size-${bound}`).addEventListener('change', syncSizeUI);
 });
 function syncShapeUI() {
-  $('#shape').value = state.shape;
+  $('#shape').value = state.mode === 'line' ? 'ring' : state.shape;
   $('#line-tool-controls').hidden = state.mode !== 'line';
-  $('#circle-controls').hidden = state.mode === 'line' || ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode === 'line' || !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
+  $('#circle-controls').hidden = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode !== 'line' && !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.mode === 'line' ? 'ring' : state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
   for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) { $(`#${axis}-${bound}`).value = $(`#${axis}-range-${bound}`).value = state[`${axis}${bound}`]; }
   $('#shape-angle').value = state.angle; $('#shape').disabled = state.mode === 'line';
 }
@@ -786,14 +793,6 @@ $('#loop-progress').addEventListener('input', event => {
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#restart').addEventListener('click', () => { endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
-$('#loop-duration').addEventListener('change', event => {
-  endStroke(null);
-  const seconds = Number(event.target.value);
-  if (!Number.isFinite(seconds * 1000) || seconds <= 0) { playbackUI(); return; }
-  const minimum = Math.ceil(minimumLoop(clips) / 500) * 500;
-  clock.resize(Math.max(minimum, seconds * 1000), performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
-  if (seconds * 1000 < minimum) toast(`These layers need at least ${minimum / 1000}s to finish their motion.`);
-});
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -805,9 +804,7 @@ $('#draw-blur-radius').addEventListener('input', setBrushBlur); $('#draw-blur-ra
 function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
-  clips = clips.map(clip => editLayer(clip, 'all', item => ['return', 'move', 'line'].includes(item.mode) ? fitGestureTrim({ ...item, fadeMs: state.fadeMs }, clock.duration) : item));
-  const required = Math.ceil(minimumLoop(clips) / 500) * 500;
-  if (clock.duration < required) clock.resize(required, performance.now());
+  clips = clips.map(clip => editLayer(clip, 'all', item => ['return', 'move', 'line'].includes(item.mode) ? fitGestureTrim({ ...item, fadeMs: state.fadeMs, ...(item.lineMarkers ? {lineMarkers:item.lineMarkers.map(m=>({...m,fadeMs:state.fadeMs}))} : {}) }, clock.duration) : item));
   syncEffectsUI(); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
 }
 $('#fade-range').addEventListener('input', event => setFade(event.target.value));
@@ -826,17 +823,16 @@ function syncLineUI() {
   const draft = clips.find(c => c.mode === 'line' && c.lineIncomplete);
   $('#line-width').value = state.lineWidth;
   $('#cancel-line').disabled = !draft;
-  $('#line-hint').textContent = draft ? '2点目をタップしてください。次の周回から直線になります。' : '2点をタップ。最初はRing、次の周回の1点目の時刻に直線が現れます。';
+  $('#line-hint').textContent = draft ? '2点目を描いてください。円Ringと同じ筆圧・サイズ・フェードを使います。' : '2回入力。初回は円Ringとして描画・フェードし、次の周回から直線になります。';
 }
-function recordLinePoint(point, contactPhase) {
-  const now = performance.now(); clock.play(now); playbackUI();
-  const p = { x: point.x, y: point.y, size: Math.max(64, Math.min(160, point.size)), pressure: point.pressure, t: 0 };
-  const draft = clips.find(c => c.mode === 'line' && c.lineIncomplete);
-  history.endGroup();
-  if (draft) clips = clips.map(c => c.id === draft.id ? { ...c, samples: [c.samples[0], p], lineIncomplete: false } : c);
-  else { liveRevision++; clips = [...clips, { id: `${liveSession}-line-${liveRevision}`, mode: 'line', shape: 'circle', color: state.color, opacity: state.opacity, effects: { ...state.effects }, ringWidth: state.lineWidth, targets: [0], samples: [p], duration: 0, start: contactPhase, fadeMs: state.fadeMs, enabled: true, blendMode: 'analog', linePending: true, lineIncomplete: true }]; }
-  fitLoop(); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
-  rebuildCache(); renderTargets([0], now, true); queueSave(); publisher.publish(true);
+function cacheLineGesture(current, duration) {
+  const marker = { id: `${current.id}-ring`, mode:'move', shape:'ring', plane:current.plane, samples:current.samples, duration, start:current.start, fadeMs:state.fadeMs, ringWidth:current.ringWidth, color:current.color, opacity:current.opacity, effects:{...current.effects}, targets:[0], enabled:true, blendMode:'analog' };
+  const point = {...current.last,t:0}, world = pointInSpace(point,current.plane);
+  const draft = clips.find(c=>c.mode==='line'&&c.lineIncomplete);
+  if(draft){
+    const first = draft.lineMarkers?.[0] ?? { ...marker,id:`${draft.id}-ring-0`,plane:draft.plane,samples:[{...draft.samples[0],shape:'ring',t:0}],duration:0,start:draft.start,ringWidth:draft.ringWidth,fadeMs:draft.fadeMs };
+    clips=clips.map(c=>c.id===draft.id?{...c,samples:[c.samples[0],point],points3D:[c.points3D?.[0]??pointInSpace(c.samples[0],c.plane),world],lineMarkers:[first,marker],lineIncomplete:false}:c);
+  }else clips=[...clips,{id:`${current.id}-line`,mode:'line',shape:'circle',color:current.color,opacity:current.opacity,effects:{...current.effects},ringWidth:state.lineWidth,targets:[0],samples:[point],points3D:[world],lineMarkers:[marker],duration:0,start:current.start,fadeMs:state.fadeMs,enabled:true,blendMode:'analog',linePending:true,lineIncomplete:true}];
 }
 $('#line-width').addEventListener('input', event => { if (!event.target.value) return; state.lineWidth = Math.max(1, Math.min(MAX_RING_WIDTH, Math.round(Number(event.target.value)))); syncLineUI(); queueSave(); });
 $('#cancel-line').addEventListener('click', () => { clips = clips.filter(c => !(c.mode === 'line' && c.lineIncomplete)); rebuildCache(); renderTargets([0], performance.now(), true); queueSave(); });
@@ -848,7 +844,7 @@ function download(blob, filename) {
   // Safari may still be reading the object URL after the click.
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-function currentProject() { return { version: 1, canvas: { ...CANVAS_SPEC }, clips, duration: clock.duration, settings: state }; }
+function currentProject() { return { version: 1, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, clips, duration: clock.duration, settings: state }; }
 $('#save-project').addEventListener('click', () => {
   if (!ready) return;
   endStroke(null);
@@ -890,7 +886,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
-    lineTap = null; lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
+    lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
     viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);
     syncSizeUI(); syncShapeUI(); syncEffectsUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
@@ -914,7 +910,12 @@ async function restoreProject() {
     $('#cache-status').textContent = 'MEMORY ONLY'; cacheFailed = true;
     toast('Local cache could not be restored. You can still draw and save a project.'); console.error(error);
   } finally {
-    history.reset(currentProject()); ready = true; historyUI(); $('.sidebar-scroll').inert = false; $('.loop-controls').inert = false; clock.restart(performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); publisher.publish(true);
+    history.reset(currentProject()); ready = true; historyUI(); $('.sidebar-scroll').inert = false; $('.loop-controls').inert = false; clock.restart(performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); if (!pendingTransport) publisher.publish(true);
   }
 }
-restoreProject();
+restoreProject().then(() => {
+  if (!pendingTransport) return;
+  const { token, playback, serverNow, latency, received } = pendingTransport;
+  transportState = null; pendingTransport = null;
+  receiveTransport(token, playback, serverNow + performance.now() - received, latency);
+});

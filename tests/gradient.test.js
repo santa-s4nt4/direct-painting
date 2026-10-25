@@ -74,7 +74,7 @@ test('cached paths recolor the entire trail while scrubbing and accept B edits o
 });
 
 test('eye-specific gradients survive JSON and history and retain source timing across trim/loop seams', () => {
-  const original = clip({ start: 3500, colorGradient: { to: '#0000ff', startMs: 0, endMs: 1000 } });
+  const original = clip({ start: 15500, colorGradient: { to: '#0000ff', startMs: 0, endMs: 1000 } });
   const right = editLayer(original, '1', value => ({ ...value, colorGradient: { ...value.colorGradient, to: '#00ff00' } }));
   const state = normalizeProject(project(right)), h = new EditHistory(); h.reset(normalizeProject(project(original))); h.record(state);
   assert.equal(resolveLayer(h.undo().clips[0], 1).colorGradient.to, '#0000ff');
@@ -84,7 +84,7 @@ test('eye-specific gradients survive JSON and history and retain source timing a
   const scene = new RGBAScene(restored);
   assert.deepEqual(pixel(scene.draw(0, 0)), [128, 0, 128, 255]);
   assert.deepEqual(pixel(scene.draw(1, 0)), [128, 128, 0, 255]);
-  const trimmed = new RGBAScene(project(trimGesture(right, 'in', 400, 4000)));
+  const trimmed = new RGBAScene({ ...project(trimGesture(right, 'in', 400, 16000)), duration:16000 });
   for (const side of [0, 1]) equalPixels(trimmed.draw(side, 0), scene.draw(side, 0));
 });
 

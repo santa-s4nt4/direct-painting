@@ -83,7 +83,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   const stage = document.createElement('div'); stage.className = 'canvas-stage';
   stage.append($('.canvas-pair'));
   const controls = document.createElement('div'); controls.className = 'canvas-controls';
-  controls.innerHTML = '<button id="toggle-sidebar" class="icon-button" title="Toggle left panel" aria-label="Toggle left panel" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>';
+  controls.innerHTML = '<div class="navigation-tools"><button id="toggle-sidebar" class="icon-button" title="Toggle left panel" aria-label="Toggle left panel" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button></div>';
   const floating = document.createElement('div'); floating.className = 'canvas-tools'; floating.setAttribute('role', 'group'); floating.setAttribute('aria-label', 'Motion mode');
   floating.innerHTML = modes.map(mode => `<button data-paint-mode="${mode}" aria-label="${mode[0].toUpperCase() + mode.slice(1)} mode" aria-pressed="${mode === modes[0]}" title="${modeHints[mode]}">${icon(mode)}<span>${mode[0].toUpperCase() + mode.slice(1)}</span></button>`).join('');
   for (const button of floating.querySelectorAll('button')) button.addEventListener('click', () => onMode(button.dataset.paintMode));
@@ -92,7 +92,7 @@ export function setupEditorShell({ icon, modes, modeHints, onMode, onShape, onTa
   const view = document.createElement('div'); view.className = 'view-tools';
   view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
   view.append(fps); controls.append(floating, view);
-  const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove(); timeline.querySelector('.loop-duration label').textContent = 'Duration';
+  const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove();
   workspace.replaceChildren(stage, controls, timeline);
   studio.replaceChildren(sidebar, workspace);
   const toggle = $('#toggle-sidebar');
