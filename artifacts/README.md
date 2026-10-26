@@ -1,5 +1,13 @@
 # 画面と描画検証の記録
 
+## Camera motion（2026-10-26）
+
+- [カメラを含む実シェーダー検証](camera-shader-checks.json)：オフスクリーンGPUで17項目成功。カメラの8項目は最大RMS 0.0334／255、一部境界の最大差16／255。
+- [Camera Motion Blur ON／OFF比較](camera-motion-blur-comparison.png)：本番GLSLのGPU出力です。アプリ画面のスクリーンショットではありません。
+- [実CoreMIDI入力](camera-midi-checks.json)：頭出し・カメラの対象ノート変更・Note Off・切断を含む7項目成功。
+
+UIのイベント連携はHappy DOMで確認しています。実画面・ブラウザーWebGL2統合・iPad実機は未確認です。[操作と確認範囲](../docs/camera-motion.md)を参照してください。
+
 
 ## Motion blur（2026-10-26）
 

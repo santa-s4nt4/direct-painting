@@ -8,6 +8,8 @@ The world box is 3840×3480×3480, centered at the origin with Y down. Source co
 
 Both presentation and accumulation targets are 1920×1080. The default view shows the central Full HD region at 100%. Zoom is 50–500%; pan covers the box height, and roll/pitch/yaw wrap through a full rotation. The same functions transform input, GPU geometry, CPU projected polygons, box clipping and the editor wireframe. See `src/space.js` and `src/view.js`.
 
+`camera-view.js` positions the actual PerspectiveCamera around the origin and calls `lookAt(0,0,0)`, including roll through the up vector. The focal length remains 5000 while orbit distance can vary. `space.js` uses the same distance for projection and inverse input. An active stroke retains its input plane while the camera moves. `camera-motion.js` owns normal / rec / MIDI ADSR poses; the server shares timestamped events and recorded poses with editor/output.
+
 ## GPU passes
 
 Move circles, rectangles, outline variants and completed Lines use analytic quads with per-stroke plane transforms. They do not allocate a raster mask per saved layer. A live Move target is 1×1; actual live geometry is analytic as well. Legacy Trail/Return data retains incremental cached mask rendering for compatible playback.
@@ -15,6 +17,8 @@ Move circles, rectangles, outline variants and completed Lines use analytic quad
 Jobs are sorted by center depth and clipped against the box. Each isolated shape is composited with the official Spectral.js Analog pigment shader and premultiplied alpha. There is no separate edge color. Gaussian Blur defaults OFF (16px). Motion blur defaults ON (100% shutter = one 60Hz frame, adjustable 0–200%). Both can be toggled independently on the Draw brush or each layer. Shared quarter-resolution Gaussian scratch targets are reused across layers. Retired glitch/chromatic settings are ignored on import.
 
 Motion blur integrates 8–32 source-time samples (adaptive to motion) into the same analytic fragment shader, averages premultiplied color/alpha, then composites Analog once per layer. Expanded bounds cover the whole exposure. Translation, pressure-driven size and rectangle rotation use actual recorded geometry, including its easing; saved planes keep 3D projection correct. Stationary geometry bypasses sampling. There are no temporal framebuffer histories or per-layer render targets. The CPU fallback averages projected polygons before optional Gaussian Blur. Live input retains at most 32 displayed-head positions within a short history, cleared on stroke change; output builds the same history from transmitted heads. Scrubbing, loop restart and MIDI reset do not reuse pixels from another time.
+
+Global Camera Motion Blur defaults ON (100% shutter), separately from object Motion blur. `camera-exposure.js` combines object source times with 8–16 camera poses and their inverse plane homographies. The shader evaluates a bounded screen quad, clips samples against the world box, averages once, and composites once. Normal manual movement uses bounded pose history; rec/MIDI poses are evaluated analytically at exposure times. Camera blur needs no extra framebuffer or target per layer. CPU vector shapes average projected polygons; legacy bitmap layers retain normal playback but camera blur for those layers is GPU-only.
 
 Legacy effects without an explicit `motionBlur` flag migrate once to Blur OFF / Motion blur ON, retaining radius. Saves with the new flag retain explicit choices. See `motion-blur.js`, `motion-shader.js`, `effects.js` and the live transport.
 
@@ -35,4 +39,4 @@ The application transport is fixed at 16 seconds (120 BPM, 4/4, eight bars) and 
 
 The earlier, pre-Motion-blur spatial benchmark ([JSON](../../artifacts/volume-render-checks.json)) measured ten 1600px rectangle-ring layers, all visible with Blur16, at mean2.10ms/p95 4.00ms on this Mac Chrome. No saved masks or CPU pixel uploads were created. These are draw timings, not iPad hardware or end-to-end input latency guarantees. See [3D box notes](../../docs/box-canvas.md) and [MIDI transport](../../docs/midi-sync.md).
 
-Current verification: 159 Node tests, build success and nine offscreen shader cases (channel error at most 1). Browser automation was unavailable, so the new browser checks, UI and iPad performance remain unverified.
+Current verification: 169 Node tests (including three Happy DOM UI tests), build success, seven native CoreMIDI cases and 17 offscreen shader cases. The eight camera cases have maximum RMS error 0.0334/255, with boundary pixels differing by up to 16/255. Browser automation was unavailable, so actual layout, browser Three.js/WebGL2 integration and iPad performance remain unverified. See [camera behavior and validation](../../docs/camera-motion.md).
