@@ -1,3 +1,4 @@
+import { DEFAULT_CAMERA } from '../src/camera-motion.js';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -34,8 +35,20 @@ try {
  await post('/api/midi',{selected:id,note:24});source.stdin.write('159 24 110\n');await until(async()=>(await get('/api/midi')).triggers===2);
  snapshot=await get('/api/loop');assert.equal(snapshot.state.playback.playing,true);assert.equal(snapshot.transport.revision,2);
  report.checks.push('Note 24 on MIDI channel 16 retriggers from the beginning');
+ await post('/api/camera',{session:'native-check',revision:1,kind:'settings',camera:{...DEFAULT_CAMERA,mode:'midi-auto',note:60}});
+ const anchor=(await get('/api/loop')).state.playback.anchor;
+ source.stdin.write('145 60 100\n');await until(async()=>(await get('/api/camera')).event?.key==='2:60');
+ assert.equal((await get('/api/loop')).state.playback.anchor,anchor);assert.ok((await get('/api/midi')).receivedNotes.includes(60));
+ report.checks.push('A selected received note starts shared MIDI camera ADSR without resetting the timeline');
+ source.stdin.write('145 60 0\n');await until(async()=>(await get('/api/camera')).event?.releaseAt!==null);
+ report.checks.push('Velocity-zero Note On releases the camera envelope');
+ source.stdin.write('146 61 100\n');await until(async()=>(await get('/api/midi')).receivedNotes.includes(61));
+ await post('/api/camera',{session:'native-check',revision:2,kind:'settings',camera:{...DEFAULT_CAMERA,mode:'midi-auto',note:61}});
+ source.stdin.write('146 61 100\n');await until(async()=>(await get('/api/camera')).event?.key==='3:61');
+ report.checks.push('Changing the selected camera note changes its trigger source');
  const before=(await get('/api/midi')).triggers;source.stdin.end();await once(source,'exit');await until(async()=>!(await get('/api/midi')).connected);assert.equal((await get('/api/midi')).triggers,before);
- report.checks.push('Removing the selected source disconnects input without retriggering');
+ assert.notEqual((await get('/api/camera')).event.releaseAt,null);
+ report.checks.push('Removing the selected source disconnects input, releases the camera and does not retrigger');
  report.passed=true;
  if(process.argv[2])await writeFile(process.argv[2],JSON.stringify(report,null,2)+'\n');
  console.log(JSON.stringify(report,null,2));

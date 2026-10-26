@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-26T12:14:12.237Z",
+  "backend": "CoreMIDI",
+  "checks": [
+    "A real CoreMIDI virtual source triggers Note 24 and starts the fixed 16-second timeline",
+    "Other notes, velocity-zero Note On and Note Off keep paused playback unchanged",
+    "Note 24 on MIDI channel 16 retriggers from the beginning",
+    "A selected received note starts shared MIDI camera ADSR without resetting the timeline",
+    "Velocity-zero Note On releases the camera envelope",
+    "Changing the selected camera note changes its trigger source",
+    "Removing the selected source disconnects input, releases the camera and does not retrigger"
+  ],
+  "passed": true
+}

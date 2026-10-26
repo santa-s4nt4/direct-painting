@@ -1,3 +1,5 @@
+import { Vector3 } from 'three';
+import { DEFAULT_CAMERA,CameraSampler,cameraPose } from '../src/camera-motion.js';
 import { VolumePaintingRenderer } from '../src/render/volume.js';
 import { CPUVolumeRenderer } from '../src/render/volume-cpu.js';
 import { DEFAULT_EFFECTS } from '../src/effects.js';
@@ -34,6 +36,16 @@ run.onclick=async()=>{
   const atStart=draw(gpu,example,0);draw(gpu,example,80);check('Seeking back / MIDI-style restart leaves no prior-frame ghost',same(draw(gpu,example,0),atStart));
   const blurred=draw(gpu,example,80);draw(gpu,{...example,effects:{...DEFAULT_EFFECTS,motionBlur:false}},80);check('Turning Motion blur OFF and ON is reversible without saved masks',same(draw(gpu,example,80),blurred)&&gpu.stats.masksCreated===0);
   const gaussian=draw(gpu,{...example,effects:{...DEFAULT_EFFECTS,blur:true}},80);check('Gaussian Blur can be enabled independently alongside Motion blur',!same(gaussian,blurred));
+  const views=Array.from({length:8},(_,i)=>canvasView({...DEFAULT_VIEW,yaw:-6+i*2,pitch:-3+i,distance:5000+i*50}));
+  const cameraClip=clip({id:'camera',effects:{...DEFAULT_EFFECTS,motionBlur:false},duration:6000,samples:[{x:2200,y:1200,size:100,t:0},{x:2200,y:1200,size:100,t:6000}]});
+  gpu.setView(views.at(-1));gpu.setProject(project([cameraClip]));gpu.draw(0,80,{cameraViews:views});const cameraImage=gpu.readPixels(),cameraMean=new Float32Array(cameraImage.length);
+  for(const view of views){sharp.setView(view);const data=draw(sharp,cameraClip,80);for(let i=0;i<data.length;i++)cameraMean[i]+=data[i]/views.length;}
+  let squared=0,bad=0;for(let i=0;i<cameraImage.length;i++){const delta=Math.abs(cameraImage[i]-Math.round(cameraMean[i]));squared+=delta*delta;if(delta>2)bad++;}
+  check('Camera Motion Blur matches independent camera projections',Math.sqrt(squared/cameraImage.length)<.15&&bad<128,{rmsError:Math.sqrt(squared/cameraImage.length),channelsOver2:bad});
+  check('The actual Three.js camera looks at the origin from its orbital position',Math.abs(gpu.camera.getWorldDirection(new Vector3()).dot(gpu.camera.position.clone().normalize())+1)<1e-6&&Math.abs(gpu.camera.position.length()-5350)<1e-6);
+  const rec={config:{...DEFAULT_CAMERA,mode:'rec',track:{id:'loop',samples:[{t:0,view:DEFAULT_VIEW},{t:2000,view:views.at(-1)}]}}},sampler=new CameraSampler(),sampled=sampler.frame(rec,DEFAULT_VIEW,1000,0,0);
+  gpu.setView(sampled.view);gpu.setProject(project([cameraClip]));gpu.draw(0,1000,{cameraViews:sampled.cameraViews});const recorded=gpu.readPixels();const repeat=sampler.frame(rec,DEFAULT_VIEW,17000,0,1);gpu.setView(repeat.view);gpu.draw(0,17000,{cameraViews:repeat.cameraViews});check('Recorded camera exposure repeats on the 16-second timeline',same(recorded,gpu.readPixels()));
+  gpu.setView(DEFAULT_VIEW);sharp.setView(DEFAULT_VIEW);
   // Fast live input: history tracks the actual displayed (smoothed) head.
   gpu.setProject(project([]));sharp.setProject(project([]));const a={x:1800,y:1080,size:40,t:0},b={x:1920,y:1080,size:40,t:FRAME_MS};
   const live={...clip(),id:'live',started:0,samples:[a],last:a};gpu.setLiveStroke(live,0,a);live.samples.push(b);live.last=b;gpu.setLiveStroke(live,FRAME_MS,b);gpu.draw(0,0,{now:FRAME_MS});const liveImage=gpu.readPixels();

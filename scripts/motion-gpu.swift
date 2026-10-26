@@ -37,7 +37,13 @@ func floats(_ value:Any)->[GLfloat]{(value as! [NSNumber]).map{$0.floatValue}}
 func uniform4(_ name:String,_ values:[GLfloat]){values.withUnsafeBufferPointer{glUniform4fv(location(name),GLsizei(values.count/4),$0.baseAddress)}}
 func matrix(_ name:String,_ values:Any){floats(values).withUnsafeBufferPointer{glUniformMatrix4fv(location(name),1,GLboolean(GL_FALSE),$0.baseAddress)}}
 func render(_ test:[String:Any],_ frames:[[String:Any]],_ temporal:Bool)->[UInt8]{
- glClearColor(0,0,0,0);glClear(GLbitfield(GL_COLOR_BUFFER_BIT));glUniform2f(location("resolution"),1920,1080);matrix("projectionMatrix",test["projection"]!);matrix("modelViewMatrix",test["modelView"]!);matrix("planeMatrix",test["plane"]!);uniform4("bounds",floats(test["bounds"]!));
+ let cameraBlur=temporal && test["cameraBlur"] as? Bool == true
+ glUniform1i(location("cameraCount"),cameraBlur ? GLint(frames.count):0)
+ if cameraBlur{
+  uniform4("cameraBounds",floats(test["cameraBounds"]!));let inverse=(test["cameraInverse"] as! [[NSNumber]]).flatMap{m->[GLfloat] in [m[0],m[3],m[6],m[1],m[4],m[7],m[2],m[5],m[8]].map{$0.floatValue}}
+  inverse.withUnsafeBufferPointer{glUniformMatrix3fv(location("cameraInverse[0]"),GLsizei(frames.count),GLboolean(GL_FALSE),$0.baseAddress)}
+ }
+ glClearColor(0,0,0,0);glClear(GLbitfield(GL_COLOR_BUFFER_BIT));glUniform2f(location("resolution"),1920,1080);matrix("projectionMatrix",!temporal ? frames.last!["projection"] ?? test["projection"]! : test["projection"]!);matrix("modelViewMatrix",!temporal ? frames.last!["modelView"] ?? test["modelView"]! : test["modelView"]!);matrix("planeMatrix",test["plane"]!);uniform4("bounds",floats(test["bounds"]!));
  let shape=(test["shape"] as! NSNumber).int32Value
  func brush(_ frame:[String:Any])->[GLfloat]{let p=frame["visual"] as! [String:Any];let x=(p["x"] as! NSNumber).floatValue.rounded(),y=(p["y"] as! NSNumber).floatValue.rounded(),size=(p["size"] as! NSNumber).floatValue.rounded();return[x,y,shape==2||shape==4 ? (p["width"] as! NSNumber).floatValue:size,shape==2||shape==4 ? (p["height"] as! NSNumber).floatValue:size]}
  let current=frames.last!,point=current["visual"] as! [String:Any],color=floats(current["color"]!)
@@ -49,16 +55,16 @@ func render(_ test:[String:Any],_ frames:[[String:Any]],_ temporal:Bool)->[UInt8
  }
  glDrawArrays(GLenum(GL_TRIANGLES),0,6);var pixels=[UInt8](repeating:0,count:length);pixels.withUnsafeMutableBytes{glReadPixels(0,0,GLsizei(width),GLsizei(height),GLenum(GL_RGBA),GLenum(GL_UNSIGNED_BYTE),$0.baseAddress)};return pixels
 }
-func comparison(_ motion:[UInt8],_ sharp:[UInt8],_ path:String) throws {
+func comparison(_ motion:[UInt8],_ sharp:[UInt8],_ path:String,_ left:Int=760,_ top:Int=420,_ title:String="Motion blur") throws {
  let w=720,h=300;var pixels=[UInt8](repeating:0,count:w*h*4)
  for y in 0..<h{for x in 0..<w{let p=(y*w+x)*4;pixels[p+3]=255}}
  for (side,source) in [motion,sharp].enumerated(){for y in 0..<240{for x in 0..<320{
-  let a=((1079-(420+y))*1920+760+x)*4,b=((y+44)*w+20+side*360+x)*4
+  let a=((1079-(top+y))*1920+left+x)*4,b=((y+44)*w+20+side*360+x)*4
   for c in 0..<3{pixels[b+c]=source[a+c]}
  }}}
  try pixels.withUnsafeMutableBytes{buffer in
   let context=CGContext(data:buffer.baseAddress,width:w,height:h,bitsPerComponent:8,bytesPerRow:w*4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue)!
-  for (i,text) in ["Motion blur ON (1 frame)","Motion blur OFF"].enumerated(){
+  for (i,text) in ["\(title) ON (1 frame)","\(title) OFF"].enumerated(){
    let label=NSAttributedString(string:text,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):CTFontCreateWithName("Helvetica" as CFString,15,nil),NSAttributedString.Key(kCTForegroundColorAttributeName as String):CGColor(gray:1,alpha:1)])
    context.textPosition=CGPoint(x:20+i*360,y:h-26);CTLineDraw(CTLineCreateWithAttributedString(label),context)
   }
@@ -70,9 +76,12 @@ var checks=[[String:Any]](),allPassed=true
 for test in fixture["cases"] as! [[String:Any]]{
  let frames=test["frames"] as! [[String:Any]],actual=render(test,frames,true);var expected=[Float](repeating:0,count:length)
  for frame in frames{let crisp=render(test,[frame],false);for i in 0..<length{expected[i]+=Float(crisp[i])/Float(frames.count)}}
- var error=0,painted=0;for i in 0..<length{error=max(error,abs(Int(actual[i])-Int(expected[i].rounded())));if i%4==3&&actual[i]>0{painted+=1}}
+ var error=0,painted=0,badChannels=0,squared=0.0;for i in 0..<length{let difference=abs(Int(actual[i])-Int(expected[i].rounded()));error=max(error,difference);squared+=Double(difference*difference);if difference>2{badChannels+=1};if i%4==3&&actual[i]>0{painted+=1}}
+ let rms=sqrt(squared/Double(length))
  if test["name"] as? String == "moving ellipse",CommandLine.arguments.count>3{try comparison(actual,render(test,[frames.last!],false),CommandLine.arguments[3])}
- let passed=error<=2&&painted>0;allPassed = allPassed && passed;checks.append(["name":test["name"]!,"passed":passed,"maxChannelError":error,"paintedPixels":painted])
+ if test["name"] as? String == "camera radius",CommandLine.arguments.count>4{try comparison(actual,render(test,[frames.last!],false),CommandLine.arguments[4],1000,500,"Camera Motion Blur")}
+ let cameraCase=test["cameraBlur"] as? Bool == true
+ let passed=(cameraCase ? rms<0.15 && badChannels<max(128,painted/250) : error<=2) && painted>0;allPassed = allPassed && passed;checks.append(["name":test["name"]!,"passed":passed,"maxChannelError":error,"paintedPixels":painted,"rmsError":rms,"channelsOver2":badChannels])
 }
 let error=glGetError();allPassed = allPassed && error==GLenum(GL_NO_ERROR)
 let report:[String:Any]=["date":ISO8601DateFormatter().string(from:Date()),"backend":"macOS offscreen OpenGL (actual production GLSL; not browser WebGL2)","renderer":String(cString:glGetString(GLenum(GL_RENDERER))),"checks":checks,"glError":error,"passed":allPassed]

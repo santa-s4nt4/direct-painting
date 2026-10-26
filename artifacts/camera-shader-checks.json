@@ -1,0 +1,145 @@
+{
+  "backend" : "macOS offscreen OpenGL (actual production GLSL; not browser WebGL2)",
+  "checks" : [
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "moving ellipse",
+      "paintedPixels" : 19860,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "moving Ring",
+      "paintedPixels" : 19860,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "rotating rectangle",
+      "paintedPixels" : 26601,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "rotating rectangle Ring",
+      "paintedPixels" : 26601,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "pressure change",
+      "paintedPixels" : 14774,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "3D front-facing Ring",
+      "paintedPixels" : 19860,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "stationary Ring",
+      "paintedPixels" : 2836,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 0,
+      "name" : "box clipping",
+      "paintedPixels" : 2488,
+      "passed" : true,
+      "rmsError" : 0
+    },
+    {
+      "channelsOver2" : 0,
+      "maxChannelError" : 1,
+      "name" : "opacity and color",
+      "paintedPixels" : 19860,
+      "passed" : true,
+      "rmsError" : 0.017968540323521683
+    },
+    {
+      "channelsOver2" : 8,
+      "maxChannelError" : 16,
+      "name" : "camera orbit",
+      "paintedPixels" : 9650,
+      "passed" : true,
+      "rmsError" : 0.015713484026367724
+    },
+    {
+      "channelsOver2" : 36,
+      "maxChannelError" : 16,
+      "name" : "camera roll",
+      "paintedPixels" : 19890,
+      "passed" : true,
+      "rmsError" : 0.033333333333333333
+    },
+    {
+      "channelsOver2" : 8,
+      "maxChannelError" : 16,
+      "name" : "camera radius",
+      "paintedPixels" : 19888,
+      "passed" : true,
+      "rmsError" : 0.015713484026367724
+    },
+    {
+      "channelsOver2" : 8,
+      "maxChannelError" : 16,
+      "name" : "camera joint object",
+      "paintedPixels" : 34548,
+      "passed" : true,
+      "rmsError" : 0.015713484026367724
+    },
+    {
+      "channelsOver2" : 4,
+      "maxChannelError" : 16,
+      "name" : "camera box edge",
+      "paintedPixels" : 6459,
+      "passed" : true,
+      "rmsError" : 0.011111111111111112
+    },
+    {
+      "channelsOver2" : 4,
+      "maxChannelError" : 16,
+      "name" : "camera edge-on",
+      "paintedPixels" : 24977,
+      "passed" : true,
+      "rmsError" : 0.011111111111111112
+    },
+    {
+      "channelsOver2" : 8,
+      "maxChannelError" : 5,
+      "name" : "camera opacity",
+      "paintedPixels" : 9650,
+      "passed" : true,
+      "rmsError" : 0.016062546536417189
+    },
+    {
+      "channelsOver2" : 24,
+      "maxChannelError" : 16,
+      "name" : "camera stored plane",
+      "paintedPixels" : 11575,
+      "passed" : true,
+      "rmsError" : 0.026940506585098365
+    }
+  ],
+  "date" : "2026-10-26T12:29:14Z",
+  "glError" : 0,
+  "passed" : true,
+  "renderer" : "Apple M4 Max"
+}
