@@ -1,4 +1,4 @@
-import { cameraConfig, cameraPose, newCameraEvent, releaseCameraEvent, centered } from '../src/camera-motion.js';
+import { cameraConfig, cameraPose, newCameraEvent, centered } from '../src/camera-motion.js';
 import { DEFAULT_VIEW } from '../src/view.js';
 import { randomUUID } from 'node:crypto';
 import { LOOP_MS } from '../src/transport.js';
@@ -111,12 +111,9 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
   const receiveCameraNote=message=>{
     if(!state)return;
     const config=cameraConfig(state.project.settings?.camera);if(config.mode!=='midi-auto')return;
-    if(message.type==='all-off'||message.type==='off'&&camera.event?.key===`${message.channel}:${message.note}`){
-      const released=releaseCameraEvent(camera.event,message.at);if(released===camera.event)return;camera.event=released;
-    }else if(message.type==='on'&&message.note===config.note){
-      const base=state.project.settings?.view??DEFAULT_VIEW,from=cameraPose(cameraSnapshot(),base,phaseAt(message.at),message.at);
-      camera.event=newCameraEvent(from,base,config,message.at,`${message.channel}:${message.note}`);
-    }else return;
+    if(message.type!=='on'||message.note!==config.note)return;
+    const base=state.project.settings?.view??DEFAULT_VIEW,from=cameraPose(cameraSnapshot(),base,phaseAt(message.at),message.at);
+    camera.event=newCameraEvent(from,base,config,message.at,`${message.channel}:${message.note}`);
     camera.revision++;emitCamera();
   };
   if (midi) midiInput = await createMidiInput({ configFile: `${cacheFile}.midi.json`, onRestart: restartFromMidi, onNote:receiveCameraNote });
@@ -152,8 +149,7 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
           if(!value.camera||typeof value.camera!=='object')throw new Error('Camera settings required');
           const incoming=cameraConfig(value.camera),old=cameraConfig(state.project.settings?.camera),now=Date.now(),base=state.project.settings?.view??DEFAULT_VIEW;
           const pose=cameraPose(cameraSnapshot(),base,phaseAt(now),now);
-          if(incoming.mode!==old.mode){camera.event=null;state={...state,project:{...state.project,settings:{...state.project.settings,view:incoming.mode==='midi-auto'?centered(pose):pose}}};}
-          else if(incoming.note!==old.note)camera.event=releaseCameraEvent(camera.event,now);
+          if(incoming.mode!==old.mode||incoming.motion!==old.motion){camera.event=null;state={...state,project:{...state.project,settings:{...state.project.settings,view:incoming.mode==='midi-auto'?centered(pose):pose}}};}
           state={...state,project:{...state.project,settings:{...state.project.settings,camera:incoming}}};
         }else throw new Error('Unknown camera command');
         cameraControls.set(value.session,value.revision);if(cameraControls.size>128)cameraControls.delete(cameraControls.keys().next().value);

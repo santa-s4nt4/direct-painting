@@ -1,20 +1,31 @@
-import { canvasView, wrapAngle, CAMERA_DISTANCE } from './view.js';
+import { canvasView, wrapAngle, CAMERA_DISTANCE, MIN_ZOOM, MAX_ZOOM } from './view.js';
 import { FRAME_MS } from './timing.js';
 export const CAMERA_MODES = ['normal','midi-auto'];
 export const CAMERA_BLUR_SAMPLES = 16;
-export const DEFAULT_CAMERA = Object.freeze({mode:'normal',note:24,attack:200,decay:0,sustain:0,release:200,blur:true,blurAmount:100,adsrVersion:1});
+export const CAMERA_MOTIONS = ['position','zoom','both'];
+export const CAMERA_EASINGS = ['smooth','ease-in-out','ease-out','linear'];
+export const DEFAULT_CAMERA = Object.freeze({mode:'normal',note:24,motion:'both',duration:800,easing:'smooth',zoomMin:.5,zoomMax:2,blur:true,blurAmount:100});
 export const ease = t => {t=Math.max(0,Math.min(1,t));return t*t*t*(t*(t*6-15)+10);};
+export function cameraEase(t,kind='smooth') {
+ t=Math.max(0,Math.min(1,t));
+ if(kind==='linear')return t;
+ if(kind==='ease-out')return 1-(1-t)**3;
+ if(kind==='ease-in-out')return t<.5?4*t*t*t:1-(-2*t+2)**3/2;
+ return ease(t);
+}
 export function cameraConfig(value) {
  if(value!==undefined&&(!value||typeof value!=='object'||Array.isArray(value)))throw new Error('Invalid camera settings');
  const c={...DEFAULT_CAMERA,...value};
- if(value?.adsrVersion!==undefined&&value.adsrVersion!==1)throw new Error('Invalid camera ADSR version');
- if(value?.adsrVersion===undefined&&c.attack===400&&c.decay===300&&c.sustain===.65&&c.release===900){c.attack=200;c.decay=0;c.sustain=0;c.release=200;}
- // Retired recordings must never prevent an existing painting from loading.
+ // Old ADSR projects retain their transition time, without retaining an envelope.
+ for(const key of ['attack','decay','release'])if(value?.[key]!==undefined&&(!Number.isInteger(value[key])||value[key]<0||value[key]>16000))throw new Error(`Invalid camera ${key}`);
+ if(value?.sustain!==undefined&&(!Number.isFinite(value.sustain)||value.sustain<0||value.sustain>1))throw new Error('Invalid camera sustain');
+ if(value?.duration===undefined&&(value?.attack!==undefined||value?.decay!==undefined))c.duration=Math.max(50,Math.min(16000,(value.attack??0)+(value.decay??0)));
  if(c.mode==='rec')c.mode='normal';
- if(!CAMERA_MODES.includes(c.mode)||!Number.isInteger(c.note)||c.note<0||c.note>127||typeof c.blur!=='boolean')throw new Error('Invalid camera settings');
- for(const key of ['attack','decay','release','blurAmount'])if(!Number.isInteger(c[key])||c[key]<0||c[key]>(key==='blurAmount'?200:16000))throw new Error(`Invalid camera ${key}`);
- if(!Number.isFinite(c.sustain)||c.sustain<0||c.sustain>1)throw new Error('Invalid camera sustain');
- return {mode:c.mode,note:c.note,attack:c.attack,decay:c.decay,sustain:c.sustain,release:c.release,blur:c.blur,blurAmount:c.blurAmount,adsrVersion:1};
+ if(!CAMERA_MODES.includes(c.mode)||!CAMERA_MOTIONS.includes(c.motion)||!CAMERA_EASINGS.includes(c.easing)||!Number.isInteger(c.note)||c.note<0||c.note>127||typeof c.blur!=='boolean')throw new Error('Invalid camera settings');
+ if(!Number.isInteger(c.duration)||c.duration<50||c.duration>16000)throw new Error('Invalid camera transition time');
+ if(!Number.isInteger(c.blurAmount)||c.blurAmount<0||c.blurAmount>200)throw new Error('Invalid camera blurAmount');
+ if(!Number.isFinite(c.zoomMin)||!Number.isFinite(c.zoomMax)||c.zoomMin<MIN_ZOOM||c.zoomMax>MAX_ZOOM||c.zoomMin>c.zoomMax)throw new Error('Invalid camera zoom range');
+ return {mode:c.mode,note:c.note,motion:c.motion,duration:c.duration,easing:c.easing,zoomMin:c.zoomMin,zoomMax:c.zoomMax,blur:c.blur,blurAmount:c.blurAmount};
 }
 export function mixView(a,b,t) {
  if(t<=0)return canvasView(a);if(t>=1)return canvasView(b);
@@ -25,22 +36,26 @@ export function mixView(a,b,t) {
  return canvasView(result);
 }
 export function centered(view) {return canvasView({...view,x:(1920-3840*view.scale)/2,y:(1080-2160*view.scale)/2});}
-export function randomCamera(base,random=Math.random) {return centered({...base,yaw:random()*360-180,pitch:random()*110-55,rotation:0,distance:4500+random()*4000});}
-export function newCameraEvent(from,base,config,at,key,random=Math.random) {return {at,key,from:centered(from),target:randomCamera(base,random),attack:config.attack,decay:config.decay,sustain:config.sustain,release:config.release,releaseAt:null};}
+export function randomCamera(from,config=DEFAULT_CAMERA,random=Math.random) {
+ const target={...from};
+ // Camera position (orbit angles and radius) and view magnification are separate axes.
+ if(config.motion!=='zoom'){target.yaw=random()*360-180;target.pitch=random()*110-55;target.distance=4500+random()*4000;}
+ if(config.motion!=='position')target.scale=config.zoomMin*(config.zoomMax/config.zoomMin)**random();
+ return centered(target);
+}
+export function newCameraEvent(from,base,config,at,key,random=Math.random) {
+ return {at,key,from:centered(from),target:randomCamera(from,config,random),duration:config.duration,easing:config.easing,baseScale:base.scale};
+}
 export function autoPose(event,time) {
  if(!event)return null;
- if(event.releaseAt!==null&&time>=event.releaseAt)return mixView(event.releasePose,event.target,event.release?ease((time-event.releaseAt)/event.release):1);
- const elapsed=Math.max(0,time-event.at);
- const attackShare=event.decay>0?1-event.sustain:1;
- if(elapsed<event.attack)return mixView(event.from,event.target,attackShare*ease(elapsed/event.attack));
- const progress=event.decay?attackShare+(1-attackShare)*ease((elapsed-event.attack)/event.decay):1;
- return mixView(event.from,event.target,progress);
+ const t=cameraEase((time-event.at)/event.duration,event.easing),pose=mixView(event.from,event.target,t);
+ // Equal ratios of magnification take equal time, making large zooms feel even.
+ return centered({...pose,scale:event.from.scale*(event.target.scale/event.from.scale)**t});
 }
-export function releaseCameraEvent(event,time) {return !event||event.releaseAt!==null?event:{...event,releaseAt:time,releasePose:autoPose(event,time)};}
 export function cameraPose(snapshot,base,phase,time) {
  const config=snapshot?.config??DEFAULT_CAMERA;
  if(config.mode==='midi-auto'){
-  const pose=autoPose(snapshot?.event,time)??base;return centered({...pose,scale:base.scale});
+  const pose=autoPose(snapshot?.event,time)??base;return centered({...pose,scale:pose.scale*(snapshot?.event?base.scale/snapshot.event.baseScale:1)});
  }
  return base;
 }

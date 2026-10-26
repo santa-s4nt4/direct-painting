@@ -178,8 +178,8 @@ function receiveCamera(update){
 }
 function setCameraSettings(value){
  if(!ready)return;endStroke(null);
- const pose=effectiveView(),next=cameraConfig(value),changed=next.mode!==state.camera.mode;
- if(changed){state.view=next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null};cubeDragging=false;cameraSampler.reset();}
+ const pose=effectiveView(),next=cameraConfig(value),modeChanged=next.mode!==state.camera.mode,changed=modeChanged||next.motion!==state.camera.motion;
+ if(changed){state.view=modeChanged&&next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null};cubeDragging=false;cameraSampler.reset();}
  pendingCameraSettings=next;state.camera=next;syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
  clearTimeout(cameraSettingsTimer);
  if(changed)void pushCameraSettings();else cameraSettingsTimer=setTimeout(pushCameraSettings,100);
@@ -694,13 +694,16 @@ function syncViewPresentation(view) {
   paintingBoundary.innerHTML=boxEdges(view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
 }
 function syncViewUI() {
-  const percent = `${Math.round(state.view.scale * 100)}%`;
-  $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
+  const view=effectiveView(),percent = `${Math.round(view.scale * 100)}%`;
+  $('#zoom-out').disabled = view.scale <= MIN_ZOOM; $('#zoom-in').disabled = view.scale >= MAX_ZOOM;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
-  const view=effectiveView();syncViewPresentation(view);painting.setView(view);canvases[0].dataset.zoom=state.view.scale;
+  syncViewPresentation(view);painting.setView(view);canvases[0].dataset.zoom=view.scale;
 }
 function changeView(view) {
-  if(state.camera.mode==='midi-auto')view=centered({...state.view,scale:view.scale});
+  if(state.camera.mode==='midi-auto'){
+    const animatedScale=effectiveView().scale;
+    view=centered({...state.view,scale:state.view.scale*view.scale/animatedScale});
+  }
   state.view = canvasView(view); viewRevision++; syncViewUI(); viewDirty = true;
 }
 function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
@@ -712,7 +715,7 @@ function cancelTouchStroke() {
   $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now(), true);
 }
 $('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
-for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(effectiveView(), state.view.scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
+for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(effectiveView(), effectiveView().scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch') {
@@ -765,7 +768,7 @@ canvases.forEach((canvas, index) => {
   canvas.addEventListener('wheel', event => {
     if (!event.ctrlKey || !ready || trimDrag) return;
     event.preventDefault(); endStroke(null);
-    changeView(zoomAt(effectiveView(), state.view.scale * Math.exp(-event.deltaY * .01), canvasPoint(event, canvas.getBoundingClientRect())));
+    changeView(zoomAt(effectiveView(), effectiveView().scale * Math.exp(-event.deltaY * .01), canvasPoint(event, canvas.getBoundingClientRect())));
     clearTimeout(zoomSaveTimer); zoomSaveTimer = setTimeout(finishView, 150);
   }, { passive: false });
   canvas.addEventListener('contextmenu', event => event.preventDefault()); canvas.addEventListener('focus', () => selectCanvas(index));
