@@ -18,14 +18,19 @@ function dom(){
  window.Element.prototype.setPointerCapture=function(id){this._pointer=id;};window.Element.prototype.hasPointerCapture=function(id){return this._pointer===id;};window.Element.prototype.releasePointerCapture=function(){this._pointer=null;};
  return {window,restore:async()=>{await window.happyDOM.abort();for(const [key,value] of old){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}}};
 }
-test('camera controls offer only normal and MIDI auto, select received notes and edit ADSR',async()=>{
+test('camera controls offer MIDI target axes, easing, transition time and zoom range',async()=>{
  const env=dom(),d=env.window.document;d.body.innerHTML='<div id="midi"></div><div id="bottom"></div><div id="effects"></div>';let config=cameraConfig();
  try{
   const ui=setupCameraControls({midi:d.querySelector('#midi'),bottom:d.querySelector('#bottom'),effects:d.querySelector('#effects'),getCamera:()=>config,onChange:value=>{config=cameraConfig(value);}});ui.sync();ui.setReceived([60,64]);
-  assert.deepEqual(['attack','decay','sustain','release'].map(key=>d.querySelector(`#camera-${key}`).value),['0.2','0','0','0.2']);
+  assert.equal(d.querySelector('#camera-duration').value,'0.8');assert.equal(d.querySelector('#camera-motion').value,'both');assert.equal(d.querySelector('#camera-easing').value,'smooth');
+  assert.deepEqual(['min','max'].map(key=>d.querySelector(`#camera-zoom-${key}`).value),['50','200']);
   const select=d.querySelector('#camera-note');assert.deepEqual([...select.options].map(o=>o.value),['24','60','64']);select.value='60';select.dispatchEvent(new env.window.Event('change'));assert.equal(config.note,60);
   const enabled=d.querySelector('#camera-midi-enabled');enabled.checked=true;enabled.dispatchEvent(new env.window.Event('change'));ui.sync();assert.equal(config.mode,'midi-auto');
-  for(const [key,value,expected] of [['attack','0.8',800],['decay','0.2',200],['sustain','75',.75],['release','1.2',1200]]){const input=d.querySelector(`#camera-${key}`);input.value=value;input.dispatchEvent(new env.window.Event('input'));assert.equal(config[key],expected);}
+  const duration=d.querySelector('#camera-duration');duration.value='1.25';duration.dispatchEvent(new env.window.Event('input'));assert.equal(config.duration,1250);
+  const motion=d.querySelector('#camera-motion');motion.value='position';motion.dispatchEvent(new env.window.Event('change'));assert.equal(config.motion,'position');assert.equal(d.querySelector('#camera-zoom-min').disabled,true);
+  motion.value='zoom';motion.dispatchEvent(new env.window.Event('change'));assert.equal(config.motion,'zoom');assert.equal(d.querySelector('#camera-zoom-min').disabled,false);
+  const easing=d.querySelector('#camera-easing');easing.value='ease-out';easing.dispatchEvent(new env.window.Event('change'));assert.equal(config.easing,'ease-out');
+  const zoom=d.querySelector('#camera-zoom-max');zoom.value='350';zoom.dispatchEvent(new env.window.Event('input'));assert.equal(config.zoomMax,3.5);
   assert.deepEqual([...d.querySelectorAll('[data-camera-mode]')].map(b=>b.dataset.cameraMode),['normal','midi-auto']);ui.setReceived([60]);assert.match(d.querySelector('#camera-mode-status').textContent,/MIDI 60/);
   const blur=d.querySelector('#camera-motion-blur');blur.checked=false;blur.dispatchEvent(new env.window.Event('change'));ui.sync();assert.equal(d.querySelector('#camera-blur-amount').disabled,true);
  }finally{await env.restore();}

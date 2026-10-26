@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { createLoopRelay } from '../server/loop-relay.js';
 import { DEFAULT_CAMERA,cameraPose } from '../src/camera-motion.js';
 import { DEFAULT_VIEW } from '../src/view.js';
-test('host camera controls share MIDI ADSR, timeline independence and stale snapshot protection',async()=>{
+test('host camera transitions share settings and MIDI events without Note Off releases',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'direct-camera-')),file=join(dir,'loop.json'),relay=await createLoopRelay(file);
  const server=createServer((req,res)=>relay(req,res,()=>{res.writeHead(404);res.end();}));await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
  const get=async path=>(await(await fetch(base+path)).json());
@@ -21,10 +21,11 @@ test('host camera controls share MIDI ADSR, timeline independence and stale snap
   const at=Date.now();relay.receiveCameraNote({type:'on',note:60,channel:1,at});const triggered=await get('/api/camera');assert.equal(triggered.event.at,at);assert.equal(triggered.event.key,'1:60');
   const output=await get('/api/loop');assert.deepEqual(output.camera.event,triggered.event);assert.equal(output.state.playback.playing,false,'Camera notes do not restart the timeline');
   await post('/api/loop',original);assert.equal((await get('/api/camera')).config.mode,'midi-auto','Stale painting snapshots cannot disable automation');
-  relay.receiveCameraNote({type:'off',note:60,channel:2,at:at+100});assert.equal((await get('/api/camera')).event.releaseAt,null);
-  relay.receiveCameraNote({type:'off',note:60,channel:1,at:at+100});const released=await get('/api/camera');assert.equal(released.event.releaseAt,at+100);assert.ok(Number.isFinite((cameraPose(released,released.baseView,0,at+1000).distance??5000)));
+  relay.receiveCameraNote({type:'off',note:60,channel:2,at:at+100});const afterOtherChannelOff=await get('/api/camera');assert.deepEqual(afterOtherChannelOff.event,triggered.event);
+  relay.receiveCameraNote({type:'off',note:60,channel:1,at:at+100});const held=await get('/api/camera');assert.deepEqual(held.event,triggered.event);assert.ok(Number.isFinite((cameraPose(held,held.baseView,0,at+1000).distance??5000)));
+  const halfway=cameraPose(held,held.baseView,0,at+400);assert.notEqual(halfway.yaw,triggered.event.from.yaw);assert.deepEqual(cameraPose(held,held.baseView,0,at+10000),triggered.event.target);
   const before=(await get('/api/loop')).state.playback;
-  await command({kind:'settings',camera:{...released.config,mode:'normal',blur:false}});
+  await command({kind:'settings',camera:{...held.config,mode:'normal',blur:false}});
   assert.deepEqual((await get('/api/loop')).state.playback,before,'Changing camera modes does not stop or restart the timeline');
   const retired=await fetch(base+'/api/camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:'editor',revision:++revision,kind:'record-start',takeId:'retired',view:DEFAULT_VIEW})});assert.equal(retired.status,400);
   await post('/api/view',{session:'editor',revision:1,takeId:'retired',view:{...DEFAULT_VIEW,yaw:90}});assert.notEqual((await get('/api/camera')).baseView.yaw,90,'Late recording packets cannot move the camera');

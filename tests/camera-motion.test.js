@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera,Vector3 } from 'three';
-import { DEFAULT_CAMERA,cameraConfig,ease,mixView,newCameraEvent,autoPose,releaseCameraEvent,cameraPose,CameraSampler,mergeCamera } from '../src/camera-motion.js';
+import { DEFAULT_CAMERA,cameraConfig,ease,cameraEase,mixView,newCameraEvent,autoPose,cameraPose,CameraSampler,mergeCamera,randomCamera } from '../src/camera-motion.js';
 import { DEFAULT_VIEW,canvasView,CAMERA_DISTANCE,transformAt } from '../src/view.js';
 import { workingPlane,pointInSpace,projectSpace,drawingPoint,drawingPointOnPlane } from '../src/space.js';
 import { positionCamera } from '../src/render/camera-view.js';
@@ -10,14 +10,11 @@ import { normalizeProject,serializeProject,parseProject } from '../src/project.j
 const near=(a,b,e=1e-6)=>assert.ok(Math.abs(a-b)<e,`${a} != ${b}`);
 const camera=()=>new PerspectiveCamera(2*Math.atan(1080/(2*CAMERA_DISTANCE))*180/Math.PI,1920/1080,1,20000);
 
-test('camera ADSR defaults use the supplied envelope, migrate only old defaults and retain saved custom envelopes',()=>{
- const envelope=c=>[c.attack,c.decay,c.sustain,c.release];
- assert.deepEqual(envelope(cameraConfig()),[200,0,0,200]);
- const old={attack:400,decay:300,sustain:.65,release:900,note:60,blur:false};
- const migrated=cameraConfig(old);assert.deepEqual(envelope(migrated),[200,0,0,200]);assert.equal(migrated.note,60);assert.equal(migrated.blur,false);
- assert.deepEqual(envelope(cameraConfig({...old,attack:800})),[800,300,.65,900]);
- const explicit=cameraConfig({...old,adsrVersion:1});assert.deepEqual(envelope(explicit),[400,300,.65,900]);
- const project=normalizeProject({version:1,clips:[],settings:{camera:explicit}});assert.deepEqual(envelope(parseProject(serializeProject(project,{playing:true,phase:0})).project.settings.camera),[400,300,.65,900]);
+test('camera motion defaults, legacy ADSR duration migration and project roundtrip',()=>{
+ assert.deepEqual(cameraConfig(),DEFAULT_CAMERA);assert.equal(DEFAULT_CAMERA.duration,800);assert.equal(DEFAULT_CAMERA.easing,'smooth');assert.equal(DEFAULT_CAMERA.motion,'both');
+ const migrated=cameraConfig({attack:400,decay:300,sustain:.65,release:900,note:60,blur:false});assert.equal(migrated.duration,700);assert.equal(migrated.note,60);assert.equal(migrated.blur,false);assert.equal('attack' in migrated,false);
+ const explicit=cameraConfig({duration:1250,attack:400,decay:300,sustain:.65,release:900,motion:'zoom',easing:'ease-out'});assert.equal(explicit.duration,1250);assert.equal(explicit.motion,'zoom');
+ const project=normalizeProject({version:1,clips:[],settings:{camera:explicit}});assert.deepEqual(parseProject(serializeProject(project,{playing:true,phase:0})).project.settings.camera,explicit);
 });
 
 test('actual cameras orbit the origin at the requested distance and share CPU projection and inverse input',()=>{
@@ -32,15 +29,21 @@ test('actual cameras orbit the origin at the requested distance and share CPU pr
  }
  const view=canvasView({...DEFAULT_VIEW,distance:8000,yaw:30,pitch:20}),anchor={x:960,y:540},next=transformAt(view,{scale:1.25},anchor);near(next.x+1920*next.scale,anchor.x);near(next.y+1080*next.scale,anchor.y);
 });
-test('MIDI ADSR has continuous attack/retrigger/release and deterministic shared random destinations',()=>{
- const config=cameraConfig({...DEFAULT_CAMERA,mode:'midi-auto',attack:400,decay:300,sustain:.65,release:900}),event=newCameraEvent(DEFAULT_VIEW,DEFAULT_VIEW,config,1000,'1:60',()=>.75);
- assert.deepEqual(autoPose(event,1000),canvasView(DEFAULT_VIEW));near(autoPose(event,1400).distance,5000+(event.target.distance-5000)*.35);
- const held=autoPose(event,1700),later=autoPose(event,10000);assert.deepEqual(later,held);
- const released=releaseCameraEvent(event,1500);assert.deepEqual(autoPose(released,1500),autoPose(event,1500));assert.deepEqual(autoPose(released,2400),event.target);assert.deepEqual(autoPose(released,10000),event.target);
- const next=newCameraEvent(autoPose(released,10000),DEFAULT_VIEW,config,10000,'1:60',()=>.1);assert.deepEqual(autoPose(next,10000),event.target);assert.notDeepEqual(next.target,event.target);
+test('MIDI transitions ease between random poses, hold their destination and retrigger continuously',()=>{
+ const config=cameraConfig({...DEFAULT_CAMERA,mode:'midi-auto',duration:1000,easing:'ease-in-out'}),event=newCameraEvent(DEFAULT_VIEW,DEFAULT_VIEW,config,1000,'1:60',()=>.75);
+ assert.deepEqual(autoPose(event,1000),canvasView(DEFAULT_VIEW));assert.deepEqual(autoPose(event,2000),event.target);assert.deepEqual(autoPose(event,10000),event.target);
+ const halfway=autoPose(event,1500);near(halfway.yaw,wrapShort(event.from.yaw??0,event.target.yaw??0,.5));near(halfway.scale,Math.sqrt(event.from.scale*event.target.scale));
+ const next=newCameraEvent(autoPose(event,10000),DEFAULT_VIEW,config,10000,'1:60',()=>.1);assert.deepEqual(autoPose(next,10000),event.target);assert.notDeepEqual(next.target,event.target);
  const retrigger=newCameraEvent(autoPose(event,1200),DEFAULT_VIEW,config,1200,'1:60',()=>.1);assert.deepEqual(autoPose(retrigger,1200),autoPose(event,1200));
  const snapshot={config,event};assert.deepEqual(cameraPose(snapshot,DEFAULT_VIEW,500,1450),cameraPose(structuredClone(snapshot),DEFAULT_VIEW,9000,1450));
- assert.equal(ease(0),0);assert.equal(ease(1),1);assert.ok(ease(.2)<.2);
+ assert.equal(ease(0),0);assert.equal(ease(1),1);assert.ok(ease(.2)<.2);assert.equal(cameraEase(.5,'linear'),.5);assert.equal(cameraEase(.5,'ease-out'),.875);
+});
+const wrapShort=(a,b,t)=>a+(((b-a+540)%360)-180)*t;
+test('position-only and zoom-only random transitions preserve the other camera axes',()=>{
+ const from=canvasView({...DEFAULT_VIEW,scale:1.3,yaw:30,pitch:-15,rotation:8,distance:7000});
+ const position=randomCamera(from,{...DEFAULT_CAMERA,motion:'position'},()=>.8);assert.equal(position.scale,from.scale);near(position.distance,7700);assert.notEqual(position.yaw,from.yaw);
+ const zoom=randomCamera(from,{...DEFAULT_CAMERA,motion:'zoom',zoomMin:.7,zoomMax:2.4},()=>.5);assert.equal(zoom.yaw,from.yaw);assert.equal(zoom.pitch,from.pitch);assert.equal(zoom.rotation,from.rotation);assert.equal(zoom.distance,from.distance);near(zoom.scale,Math.sqrt(.7*2.4));
+ const event=newCameraEvent(from,DEFAULT_VIEW,{...DEFAULT_CAMERA,motion:'zoom',zoomMin:.5,zoomMax:2,duration:800,easing:'smooth'},0,'',()=>1);assert.equal(event.target.scale,2);assert.equal(event.target.yaw,from.yaw);
 });
 test('retired rec projects migrate to normal, discard recordings and preserve painting and MIDI settings',()=>{
  const config=cameraConfig({...DEFAULT_CAMERA,mode:'rec',note:60,track:{id:'take',samples:[{t:0,view:DEFAULT_VIEW}]}});
@@ -64,7 +67,7 @@ test('camera projection bounds and inverse homographies cover every exposure on 
  views.forEach((view,i)=>{const screen=projectSpace(pointInSpace(visual,clip.plane),view),m=projection.inverse[i],z=m[6]*screen.x+m[7]*screen.y+m[8];near((m[0]*screen.x+m[1]*screen.y+m[2])/z,visual.x);assert.ok(screen.x>=projection.bounds.x&&screen.x<=projection.bounds.x+projection.bounds.width);});
 });
 test('invalid camera settings fail before import and stale or retired incremental messages are ignored',()=>{
- for(const value of [null,[],{mode:'other'},{note:128},{attack:-1},{sustain:2},{blur:1},{blurAmount:201}])assert.throws(()=>cameraConfig(value));
+ for(const value of [null,[],{mode:'other'},{note:128},{duration:49},{duration:16001},{motion:'other'},{easing:'other'},{zoomMin:.4},{zoomMax:5.1},{zoomMin:2,zoomMax:1},{attack:-1},{sustain:2},{blur:1},{blurAmount:201}])assert.throws(()=>cameraConfig(value));
  assert.throws(()=>normalizeProject({version:1,clips:[],settings:{camera:{release:Infinity}}}));
  const initial={epoch:'host',revision:3,config:DEFAULT_CAMERA};
  assert.equal(mergeCamera(initial,{epoch:'host',revision:4,index:2,takeId:'x',point:{t:2,view:DEFAULT_VIEW}}),initial);
