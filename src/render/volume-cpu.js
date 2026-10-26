@@ -1,3 +1,4 @@
+import { cameraExposure } from './camera-exposure.js';
 import { motionExposure } from './motion-blur.js';
 import { canvasView, invertHomography, viewRotation } from '../view.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
@@ -29,8 +30,8 @@ export class CPUVolumeRenderer {
  setProject(project){if(project.settings?.view)this.setView(project.settings.view);this.duration=project.duration;this.items=project.clips.flatMap(layerVariants).map(paintingStyle).map(clip=>({clip,gesture:new CachedGesture(clip),markers:(clip.linePending?clip.lineMarkers??[]:[]).map(m=>({clip:{...m,effects:clip.effects},gesture:new CachedGesture({...m,mode:'move',shape:'ring'})}))}));}
  setLiveStroke(stroke,now,move){this.live.setLocal(stroke,now,move);}
  receiveLive(packet,now){this.live.update(packet,now);}
- draw(side,phase,{now=performance.now()}={}){
-  const jobs=[],add=(clip,time,opacity,visual,bitmap,sample,live=false)=>{ if(visual?.active!==false)jobs.push({clip,time,opacity,visual,bitmap,exposure:sample?motionExposure(clip,time,visual,sample,{live}):null}); };
+ draw(side,phase,{now=performance.now(),cameraViews=null}={}){
+  const jobs=[],add=(clip,time,opacity,visual,bitmap,sample,live=false)=>{ if(visual?.active!==false)jobs.push({clip,time,opacity,visual,bitmap,exposure:cameraViews&&visual?cameraExposure(clip,time,visual,sample,cameraViews,{live}):sample?motionExposure(clip,time,visual,sample,{live}):null}); };
   for(const item of this.items){const c=item.clip;if(!c.enabled||!c.targets.includes(side)||!gestureVisible(c,phase,this.duration))continue;
    if(c.mode==='line'&&c.linePending){if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration);add(m.clip,t,gestureOpacity(m.clip,t),m.gesture.render(t),null,s=>m.gesture.render(s));}}else for(const p of c.samples)add({...c,ringWidth:Math.min(c.ringWidth??5,12,Math.floor(p.size/4))},0,1,{...p,shape:'ring'});continue;}
    const t=gestureTime(c,phase,this.duration),opacity=gestureOpacity(c,t);
@@ -47,7 +48,7 @@ export class CPUVolumeRenderer {
     for(const sample of samples){
      if(!sample.visual||sample.opacity<=0)continue;
      this.layerCtx.globalAlpha=sample.opacity/samples.length;this.layerCtx.fillStyle=colorAtTime(clip,sample.time,sample.visual);this.layerCtx.beginPath();
-     for(const polygon of polygons(sample.visual,clip)){const points=clipPolygonToBox(polygon.map(p=>pointInSpace(p,clip.plane,clip.origin))).map(p=>projectSpace(p,this.view));if(!points.length)continue;this.layerCtx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))this.layerCtx.lineTo(p.x,p.y);this.layerCtx.closePath();}this.layerCtx.fill('evenodd');
+     for(const polygon of polygons(sample.visual,clip)){const points=clipPolygonToBox(polygon.map(p=>pointInSpace(p,clip.plane,clip.origin))).map(p=>projectSpace(p,sample.view??this.view));if(!points.length)continue;this.layerCtx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))this.layerCtx.lineTo(p.x,p.y);this.layerCtx.closePath();}this.layerCtx.fill('evenodd');
     }
     this.layerCtx.globalAlpha=1;this.layerCtx.globalCompositeOperation='source-over';
    }

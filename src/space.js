@@ -1,5 +1,5 @@
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, BOX_SPEC } from './canvas.js';
-import { CAMERA_DISTANCE, viewRotation } from './view.js';
+import { CAMERA_DISTANCE, viewRotation, invertHomography } from './view.js';
 export { BOX_SPEC } from './canvas.js';
 export const IDENTITY_PLANE = Object.freeze([1,0,0,0,1,0,0,0,1]);
 export const transpose = r => [r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]].map(v=>v||0);
@@ -7,9 +7,9 @@ export const multiply = (r,p) => [r[0]*p[0]+r[1]*p[1]+r[2]*p[2],r[3]*p[0]+r[4]*p
 export const workingPlane = view => transpose(viewRotation(view));
 export function pointInSpace(point, plane = IDENTITY_PLANE, origin = [0,0,0]) { return multiply(plane,[point.x-W/2,point.y-H/2,0]).map((v,i)=>v+origin[i]); }
 export function insideBox(p) { return p.every((v,i)=>Number.isFinite(v)&&Math.abs(v)<=[BOX_SPEC.width,BOX_SPEC.height,BOX_SPEC.depth][i]/2+1e-5); }
-export function drawingPoint(screen,view) { return {x:(screen.x-view.x-W*view.scale/2)/view.scale+W/2,y:(screen.y-view.y-H*view.scale/2)/view.scale+H/2}; }
+export function drawingPoint(screen,view) { return {x:(screen.x-view.x-W*view.scale/2)*(view.distance??CAMERA_DISTANCE)/view.scale/CAMERA_DISTANCE+W/2,y:(screen.y-view.y-H*view.scale/2)*(view.distance??CAMERA_DISTANCE)/view.scale/CAMERA_DISTANCE+H/2}; }
 export function projectSpace(point,view) {
-  const [x,y,z]=multiply(viewRotation(view),point), k=view.scale*CAMERA_DISTANCE/(CAMERA_DISTANCE-z);
+  const [x,y,z]=multiply(viewRotation(view),point), k=view.scale*CAMERA_DISTANCE/((view.distance??CAMERA_DISTANCE)-z);
   return {x:view.x+W*view.scale/2+x*k,y:view.y+H*view.scale/2+y*k};
 }
 export function validatePlane(plane) {
@@ -35,8 +35,9 @@ export function boxEdges(view) {
 }
 export function planeHomography(plane=IDENTITY_PLANE,origin=[0,0,0],view){
  const r=viewRotation(view),p=plane,m=Array.from({length:9},(_,i)=>{const row=Math.floor(i/3),col=i%3;return r[row*3]*p[col]+r[row*3+1]*p[3+col]+r[row*3+2]*p[6+col];}),o=multiply(r,origin),cx=view.x+W*view.scale/2,cy=view.y+H*view.scale/2;
- const a=view.scale*m[0]-cx*m[6]/CAMERA_DISTANCE,b=view.scale*m[1]-cx*m[7]/CAMERA_DISTANCE,d=view.scale*m[3]-cy*m[6]/CAMERA_DISTANCE,e=view.scale*m[4]-cy*m[7]/CAMERA_DISTANCE,g=-m[6]/CAMERA_DISTANCE,h=-m[7]/CAMERA_DISTANCE;
- return[a,b,cx*(1-o[2]/CAMERA_DISTANCE)+view.scale*o[0]-a*W/2-b*H/2,d,e,cy*(1-o[2]/CAMERA_DISTANCE)+view.scale*o[1]-d*W/2-e*H/2,g,h,1-o[2]/CAMERA_DISTANCE-g*W/2-h*H/2];
+ const distance=view.distance??CAMERA_DISTANCE,f=view.scale*CAMERA_DISTANCE/distance;
+ const a=f*m[0]-cx*m[6]/distance,b=f*m[1]-cx*m[7]/distance,d=f*m[3]-cy*m[6]/distance,e=f*m[4]-cy*m[7]/distance,g=-m[6]/distance,h=-m[7]/distance;
+ return[a,b,cx*(1-o[2]/distance)+f*o[0]-a*W/2-b*H/2,d,e,cy*(1-o[2]/distance)+f*o[1]-d*W/2-e*H/2,g,h,1-o[2]/distance-g*W/2-h*H/2];
 }
 export function clipPolygonToBox(points){
  let polygon=points;
@@ -47,4 +48,9 @@ export function clipPolygonToBox(points){
    if(da>=0)next.push(a);if((da>=0)!==(db>=0)){const t=da/(da-db);next.push(a.map((x,k)=>x+(b[k]-x)*t));}
   }polygon=next;
  }return polygon;
+}
+
+export function drawingPointOnPlane(screen,view,plane,origin){
+ const m=invertHomography(planeHomography(plane,origin,view)),w=m[6]*screen.x+m[7]*screen.y+m[8];
+ return {x:(m[0]*screen.x+m[1]*screen.y+m[2])/w,y:(m[3]*screen.x+m[4]*screen.y+m[5])/w};
 }

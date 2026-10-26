@@ -87,6 +87,7 @@ export class WebGLPaintingRenderer {
     const r = viewRotation(this.view), { scale, x, y } = this.view;
     this.painting.matrix.set(r[0], -r[1], r[2], 0, -r[3], r[4], -r[5], 0, r[6], -r[7], r[8], 0, 0, 0, 0, 1);
     this.painting.matrixWorldNeedsUpdate = true;
+    this.camera.position.set(0,0,this.view.distance??CAMERA_DISTANCE);
     this.camera.zoom = scale;
     this.camera.setViewOffset(VW, VH, VW / 2 - x - W * scale / 2, VH / 2 - y - H * scale / 2, VW, VH);
     this.camera.updateProjectionMatrix();

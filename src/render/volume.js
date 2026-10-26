@@ -1,7 +1,9 @@
+import { positionCamera } from './camera-view.js';
+import { cameraExposure, cameraProjection } from './camera-exposure.js';
 import { motionExposure, exposureBounds, MOTION_SAMPLES } from './motion-blur.js';
 import { motionUniforms, motionCoverage } from './motion-shader.js';
 import { colorAtTime } from '../color.js';
-import { Matrix4, Vector2, Vector3, Vector4 } from 'three';
+import { Matrix3, Matrix4, Vector2, Vector3, Vector4 } from 'three';
 import { WebGLPaintingRenderer, target, material } from './webgl.js';
 import { screenVertex, blurFragment, analogFragment, analogComposite } from './shaders.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
@@ -14,10 +16,14 @@ export const volumeVertex = `
 precision highp float;
 in vec3 position;
 uniform vec4 bounds;
+uniform int cameraCount;
+uniform vec4 cameraBounds;
+uniform vec2 resolution;
 uniform mat4 planeMatrix,projectionMatrix,modelViewMatrix;
 out vec2 pixel;
 out vec3 volumePoint;
 void main(){
+ if(cameraCount>0){pixel=vec2(0.);volumePoint=vec3(0.);vec2 p=cameraBounds.xy+(position.xy+.5)*cameraBounds.zw;gl_Position=vec4(p.x/resolution.x*2.-1.,1.-p.y/resolution.y*2.,0.,1.);return;}
  pixel=bounds.xy+(position.xy+.5)*bounds.zw;
  volumePoint=(planeMatrix*vec4(pixel-vec2(${W/2}.,${H/2}.),0.,1.)).xyz;
  gl_Position=projectionMatrix*modelViewMatrix*vec4(volumePoint.x,-volumePoint.y,volumePoint.z,1.);
@@ -32,7 +38,7 @@ vec4 layerColor(){vec4 p=texture(image,texCoord);return p.a>0.?vec4(p.rgb/p.a,p.
 `+screenComposite;
 export function spatialFragment(fragment){
  return fragment.replace('in vec2 pixel;', 'in vec2 pixel;\nin vec3 volumePoint;'+motionUniforms)
- .replace('vec4 layerColor() {', `vec4 layerColor() {\n if(any(greaterThan(abs(volumePoint),vec3(${BOX_SPEC.width/2}.,${BOX_SPEC.height/2}.,${BOX_SPEC.depth/2}.))))return vec4(0.);\n ${motionCoverage}\n if(directShape==5){vec2 p=pixel-directBrush.xy;vec2 q=vec2(max(abs(p.x)-directBrush.z*.5,0.),p.y);return dot(q,q)<=directBrush.w*directBrush.w*.25?vec4(fillColor,layerOpacity):vec4(0.);}`)
+ .replace('vec4 layerColor() {', `vec4 layerColor() {\n if(cameraCount==0&&any(greaterThan(abs(volumePoint),vec3(${BOX_SPEC.width/2}.,${BOX_SPEC.height/2}.,${BOX_SPEC.depth/2}.))))return vec4(0.);\n ${motionCoverage}\n if(directShape==5){vec2 p=pixel-directBrush.xy;vec2 q=vec2(max(abs(p.x)-directBrush.z*.5,0.),p.y);return dot(q,q)<=directBrush.w*directBrush.w*.25?vec4(fillColor,layerOpacity):vec4(0.);}`)
  .replace('vec2 uv=vec2(pixel.x/resolution.x,1.-pixel.y/resolution.y);','vec2 uv=gl_FragCoord.xy/resolution;');
 }
 
@@ -48,6 +54,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   const shader=super.layerMaterial(fragment,blending);
   shader.vertexShader=volumeVertex;shader.fragmentShader=spatialFragment(fragment);
   shader.uniforms.planeMatrix={value:new Matrix4()};
+  shader.uniforms.cameraCount={value:0};shader.uniforms.cameraBounds={value:new Vector4()};shader.uniforms.cameraInverse={value:Array.from({length:16},()=>new Matrix3())};
   shader.uniforms.motionCount={value:0};
   shader.uniforms.motionBrush={value:Array.from({length:MOTION_SAMPLES},()=>new Vector4())};
   shader.uniforms.motionInfo={value:Array.from({length:MOTION_SAMPLES},()=>new Vector4())};
@@ -55,7 +62,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
  }
  setView(view){
   super.setView(view);
-  this.passMesh.matrixAutoUpdate=false;this.passMesh.matrix.copy(this.painting.matrix);this.passMesh.matrixWorldNeedsUpdate=true;
+  this.passMesh.matrixAutoUpdate=false;this.passMesh.matrix.identity();positionCamera(this.camera,this.view);this.passMesh.matrixWorldNeedsUpdate=true;
  }
  setProject(project){
   super.setProject(project);
@@ -86,16 +93,18 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   const r=item.clip.plane??IDENTITY_PLANE,o=item.clip.origin??[0,0,0];
   shader.uniforms.planeMatrix.value.set(r[0],r[1],r[2],o[0],r[3],r[4],r[5],o[1],r[6],r[7],r[8],o[2],0,0,0,1);
   if(capsule){shader.uniforms.directShape.value=5;shader.uniforms.directBrush.value.set(visual.x,visual.y,visual.width,visual.height);}
-  const exposure=item.exposure;shader.uniforms.motionCount.value=exposure?.length??0;
+  const exposure=item.exposure;shader.uniforms.motionCount.value=exposure?.length??0;shader.uniforms.cameraCount.value=item.cameraExposure?exposure.length:0;
+  if(item.cameraExposure){const projection=cameraProjection(item.clip,exposure,b);projection.inverse.forEach((m,i)=>shader.uniforms.cameraInverse.value[i].set(...m));const box=projection.bounds;shader.uniforms.cameraBounds.value.set(box.x,box.y,box.width,box.height);}
   if(exposure){
    exposure.forEach((sample,i)=>{
-    const v=sample.visual??visual,shape={circle:1,rect:2,ring:3,'rect-ring':4,capsule:5}[v.shape]??1;
+    const v=sample.visual??visual??{x:0,y:0,size:1},shape=sample.visual===null?0:{circle:1,rect:2,ring:3,'rect-ring':4,capsule:5}[v.shape]??1;
     const rect=shape===2||shape===4,w=rect||shape===5?(v.width??v.size):Math.max(1,Math.round(v.size)),h=rect||shape===5?(v.height??v.size):w;
     shader.uniforms.motionBrush.value[i].set(Math.round(v.x),Math.round(v.y),w,h);
     shader.uniforms.motionInfo.value[i].set((v.angle??0)*Math.PI/180,sample.opacity*(item.clip.opacity??1),shape,item.clip.ringWidth??5);
     const color=Number.parseInt(colorAtTime(item.clip,sample.time,v).slice(1),16);
     shader.uniforms.motionColor.value[i].set((color>>16)/255,((color>>8)&255)/255,(color&255)/255);
    });
+   if(item.cameraExposure)return b;
    const box=exposureBounds(exposure);shader.uniforms.bounds.value.set(box.x,box.y,box.width,box.height);return box;
   }
   return b;
@@ -117,12 +126,12 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   shader.uniforms.belowTexture.value=this.current.texture;shader.uniforms.mixAmount.value=(clip.mixAmount??50)/100;
   this.pass(shader,this.alternate);[this.current,this.alternate]=[this.alternate,this.current];this.composed=true;
  }
- draw(side,phase,{now=performance.now(),placementPreview=false}={}){
+ draw(side,phase,{now=performance.now(),placementPreview=false,cameraViews=null}={}){
   if(this.contextLost)return;
   this.frame++;this.renderer.info.reset();this.current=this.accumulator;this.clearTarget(this.current);this.composed=false;
   const jobs=[],add=(item,time,opacity,visual)=>{
-   const exposure=item.exposure??(item.gesture?motionExposure(item.clip,time,visual,t=>item.gesture.render(t)):null);
-   jobs.push({item:exposure?{...item,exposure}:item,time,opacity,visual});
+   const exposure=item.exposure??(cameraViews?cameraExposure(item.clip,time,visual,item.gesture?t=>item.gesture.render(t):null,cameraViews):(item.gesture?motionExposure(item.clip,time,visual,t=>item.gesture.render(t)):null));
+   jobs.push({item:exposure?{...item,exposure,cameraExposure:!!cameraViews}:item,time,opacity,visual});
   };
   for(const item of this.items){
    const clip=item.clip;if(!clip.enabled||!clip.targets.includes(side)||!gestureVisible(clip,phase,this.duration))continue;item.lastUsed=this.frame;
@@ -139,7 +148,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   const live=this.live;
   if(live.id&&live.targets?.includes(side)){
    const clip={id:live.id,mode:live.mode,color:live.color,opacity:live.opacity,effects:live.effects,ringWidth:live.ringWidth,plane:live.plane};
-   const visual=live.move??live.head,exposure=motionExposure(clip,live.elapsed,visual,t=>live.motionAt(t),{live:true});
+   const visual=live.move??live.head,exposure=cameraViews?cameraExposure(clip,live.elapsed,visual,t=>live.motionAt(t),cameraViews,{live:true}):motionExposure(clip,live.elapsed,visual,t=>live.motionAt(t),{live:true});
    add({clip,bounds:{},target:null,exposure},live.time(now),1,visual);
   }
   const r=viewRotation(this.view);
