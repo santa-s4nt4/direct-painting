@@ -33,12 +33,15 @@ The application transport is fixed at 16 seconds (120 BPM, 4/4, eight bars) and 
 - `npm test`: geometry, project migration, shader-independent math, timing, live transport, MIDI, editing and reference rendering.
 - `/benchmarks/volume.html`: current spatial renderer, exact Ring equivalence, rotated input, 3D Line, fallback, and ten active spatial layers.
 - `/benchmarks/motion.html`: current temporal-shutter browser checks and ten moving spatial layers (prepared, not run in this environment).
+- `npm run test:gles`: production GLSL ES 3.00 link and pixel checks in an ANGLE OpenGL ES 3.0 context. It reproduces the pre-fix precision mismatch, then checks normal and Analog paths. Requires macOS and installed ANGLE libraries; set `ANGLE_LIBRARY_DIR` if needed.
 - `npm run test:motion-gpu`: production GLSL pixel comparisons in an offscreen macOS GPU context; it does not validate Three.js/WebGL2 browser integration.
 - `/benchmarks/render.html`: legacy GPU versus CPU reference, pigment mixing, Blur, view bounds, cache behavior, context recovery and fallback.
 - `npm run test:midi`: actual CoreMIDI virtual-source → host relay integration on macOS.
 
 The earlier, pre-Motion-blur spatial benchmark ([JSON](../../artifacts/volume-render-checks.json)) measured ten 1600px rectangle-ring layers, all visible with Blur16, at mean2.10ms/p95 4.00ms on this Mac Chrome. No saved masks or CPU pixel uploads were created. These are draw timings, not iPad hardware or end-to-end input latency guarantees. See [3D box notes](../../docs/box-canvas.md) and [MIDI transport](../../docs/midi-sync.md).
 
-Current verification: 169 Node tests (including three Happy DOM UI tests), build success, seven native CoreMIDI cases and 17 offscreen shader cases. The eight camera cases have maximum RMS error 0.0334/255, with boundary pixels differing by up to 16/255. Browser automation was unavailable, so actual layout, browser Three.js/WebGL2 integration and iPad performance remain unverified. See [camera behavior and validation](../../docs/camera-motion.md).
+Current verification: 171 Node tests (including three Happy DOM UI tests), build success, seven native CoreMIDI cases and 17 offscreen shader cases. The eight camera cases have maximum RMS error 0.0334/255, with boundary pixels differing by up to 16/255. Browser automation was unavailable, so actual layout, browser Three.js/WebGL2 integration and iPad performance remain unverified. See [camera behavior and validation](../../docs/camera-motion.md).
 
 Navigation SVGs update only when the view changes. The editor updates transport UI before drawing and schedules its next animation frame first, so a drawing exception cannot cancel subsequent timeline updates. The output frame loop uses the same scheduling order. Camera changes never change the fixed 16-second clock.
+
+The cameraCount uniform is explicitly highp in both stages. Leaving its integer precision implicit made GLSL ES program linking fail (vertex default highp versus fragment default mediump). Desktop CGL did not detect this. The ANGLE regression check now verifies failure before the fix and painted pixels after it; see [the rendering fix](../../docs/shader-precision.md).
