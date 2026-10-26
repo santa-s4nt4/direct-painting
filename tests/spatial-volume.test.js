@@ -54,13 +54,13 @@ test('a view-aligned spatial segment has a round near end cap instead of collaps
 });
 
 
-test('Line uses fixed 30px through legacy imports, scoped overrides and output relay while its preview Ring keeps its stroke', () => {
+test('Line uses fixed 20px through legacy imports, scoped overrides and output relay while its preview Ring keeps its stroke', () => {
  const preview=marker(), line={id:'fixed-line',mode:'line',shape:'circle',color:'#ffffff',targets:[0,1],enabled:true,start:100,duration:0,fadeMs:500,ringWidth:5,samples:[{x:1920,y:1080,size:180,t:0}],linePending:true,lineIncomplete:true,lineMarkers:[preview],eyeOverrides:{1:{ringWidth:80}}};
  const source={version:1,duration:16000,clips:[line],settings:{lineWidth:100}};
  const restored=normalizeProject(source);
- assert.equal(DEFAULT_SETTINGS.lineWidth,30);assert.equal(restored.settings.lineWidth,30);
- assert.equal(restored.clips[0].ringWidth,30);assert.equal(restored.clips[0].eyeOverrides[1].ringWidth,30);assert.equal(restored.clips[0].lineMarkers[0].ringWidth,7);
+ assert.equal(DEFAULT_SETTINGS.lineWidth,20);assert.equal(restored.settings.lineWidth,20);
+ assert.equal(restored.clips[0].ringWidth,20);assert.equal(restored.clips[0].eyeOverrides[1].ringWidth,20);assert.equal(restored.clips[0].lineMarkers[0].ringWidth,7);
  const output=validateSnapshot({project:source,playback:{playing:false,phase:0}},1000);
- assert.equal(output.project.clips[0].ringWidth,30);assert.equal(output.project.clips[0].eyeOverrides[1].ringWidth,30);assert.equal(output.project.clips[0].lineMarkers[0].ringWidth,7);
+ assert.equal(output.project.clips[0].ringWidth,20);assert.equal(output.project.clips[0].eyeOverrides[1].ringWidth,20);assert.equal(output.project.clips[0].lineMarkers[0].ringWidth,7);
  assert.equal(source.clips[0].ringWidth,5);
 });

@@ -4,14 +4,14 @@ import { canvasView, invertHomography, viewRotation } from '../view.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
 import { pointInSpace, projectSpace, lineGeometry, multiply, clipPolygonToBox, planeHomography } from '../space.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
-import { paintingStyle } from '../effects.js';
+import { paintingStyle, DEFAULT_RING_WIDTH } from '../effects.js';
 import { layerVariants } from '../layers.js';
 import { colorAtTime } from '../color.js';
 import { LiveStroke } from './stroke.js';
 import { CPULayerEffects } from './cpu-effects.js';
 import { compositePixel, PigmentMixer } from '../blend.js';
 function polygons(p,style){
- const shape=p.shape,w=p.width??p.size,h=p.height??p.size,r=p.size/2,edge=style.ringWidth??5,angle=(p.angle??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
+ const shape=p.shape,w=p.width??p.size,h=p.height??p.size,r=p.size/2,edge=style.ringWidth??DEFAULT_RING_WIDTH,angle=(p.angle??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
  const transform=points=>points.map(([x,y])=>({x:p.x+x*c-y*s,y:p.y+x*s+y*c}));
  const disk=radius=>Array.from({length:96},(_,i)=>[Math.cos(i*Math.PI/48)*radius,Math.sin(i*Math.PI/48)*radius]);
  const rect=(w,h)=>[[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2]];
@@ -33,7 +33,7 @@ export class CPUVolumeRenderer {
  draw(side,phase,{now=performance.now(),cameraViews=null}={}){
   const jobs=[],add=(clip,time,opacity,visual,bitmap,sample,live=false)=>{ if(visual?.active!==false)jobs.push({clip,time,opacity,visual,bitmap,exposure:cameraViews&&visual?cameraExposure(clip,time,visual,sample,cameraViews,{live}):sample?motionExposure(clip,time,visual,sample,{live}):null}); };
   for(const item of this.items){const c=item.clip;if(!c.enabled||!c.targets.includes(side)||!gestureVisible(c,phase,this.duration))continue;
-   if(c.mode==='line'&&c.linePending){if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration);add(m.clip,t,gestureOpacity(m.clip,t),m.gesture.render(t),null,s=>m.gesture.render(s));}}else for(const p of c.samples)add({...c,ringWidth:Math.min(c.ringWidth??5,12,Math.floor(p.size/4))},0,1,{...p,shape:'ring'});continue;}
+   if(c.mode==='line'&&c.linePending){if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration);add(m.clip,t,gestureOpacity(m.clip,t),m.gesture.render(t),null,s=>m.gesture.render(s));}}else for(const p of c.samples)add({...c,ringWidth:Math.min(c.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))},0,1,{...p,shape:'ring'});continue;}
    const t=gestureTime(c,phase,this.duration),opacity=gestureOpacity(c,t);
    if(c.mode==='line'&&c.points3D){const g=lineGeometry(c,this.view);add({...c,plane:g.plane,origin:g.origin},t,opacity,g.visual);}
    else{const visual=item.gesture.render(t);if(c.mode==='move'||c.mode==='place')add(c,t,opacity*(visual.opacity??1),visual,null,s=>item.gesture.render(s));else add(c,t,opacity,null,visual);}

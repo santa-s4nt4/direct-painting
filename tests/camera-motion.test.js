@@ -10,6 +10,16 @@ import { normalizeProject,serializeProject,parseProject } from '../src/project.j
 const near=(a,b,e=1e-6)=>assert.ok(Math.abs(a-b)<e,`${a} != ${b}`);
 const camera=()=>new PerspectiveCamera(2*Math.atan(1080/(2*CAMERA_DISTANCE))*180/Math.PI,1920/1080,1,20000);
 
+test('camera ADSR defaults use the supplied envelope, migrate only old defaults and retain saved custom envelopes',()=>{
+ const envelope=c=>[c.attack,c.decay,c.sustain,c.release];
+ assert.deepEqual(envelope(cameraConfig()),[200,0,0,200]);
+ const old={attack:400,decay:300,sustain:.65,release:900,note:60,blur:false};
+ const migrated=cameraConfig(old);assert.deepEqual(envelope(migrated),[200,0,0,200]);assert.equal(migrated.note,60);assert.equal(migrated.blur,false);
+ assert.deepEqual(envelope(cameraConfig({...old,attack:800})),[800,300,.65,900]);
+ const explicit=cameraConfig({...old,adsrVersion:1});assert.deepEqual(envelope(explicit),[400,300,.65,900]);
+ const project=normalizeProject({version:1,clips:[],settings:{camera:explicit}});assert.deepEqual(envelope(parseProject(serializeProject(project,{playing:true,phase:0})).project.settings.camera),[400,300,.65,900]);
+});
+
 test('actual cameras orbit the origin at the requested distance and share CPU projection and inverse input',()=>{
  for(const pose of [{},{yaw:120,pitch:-50,rotation:30,distance:8500},{yaw:-175,pitch:90,distance:3500},{pitch:170,yaw:50,rotation:-120,distance:12000}]){
   const view=canvasView({...DEFAULT_VIEW,...pose}),c=camera();c.zoom=view.scale;c.setViewOffset(1920,1080,960-view.x-1920*view.scale,540-view.y-1080*view.scale,1920,1080);c.updateProjectionMatrix();positionCamera(c,view);
@@ -23,10 +33,11 @@ test('actual cameras orbit the origin at the requested distance and share CPU pr
  const view=canvasView({...DEFAULT_VIEW,distance:8000,yaw:30,pitch:20}),anchor={x:960,y:540},next=transformAt(view,{scale:1.25},anchor);near(next.x+1920*next.scale,anchor.x);near(next.y+1080*next.scale,anchor.y);
 });
 test('MIDI ADSR has continuous attack/retrigger/release and deterministic shared random destinations',()=>{
- const config=cameraConfig({...DEFAULT_CAMERA,mode:'midi-auto'}),event=newCameraEvent(DEFAULT_VIEW,DEFAULT_VIEW,config,1000,'1:60',()=>.75);
- assert.deepEqual(autoPose(event,1000),canvasView(DEFAULT_VIEW));near(autoPose(event,1400).distance,event.target.distance);
+ const config=cameraConfig({...DEFAULT_CAMERA,mode:'midi-auto',attack:400,decay:300,sustain:.65,release:900}),event=newCameraEvent(DEFAULT_VIEW,DEFAULT_VIEW,config,1000,'1:60',()=>.75);
+ assert.deepEqual(autoPose(event,1000),canvasView(DEFAULT_VIEW));near(autoPose(event,1400).distance,5000+(event.target.distance-5000)*.35);
  const held=autoPose(event,1700),later=autoPose(event,10000);assert.deepEqual(later,held);
- const released=releaseCameraEvent(event,1500);assert.deepEqual(autoPose(released,1500),autoPose(event,1500));near(autoPose(released,2400).distance??CAMERA_DISTANCE,5000);
+ const released=releaseCameraEvent(event,1500);assert.deepEqual(autoPose(released,1500),autoPose(event,1500));assert.deepEqual(autoPose(released,2400),event.target);assert.deepEqual(autoPose(released,10000),event.target);
+ const next=newCameraEvent(autoPose(released,10000),DEFAULT_VIEW,config,10000,'1:60',()=>.1);assert.deepEqual(autoPose(next,10000),event.target);assert.notDeepEqual(next.target,event.target);
  const retrigger=newCameraEvent(autoPose(event,1200),DEFAULT_VIEW,config,1200,'1:60',()=>.1);assert.deepEqual(autoPose(retrigger,1200),autoPose(event,1200));
  const snapshot={config,event};assert.deepEqual(cameraPose(snapshot,DEFAULT_VIEW,500,1450),cameraPose(structuredClone(snapshot),DEFAULT_VIEW,9000,1450));
  assert.equal(ease(0),0);assert.equal(ease(1),1);assert.ok(ease(.2)<.2);

@@ -1,7 +1,7 @@
 import { MAX_BRUSH_SIZE } from './canvas.js';
 export const DEFAULT_EFFECTS = Object.freeze({ blur: false, blurRadius: 16, motionBlur: true, motionBlurAmount: 100 });
 export const EFFECT_LIMITS = Object.freeze({ blurRadius: [0, 192], motionBlurAmount: [0, 200] });
-export const DEFAULT_RING_WIDTH = 5;
+export const DEFAULT_RING_WIDTH = 20;
 export const MAX_RING_WIDTH = MAX_BRUSH_SIZE / 2;
 
 // Effects are appearance, separate from the cached stroke geometry.

@@ -10,7 +10,7 @@ import { MAX_BRUSH_SIZE, CANVAS_SPEC } from '../src/canvas.js';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { validateProject } from '../src/loop.js';
-import { validateEffects, validateRingWidth } from '../src/effects.js';
+import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH } from '../src/effects.js';
 
 export function validateSnapshot(value, now) {
   const project = { ...validateProject(value?.project), duration: LOOP_MS };
@@ -38,7 +38,7 @@ export function validateLive(value) {
     if (sample.shape !== undefined && !['circle', 'rect', 'ring', 'rect-ring'].includes(sample.shape)) throw new Error('Invalid live shape');
     if (['rect', 'rect-ring'].includes(sample.shape) && (!['width', 'height', 'angle'].every(key => Number.isFinite(sample[key])) || sample.width < 1 || sample.width > MAX_BRUSH_SIZE || sample.height < 1 || sample.height > MAX_BRUSH_SIZE || Math.abs(sample.angle) > 720)) throw new Error('Invalid live rectangle');
     validateRingWidth(sample.ringWidth);
-    return { x: sample.x, y: sample.y, size: sample.size, ...(sample.shape === 'ring' ? { shape: 'ring', ringWidth: sample.ringWidth ?? value.ringWidth ?? 5 } : {}), ...(['rect', 'rect-ring'].includes(sample.shape) ? { shape: sample.shape, width: sample.width, height: sample.height, angle: sample.angle } : {}), ...(timed ? { t: sample.t } : {}) };
+    return { x: sample.x, y: sample.y, size: sample.size, ...(sample.shape === 'ring' ? { shape: 'ring', ringWidth: sample.ringWidth ?? value.ringWidth ?? DEFAULT_RING_WIDTH } : {}), ...(['rect', 'rect-ring'].includes(sample.shape) ? { shape: sample.shape, width: sample.width, height: sample.height, angle: sample.angle } : {}), ...(timed ? { t: sample.t } : {}) };
   };
   const samples = value.samples.map(sample => point(sample, true));
   if (samples.some((sample, index) => index && sample.t < samples[index - 1].t) || (value.from === 0 && (!samples.length || samples[0].t !== 0))) throw new Error('Invalid live sample timing');

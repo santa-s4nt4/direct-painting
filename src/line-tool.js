@@ -1,4 +1,4 @@
-export const FIXED_LINE_WIDTH = 30;
+export const FIXED_LINE_WIDTH = 20;
 
 // The endpoint Ring gestures keep their own stroke; only the final line is fixed.
 export function fixedLineStyle(clip) {

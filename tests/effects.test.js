@@ -1,7 +1,7 @@
 import { CANVAS_WIDTH } from '../src/canvas.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_EFFECTS, paintingStyle } from '../src/effects.js';
+import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, paintingStyle } from '../src/effects.js';
 import { CPULayerEffects } from '../src/render/cpu-effects.js';
 import { normalizeProject, serializeProject, parseProject } from '../src/project.js';
 import { validateLive, validateSnapshot } from '../server/loop-relay.js';
@@ -13,6 +13,13 @@ import { EditHistory } from '../src/history.js';
 const clip = { id: 'ring', mode: 'return', shape: 'ring', ringWidth: 5, color: '#ffffff', enabled: true, targets: [0], start: 0, duration: 100, fadeMs: 2000, samples: [{ x: 100, y: 100, size: 80, shape: 'ring', ringWidth: 5, t: 0 }, { x: 100, y: 100, size: 80, shape: 'ring', ringWidth: 5, t: 100 }] };
 const project = (value = clip) => ({ version: 1, duration: 10000, clips: [value] });
 const off = { ...DEFAULT_EFFECTS, blur: false };
+
+test('Ring brushes default to 20px and old brush defaults migrate without changing saved artwork or explicit new choices',()=>{
+ assert.equal(DEFAULT_RING_WIDTH,20);assert.equal(normalizeProject(project()).settings.ringWidth,20);
+ const migrated=normalizeProject({...project(),settings:{ringWidth:5}});assert.equal(migrated.settings.ringWidth,20);assert.equal(migrated.clips[0].ringWidth,5);
+ assert.equal(normalizeProject({...project(),settings:{ringWidth:8}}).settings.ringWidth,8);
+ const explicit=normalizeProject({...project(),settings:{ringWidth:5,ringDefaultsVersion:1}});assert.equal(parseProject(serializeProject(explicit,{playing:false,phase:0})).project.settings.ringWidth,5);
+});
 
 test('layer effects, ring geometry and Analog-only mixing migrate and round-trip without retired settings', () => {
   const p = normalizeProject({ ...project({ ...clip, edgeColor: '#ff0000', edgeWidth: 6, blendMode: 'normal' }), settings: { blurRadius: 99, showBlurPreview: true, exportFormat: 'rgb', shape: 'ring', ringWidth: 8 } });

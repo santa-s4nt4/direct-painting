@@ -1,6 +1,6 @@
 import { validatePlane, insideBox, pointInSpace, BOX_SPEC } from './space.js';
 import { MAX_BRUSH_SIZE } from './canvas.js';
-import { validateEffects, validateRingWidth } from './effects.js';
+import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
 import { TrailField, PersistentField, SmoothedCircle, TRAIL_LIFETIME } from './motion.js';
 import { prepareShapeClip } from './geometry.js';
@@ -162,7 +162,7 @@ export class CachedGesture {
     if (time === this.lastFrame) return this.colorizedField(time);
     const { samples, color } = this.clip;
     if (this.clip.mode === 'line' && this.clip.linePending) {
-      if (this.lastTime < 0) for (const point of samples) this.field.add(point, color, 0, { ...this.clip, ringWidth: Math.min(this.clip.ringWidth ?? 5, 12, Math.floor(point.size / 4)) });
+      if (this.lastTime < 0) for (const point of samples) this.field.add(point, color, 0, { ...this.clip, ringWidth: Math.min(this.clip.ringWidth ?? DEFAULT_RING_WIDTH, 12, Math.floor(point.size / 4)) });
       this.lastTime = time; this.lastFrame = time; return this.colorizedField(time);
     }
     const duration = this.clip.mode === 'line' ? 1 : this.clip.duration;

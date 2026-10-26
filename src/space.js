@@ -1,3 +1,4 @@
+import { DEFAULT_RING_WIDTH } from './effects.js';
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, BOX_SPEC } from './canvas.js';
 import { CAMERA_DISTANCE, viewRotation, invertHomography } from './view.js';
 export { BOX_SPEC } from './canvas.js';
@@ -25,9 +26,9 @@ export function lineGeometry(clip,view) {
   const a=points[0],b=points[1]??a, delta=b.map((v,i)=>v-a[i]),length=Math.hypot(...delta),camera=workingPlane(view);
   const u=length>1e-6?delta.map(v=>v/length):[camera[0],camera[3],camera[6]],n=[camera[2],camera[5],camera[8]];
   let v=[n[1]*u[2]-n[2]*u[1],n[2]*u[0]-n[0]*u[2],n[0]*u[1]-n[1]*u[0]],d=Math.hypot(...v);
-  if(d<1e-6){const near= a.reduce((s,x,i)=>s+x*n[i],0)>b.reduce((s,x,i)=>s+x*n[i],0)?a:b;return {plane:camera,origin:[...near],visual:{x:W/2,y:H/2,size:clip.ringWidth??5,shape:'circle'}};}v=v.map(x=>x/d);
+  if(d<1e-6){const near= a.reduce((s,x,i)=>s+x*n[i],0)>b.reduce((s,x,i)=>s+x*n[i],0)?a:b;return {plane:camera,origin:[...near],visual:{x:W/2,y:H/2,size:clip.ringWidth??DEFAULT_RING_WIDTH,shape:'circle'}};}v=v.map(x=>x/d);
   const z=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
-  return {plane:[u[0],v[0],z[0],u[1],v[1],z[1],u[2],v[2],z[2]],origin:a.map((x,i)=>(x+b[i])/2),visual:{x:W/2,y:H/2,size:clip.ringWidth??5,width:length,height:clip.ringWidth??5,shape:'capsule'}};
+  return {plane:[u[0],v[0],z[0],u[1],v[1],z[1],u[2],v[2],z[2]],origin:a.map((x,i)=>(x+b[i])/2),visual:{x:W/2,y:H/2,size:clip.ringWidth??DEFAULT_RING_WIDTH,width:length,height:clip.ringWidth??DEFAULT_RING_WIDTH,shape:'capsule'}};
 }
 export function boxEdges(view) {
   const p=[];for(const z of [-1,1])for(const y of [-1,1])for(const x of [-1,1])p.push(projectSpace([x*BOX_SPEC.width/2,y*BOX_SPEC.height/2,z*BOX_SPEC.depth/2],view));
