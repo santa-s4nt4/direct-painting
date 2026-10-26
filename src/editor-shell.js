@@ -47,7 +47,7 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
     details.append(summary, content); toolbar.append(details); return details;
   };
   const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls'), $('#line-tool-controls')]);
-  const blur = section('Blur', [$('#draw-blur-controls')], true, 'Applied to new strokes. Edit existing strokes in Layer.');
+  const blur = section('Effects', [$('#draw-blur-controls'), $('#draw-motion-controls')], true, 'Applied to new strokes. Edit existing strokes in Layer.');
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
   $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option><option value="rect-ring">Rectangle · outline</option>';

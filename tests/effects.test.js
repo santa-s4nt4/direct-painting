@@ -74,6 +74,6 @@ test('CPU effects blur alpha and preserve paint color without modifying the sour
 
 test('retired effects are ignored when loading old projects', () => {
   const p = normalizeProject(project({ ...clip, effects: { blur: false, blurRadius: 64, glitch: true, glitchAmount: 90, chromatic: true, chromaticAmount: 30 } }));
-  assert.deepEqual(p.clips[0].effects, { blur: false, blurRadius: 64 });
-  assert.deepEqual(p.settings.effects, { blur: true, blurRadius: 16 });
+  assert.deepEqual(p.clips[0].effects, { ...DEFAULT_EFFECTS, blurRadius: 64 });
+  assert.deepEqual(p.settings.effects, DEFAULT_EFFECTS);
 });

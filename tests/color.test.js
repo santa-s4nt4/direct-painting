@@ -23,6 +23,6 @@ test('lightness editing changes color without changing geometry or alpha and sur
   const edited = { ...editLayerLightness(clip, 25), colorEditMode: 'lightness' };
   assert.equal(edited.color, '#800000'); assert.deepEqual(edited.samples, clip.samples); assert.equal(edited.fadeMs, clip.fadeMs);
   const saved = serializeProject({ version: 1, duration: 3000, clips: [edited] }, { playing: false, phase: 100 });
-  assert.deepEqual(parseProject(saved).project.clips[0], { ...edited, blendMode: 'analog', effects: { blur: true, blurRadius: 16 } });
+  assert.deepEqual(parseProject(saved).project.clips[0], { ...edited, blendMode: 'analog', effects: { blur: false, blurRadius: 16, motionBlur: true, motionBlurAmount: 100 } });
   assert.throws(() => parseProject(saved.replace('"colorLightness": 25', '"colorLightness": 200')));
 });

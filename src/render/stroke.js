@@ -1,3 +1,4 @@
+import { upgradedEffects } from '../effects.js';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../canvas.js';
 import { strokePoints } from '../drawing.js';
 import { sampleAt } from '../loop.js';
@@ -60,11 +61,13 @@ export class StampCursor {
 // Receive live samples without allocating UHD CPU images. Local input uses
 // a shared source array; network input appends only its incremental packet.
 export class LiveStroke {
-  clear() { this.id = null; this.samples = []; this.count = 0; }
+  clear() { this.id = null; this.samples = []; this.count = 0; this.motionPositions = []; }
   constructor() { this.clear(); }
   setLocal(stroke, now, move) {
     if (!stroke) { this.clear(); return; }
-    Object.assign(this, { id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, plane: stroke.plane, targets: stroke.targets, samples: stroke.samples, count: stroke.samples.length, head: stroke.last, move, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), received: now });
+    if (this.id !== stroke.id) this.motionPositions = [];
+    Object.assign(this, { id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: upgradedEffects(stroke.effects), ringWidth: stroke.ringWidth, plane: stroke.plane, targets: stroke.targets, samples: stroke.samples, count: stroke.samples.length, head: stroke.last, move, elapsed: Math.max(now - stroke.started, stroke.samples.at(-1).t), received: now });
+    this.recordMotion();
   }
   update(frame, now) {
     if (!frame) { this.clear(); return; }
@@ -73,7 +76,18 @@ export class LiveStroke {
     if (frame.from !== this.count) return;
     for (const sample of frame.samples) this.samples.push(sample);
     this.count += frame.samples.length;
-    Object.assign(this, { mode: frame.mode, color: frame.color, opacity: frame.opacity, targets: frame.targets, head: frame.head, move: frame.move, elapsed: frame.elapsed, received: now, effects: frame.effects, ringWidth: frame.ringWidth, plane: frame.plane });
+    Object.assign(this, { mode: frame.mode, color: frame.color, opacity: frame.opacity, targets: frame.targets, head: frame.head, move: frame.move, elapsed: frame.elapsed, received: now, effects: upgradedEffects(frame.effects), ringWidth: frame.ringWidth, plane: frame.plane });
+    this.recordMotion();
   }
+  recordMotion() {
+    const point = this.move ?? this.head;
+    if (!point) return;
+    const sample = { ...point, t:this.elapsed }, last = this.motionPositions.at(-1);
+    if (last?.t === sample.t) this.motionPositions[this.motionPositions.length-1] = sample;
+    else this.motionPositions.push(sample);
+    while (this.motionPositions.length > 2 && this.motionPositions[1].t < sample.t - 100) this.motionPositions.shift();
+    if (this.motionPositions.length > 32) this.motionPositions.splice(0,this.motionPositions.length-32);
+  }
+  motionAt(time) { return sampleAt(this.motionPositions,time); }
   time(now) { return this.elapsed + Math.max(0, now - this.received); }
 }

@@ -5,7 +5,7 @@ import { DEFAULT_VIEW, importedView } from './view.js';
 import { resolveLayer } from './layers.js';
 import { CANVAS_SPEC, MAX_BRUSH_SIZE } from './canvas.js';
 import { validateProject } from './loop.js';
-import { DEFAULT_RING_WIDTH, MAX_RING_WIDTH, DEFAULT_EFFECTS, validateEffects, layerEffects, paintingStyle } from './effects.js';
+import { DEFAULT_RING_WIDTH, MAX_RING_WIDTH, DEFAULT_EFFECTS, validateEffects, layerEffects, paintingStyle, upgradedEffects } from './effects.js';
 import { DEFAULT_P5_CODE, MAX_SNIPPET_LENGTH, MAX_P5_DURATION_MS, P5_PRESETS, upgradeP5Code } from './p5-motion.js';
 import { validateLEDOptions } from './p5-led.js';
 
@@ -39,7 +39,7 @@ export function normalizeProject(value) {
   }
   if(supplied.rectangleDefaultsVersion!==undefined&&supplied.rectangleDefaultsVersion!==1)throw new Error('Invalid rectangle defaults version');
   if(supplied.rectangleDefaultsVersion===undefined&&supplied.widthMax===100&&supplied.heightMax===100&&supplied.widthMin===20&&supplied.heightMin===20){settings.widthMax=1600;settings.heightMax=1600;}
-  validateEffects(supplied.effects); settings.effects = layerEffects({ effects: supplied.effects });
+  validateEffects(supplied.effects); settings.effects = upgradedEffects(supplied.effects);
   if (supplied.viewVersion !== undefined && supplied.viewVersion !== 2 && supplied.viewVersion !== 3 && supplied.viewVersion !== 4) throw new Error('Invalid canvas view version');
   settings.view = importedView(supplied.view, project.canvas, supplied.viewVersion);
   settings.viewVersion = 4;

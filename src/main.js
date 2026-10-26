@@ -53,9 +53,15 @@ document.querySelector('#app').innerHTML = `
           <select id="shape" aria-label="Drawing shape"><option value="circle">CIRCLE</option><option value="rect">RECTANGLE</option></select>
         </div>
         <div id="draw-blur-controls" class="control-section">
-          <label class="checkbox-control"><input id="draw-blur" type="checkbox" checked><span>Blur</span></label>
+          <label class="checkbox-control"><input id="draw-blur" type="checkbox"><span>Blur</span></label>
           <div class="effect-value"><label for="draw-blur-radius">Radius</label><input id="draw-blur-radius" type="number" min="0" max="192" step="1" value="16" aria-label="Brush blur radius in pixels"><span>px</span></div>
           <input id="draw-blur-range" type="range" min="0" max="192" step="1" value="16" aria-label="Brush blur radius">
+        </div>
+        <div id="draw-motion-controls" class="control-section">
+          <label class="checkbox-control"><input id="draw-motion-blur" type="checkbox" checked><span>Motion blur</span></label>
+          <div class="effect-value"><label for="draw-motion-amount">Shutter</label><input id="draw-motion-amount" type="number" min="0" max="200" step="1" value="100" aria-label="Brush motion blur shutter percent"><span>%</span></div>
+          <input id="draw-motion-range" type="range" min="0" max="200" step="1" value="100" aria-label="Brush motion blur shutter">
+          <p class="control-hint">100% = 1 frame (16.7ms). Moving shapes blur; stationary shapes stay sharp.</p>
         </div>
         <div class="control-section size-controls" id="circle-controls">
           <span class="section-label">SIZE RANGE</span>
@@ -455,14 +461,14 @@ function rebuildCache() {
     blending.append(blendLabel, ratioLabel);
     const effectsPanel = document.createElement('section'); effectsPanel.className = 'layer-effects';
     const effectsHeading = document.createElement('h3'); effectsHeading.textContent = 'Effects'; effectsPanel.append(effectsHeading);
-    for (const [key, title, amountKey] of [['blur', 'Blur', 'blurRadius']]) {
+    for (const [key, title, amountKey] of [['blur', 'Blur', 'blurRadius'], ['motionBlur', 'Motion blur', 'motionBlurAmount']]) {
       const effect = document.createElement('div'); effect.className = 'layer-effect';
       const label = document.createElement('label'); label.className = 'effect-switch';
       const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.setAttribute('aria-label', `Layer ${index + 1} ${title}`);
       const name = document.createElement('span'); name.textContent = title; label.append(enabled, name); effect.append(label);
       const controls = document.createElement('div'); controls.className = 'effect-amount';
       const slider = document.createElement('input'); slider.type = 'range'; slider.min = EFFECT_LIMITS[amountKey][0]; slider.max = EFFECT_LIMITS[amountKey][1]; slider.step = 1; slider.setAttribute('aria-label', `Layer ${index + 1} ${title} amount`);
-      const amount = number(controls, key === 'blur' ? 'Radius' : 'Amount', `${title} pixels`, item => layerEffects(item)[amountKey], ...EFFECT_LIMITS[amountKey], 1, (item, value) => ({ ...item, effects: { ...layerEffects(item), [amountKey]: value } }));
+      const amount = number(controls, key === 'blur' ? 'Radius' : 'Shutter', `${title} ${key === 'blur' ? 'pixels' : 'shutter percent'}`, item => layerEffects(item)[amountKey], ...EFFECT_LIMITS[amountKey], 1, (item, value) => ({ ...item, effects: { ...layerEffects(item), [amountKey]: value } }), key === 'blur' ? 'px' : '%');
       controls.prepend(slider); effect.append(controls); effectsPanel.append(effect);
       enabled.addEventListener('change', () => update(item => ({ ...item, effects: { ...layerEffects(item), [key]: enabled.checked } })));
       slider.addEventListener('input', () => update(item => ({ ...item, effects: { ...layerEffects(item), [amountKey]: Number(slider.value) } })));
@@ -802,10 +808,15 @@ function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
   $('#draw-blur-radius').disabled = $('#draw-blur-range').disabled = !state.effects.blur;
+  $('#draw-motion-blur').checked = state.effects.motionBlur; $('#draw-motion-amount').value = $('#draw-motion-range').value = state.effects.motionBlurAmount;
+  $('#draw-motion-amount').disabled = $('#draw-motion-range').disabled = !state.effects.motionBlur;
 }
 $('#draw-blur').addEventListener('change', event => { state.effects = { ...state.effects, blur: event.target.checked }; syncEffectsUI(); queueSave(); });
 const setBrushBlur = event => { if (event.target.value === '') return; state.effects = { ...state.effects, blurRadius: Math.max(0, Math.min(192, Math.round(Number(event.target.value)))) }; syncEffectsUI(); queueSave(); };
 $('#draw-blur-radius').addEventListener('input', setBrushBlur); $('#draw-blur-range').addEventListener('input', setBrushBlur);
+$('#draw-motion-blur').addEventListener('change', event => { state.effects = { ...state.effects, motionBlur:event.target.checked }; syncEffectsUI(); queueSave(); });
+const setBrushMotion = event => { if (event.target.value === '' || !Number.isFinite(Number(event.target.value))) return; state.effects = { ...state.effects, motionBlurAmount:Math.max(0,Math.min(200,Math.round(Number(event.target.value)))) }; syncEffectsUI(); queueSave(); };
+$('#draw-motion-amount').addEventListener('input',setBrushMotion); $('#draw-motion-range').addEventListener('input',setBrushMotion);
 function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
