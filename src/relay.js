@@ -46,7 +46,7 @@ export function createLivePublisher(getFrame, onStatus) {
 
 // Pinches send only a small view transform; never resend every stroke at 60Hz.
 export function createViewPublisher(getView, onStatus) {
-  let running = false, pending = false, idle = [];
+  let running = false, pending = false;
   const send = async () => {
     if (running) { pending = true; return; }
     running = true;
@@ -55,9 +55,9 @@ export function createViewPublisher(getView, onStatus) {
       if (!response.ok) throw new Error('View sync unavailable');
       onStatus(true);
     } catch { onStatus(false); }
-    finally { running = false; if (pending) { pending = false; void send(); } else {for(const resolve of idle)resolve();idle=[];} }
+    finally { running = false; if (pending) { pending = false; void send(); } }
   };
-  return { publish: send, flush: () => new Promise(resolve=>{idle.push(resolve);void send();}) };
+  return { publish: send };
 }
 
 export function createCameraPublisher(session,onCamera,onStatus) {

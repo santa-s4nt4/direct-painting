@@ -227,8 +227,7 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
 .camera-mode-controls { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; min-width: 0; padding: 3px 0; color: #aaa; font-size: 10px; }
 .camera-mode-controls button { min-height: 30px; padding: 3px 9px; background: #303030; color: #bbb; border: 1px solid #4a4a4a; border-radius: 4px; font-size: 10px; white-space: nowrap; }
 .camera-mode-controls button[aria-pressed=true] { background: #168cff; color: white; border-color: #3aacff; }
-#camera-record-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 5px; }
-#camera-record-status[data-recording=true] { color: #ff7676; }
+#camera-mode-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 5px; }
 .camera-locked .orientation-cube { opacity: .4; cursor: not-allowed; }
 .camera-midi-controls { display: grid; gap: 10px; padding-top: 16px; margin-top: 6px; border-top: 1px solid #444; }
 .camera-midi-controls h3 { font-size: 13px; margin: 0; }

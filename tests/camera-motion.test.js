@@ -31,11 +31,11 @@ test('MIDI ADSR has continuous attack/retrigger/release and deterministic shared
  const snapshot={config,event};assert.deepEqual(cameraPose(snapshot,DEFAULT_VIEW,500,1450),cameraPose(structuredClone(snapshot),DEFAULT_VIEW,9000,1450));
  assert.equal(ease(0),0);assert.equal(ease(1),1);assert.ok(ease(.2)<.2);
 });
-test('recorded camera motion loops at 16 seconds, holds the final pose and chooses the shortest angular path',()=>{
- const a=canvasView({...DEFAULT_VIEW,yaw:175}),b=canvasView({...DEFAULT_VIEW,yaw:-175,distance:6500});
- const config=cameraConfig({...DEFAULT_CAMERA,mode:'rec',track:{id:'take',samples:[{t:0,view:a},{t:2000,view:b}]}}),snap={config};
- near(Math.abs(cameraPose(snap,DEFAULT_VIEW,1000,0).yaw),180);near(cameraPose(snap,DEFAULT_VIEW,8000,0).distance,6500);near(cameraPose(snap,DEFAULT_VIEW,16000,0).yaw,175);
+test('retired rec projects migrate to normal, discard recordings and preserve painting and MIDI settings',()=>{
+ const config=cameraConfig({...DEFAULT_CAMERA,mode:'rec',note:60,track:{id:'take',samples:[{t:0,view:DEFAULT_VIEW}]}});
+ assert.equal(config.mode,'normal');assert.equal(config.note,60);assert.equal('track' in config,false);
  const saved=normalizeProject({version:1,clips:[],settings:{camera:config}});assert.deepEqual(parseProject(serializeProject(saved,{playing:true,phase:0})).project,saved);
+ assert.deepEqual(cameraPose({config},DEFAULT_VIEW,500,1000),DEFAULT_VIEW);
 });
 test('camera exposure is default ON, clears at resets, tolerates duplicate frame times and uses bounded manual history',()=>{
  const sampler=new CameraSampler(),snap={config:DEFAULT_CAMERA};assert.equal(sampler.frame(snap,DEFAULT_VIEW,0,0,0).cameraViews,null);
@@ -52,11 +52,11 @@ test('camera projection bounds and inverse homographies cover every exposure on 
  assert.equal(projection.inverse.length,8);assert.ok(projection.bounds.width>0);
  views.forEach((view,i)=>{const screen=projectSpace(pointInSpace(visual,clip.plane),view),m=projection.inverse[i],z=m[6]*screen.x+m[7]*screen.y+m[8];near((m[0]*screen.x+m[1]*screen.y+m[2])/z,visual.x);assert.ok(screen.x>=projection.bounds.x&&screen.x<=projection.bounds.x+projection.bounds.width);});
 });
-test('invalid camera settings fail before import and missing incremental frames recover via a full snapshot',()=>{
- for(const value of [null,[],{track:{id:'x',samples:[{t:0}]}},{mode:'other'},{note:128},{attack:-1},{sustain:2},{blur:1},{blurAmount:201},{track:{id:'x',samples:[{t:1,view:DEFAULT_VIEW}]}}])assert.throws(()=>cameraConfig(value));
+test('invalid camera settings fail before import and stale or retired incremental messages are ignored',()=>{
+ for(const value of [null,[],{mode:'other'},{note:128},{attack:-1},{sustain:2},{blur:1},{blurAmount:201}])assert.throws(()=>cameraConfig(value));
  assert.throws(()=>normalizeProject({version:1,clips:[],settings:{camera:{release:Infinity}}}));
- const initial={epoch:'host',revision:1,config:cameraConfig({...DEFAULT_CAMERA,mode:'rec',track:{id:'x',samples:[{t:0,view:DEFAULT_VIEW}]}})};
- const missing=mergeCamera(initial,{epoch:'host',revision:3,index:2,takeId:'x',point:{t:2,view:DEFAULT_VIEW}});assert.equal(missing,initial);
- const full={...initial,revision:3,config:{...initial.config,track:{id:'x',samples:[{t:0,view:DEFAULT_VIEW},{t:1,view:DEFAULT_VIEW},{t:2,view:DEFAULT_VIEW}]}}};assert.equal(mergeCamera(missing,full).config.track.samples.length,3);
- assert.equal(mergeCamera(full,{...initial,revision:2}),full);
+ const initial={epoch:'host',revision:3,config:DEFAULT_CAMERA};
+ assert.equal(mergeCamera(initial,{epoch:'host',revision:4,index:2,takeId:'x',point:{t:2,view:DEFAULT_VIEW}}),initial);
+ assert.equal(mergeCamera(initial,{...initial,revision:2}),initial);
+ const next=mergeCamera(initial,{...initial,revision:4,config:{...DEFAULT_CAMERA,mode:'midi-auto'}});assert.equal(next.config.mode,'midi-auto');
 });

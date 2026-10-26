@@ -1,24 +1,18 @@
-import { canvasView, validateView, wrapAngle, CAMERA_DISTANCE } from './view.js';
-import { LOOP_MS } from './transport.js';
+import { canvasView, wrapAngle, CAMERA_DISTANCE } from './view.js';
 import { FRAME_MS } from './timing.js';
-export const CAMERA_MODES = ['normal','rec','midi-auto'];
-export const MAX_CAMERA_SAMPLES = 2048;
+export const CAMERA_MODES = ['normal','midi-auto'];
 export const CAMERA_BLUR_SAMPLES = 16;
-export const DEFAULT_CAMERA = Object.freeze({mode:'normal',note:24,attack:400,decay:300,sustain:.65,release:900,blur:true,blurAmount:100,track:null});
+export const DEFAULT_CAMERA = Object.freeze({mode:'normal',note:24,attack:400,decay:300,sustain:.65,release:900,blur:true,blurAmount:100});
 export const ease = t => {t=Math.max(0,Math.min(1,t));return t*t*t*(t*(t*6-15)+10);};
 export function cameraConfig(value) {
  if(value!==undefined&&(!value||typeof value!=='object'||Array.isArray(value)))throw new Error('Invalid camera settings');
  const c={...DEFAULT_CAMERA,...value};
+ // Retired recordings must never prevent an existing painting from loading.
+ if(c.mode==='rec')c.mode='normal';
  if(!CAMERA_MODES.includes(c.mode)||!Number.isInteger(c.note)||c.note<0||c.note>127||typeof c.blur!=='boolean')throw new Error('Invalid camera settings');
  for(const key of ['attack','decay','release','blurAmount'])if(!Number.isInteger(c[key])||c[key]<0||c[key]>(key==='blurAmount'?200:16000))throw new Error(`Invalid camera ${key}`);
  if(!Number.isFinite(c.sustain)||c.sustain<0||c.sustain>1)throw new Error('Invalid camera sustain');
- if(c.track!==null){
-  if(!c.track||typeof c.track.id!=='string'||!c.track.id.length||c.track.id.length>150||!Array.isArray(c.track.samples)||!c.track.samples.length||c.track.samples.length>MAX_CAMERA_SAMPLES)throw new Error('Invalid camera recording');
-  let previous=-1;
-  for(const sample of c.track.samples){if(!sample?.view)throw new Error('Camera pose required');if(!Number.isFinite(sample.t)||sample.t<0||sample.t>=LOOP_MS||sample.t<=previous)throw new Error('Invalid camera sample time');validateView(sample.view);previous=sample.t;}
-  if(c.track.samples[0].t!==0)throw new Error('Camera recording must start at zero');
- }
- return {mode:c.mode,note:c.note,attack:c.attack,decay:c.decay,sustain:c.sustain,release:c.release,blur:c.blur,blurAmount:c.blurAmount,track:c.track};
+ return {mode:c.mode,note:c.note,attack:c.attack,decay:c.decay,sustain:c.sustain,release:c.release,blur:c.blur,blurAmount:c.blurAmount};
 }
 export function mixView(a,b,t) {
  if(t<=0)return canvasView(a);if(t>=1)return canvasView(b);
@@ -40,28 +34,16 @@ export function autoPose(event,time) {
  return event.decay?mixView(event.target,sustained,ease((elapsed-event.attack)/event.decay)):sustained;
 }
 export function releaseCameraEvent(event,time) {return !event||event.releaseAt!==null?event:{...event,releaseAt:time,releasePose:autoPose(event,time)};}
-export function trackPose(track,phase) {
- if(!track?.samples.length)return null;
- const samples=track.samples,t=((phase%LOOP_MS)+LOOP_MS)%LOOP_MS;let low=0,high=samples.length-1;
- while(low<high){const mid=Math.ceil((low+high)/2);if(samples[mid].t<=t)low=mid;else high=mid-1;}
- const a=samples[low],b=samples[low+1];return b&&b.t>a.t?mixView(a.view,b.view,(t-a.t)/(b.t-a.t)):a.view;
-}
 export function cameraPose(snapshot,base,phase,time) {
  const config=snapshot?.config??DEFAULT_CAMERA;
  if(config.mode==='midi-auto'){
   const pose=autoPose(snapshot?.event,time)??base;return centered({...pose,scale:base.scale});
  }
- if(config.mode==='rec'&&!snapshot?.recording){const pose=trackPose(config.track,phase);if(pose)return canvasView({...base,pitch:pose.pitch??0,yaw:pose.yaw??0,rotation:pose.rotation??0,distance:pose.distance??CAMERA_DISTANCE});}
  return base;
 }
 export function mergeCamera(current,update) {
- if(!update||current?.epoch===update.epoch&&(current.revision>update.revision||current.revision===update.revision&&!update.config))return current;
- if(update.config)return update;
- if(!current||current.epoch!==update.epoch)return current;
- let config=current.config;
- if(update.point&&(config.track?.id!==update.takeId||update.index>config.track.samples.length))return current;
- if(update.point&&config.track?.id===update.takeId){const samples=[...config.track.samples];if(update.index<=samples.length)samples[update.index]=update.point;config={...config,track:{...config.track,samples}};}
- return {...current,...update,config};
+ if(!update?.config||current?.epoch===update.epoch&&current.revision>update.revision)return current;
+ return {...update,config:cameraConfig(update.config)};
 }
 const viewDiff=(a,b)=>['scale','x','y','pitch','yaw','rotation','distance'].some(k=>Math.abs((a[k]??(k==='distance'?CAMERA_DISTANCE:0))-(b[k]??(k==='distance'?CAMERA_DISTANCE:0)))>1e-7);
 export class CameraSampler {
@@ -76,7 +58,7 @@ export class CameraSampler {
   while(this.history.length>2&&this.history[1].t<now-100)this.history.shift();
   const shutter=FRAME_MS*config.blurAmount/100;
   if(!config.blur||!shutter)return {view,cameraViews:null,cameraShutter:0};
-  const manual=config.mode==='normal'||!!snapshot?.recording;
+  const manual=config.mode==='normal';
   const sampleAtOffset=offset=>{
    if(!manual)return cameraPose(snapshot,base,Math.max(0,phase-offset),time-offset);
    const t=now-offset,samples=this.history;let index=samples.length-1;while(index>0&&samples[index].t>t)index--;

@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-26T12:14:12.237Z",
+  "date": "2026-10-26T13:33:12.520Z",
   "backend": "CoreMIDI",
   "checks": [
     "A real CoreMIDI virtual source triggers Note 24 and starts the fixed 16-second timeline",

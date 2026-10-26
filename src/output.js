@@ -55,12 +55,12 @@ if (typeof EventSource === 'function') {
   window.addEventListener('pagehide', () => events.close(), { once: true });
 }
 function animate(now) {
+  requestAnimationFrame(animate);
   if ((snapshot || renderedAt === -Infinity) && frameNumber(now) !== renderedAt) {
     renderedAt = frameNumber(now);
     const time=serverTime+now-calibratedAt,phase=snapshot?outputPhase(snapshot,time):0,base=snapshot?.project.settings?.view??DEFAULT_VIEW;
     const frame=cameraSampler.frame(cameraSnapshot??{config:snapshot?.project.settings?.camera},base,phase,time,now);scene.setView(frame.view);
     scene.draw(side,phase,{now,cameraViews:frame.cameraViews,placementPreview:snapshot?!snapshot.playback.playing:false});
   }
-  requestAnimationFrame(animate);
 }
 poll(); requestAnimationFrame(animate);

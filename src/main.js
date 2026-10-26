@@ -138,8 +138,8 @@ let cacheFailed = false;
 const liveSession = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let liveRevision = 0, viewRevision = 0;
 let transportState = null;
-let cameraSnapshot={epoch:'local',revision:0,config:state.camera,event:null,recording:null},cameraUI=null,pendingCamera=null;
-let activeTakeId=null,recordStartPending=false,cubeDragging=false,cameraSettingsTimer,pendingCameraSettings=null;
+let cameraSnapshot={epoch:'local',revision:0,config:state.camera,event:null},cameraUI=null,pendingCamera=null;
+let cubeDragging=false,cameraSettingsTimer,pendingCameraSettings=null,viewPresentationKey=null;
 let cameraServerTime=Date.now(),cameraCalibratedAt=performance.now();
 const cameraSampler=new CameraSampler();
 const pinch = new PinchGesture();
@@ -156,52 +156,39 @@ const livePublisher = createLivePublisher(from => {
   return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, plane: stroke.plane, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
 }, outputStatus);
 
-const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view, takeId:activeTakeId }), outputStatus);
+const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view }), outputStatus);
 const cameraPublisher=createCameraPublisher(liveSession,receiveCamera,outputStatus);
 const serverAt=now=>cameraServerTime+now-cameraCalibratedAt;
 function effectiveView(now=performance.now()){return cubeDragging?state.view:cameraPose({...cameraSnapshot,config:state.camera},state.view,clock.phase(now),serverAt(now));}
-const orientation = setupOrientationCube($('.navigation-tools'), { getView:()=>effectiveView(),onChange:view=>{if(ready&&(state.camera.mode!=='rec'||activeTakeId))changeView(view);},onStart:startCameraTake,onFinish:()=>{cubeDragging=false;if(ready){void finishCameraTake();finishView();}} });
-function syncCameraUI(){cameraUI?.sync(!!cameraSnapshot.recording||!!activeTakeId);orientation.setDisabled(state.camera.mode==='midi-auto');}
+const orientation = setupOrientationCube($('.navigation-tools'), {
+ getView:()=>effectiveView(),
+ onChange:view=>{if(ready)changeView(view);},
+ onStart:()=>{if(ready){endStroke(null);state.view=effectiveView();cubeDragging=true;}},
+ onFinish:()=>{cubeDragging=false;if(ready)finishView();}
+});
+function syncCameraUI(){cameraUI?.sync();orientation.setDisabled(state.camera.mode==='midi-auto');}
 function receiveCamera(update){
  if(!update)return;
  if(!ready){pendingCamera=update;return;}
  const previous=cameraSnapshot,next=mergeCamera(previous,update);if(next===previous)return;
- cameraSnapshot=next;state.camera=pendingCameraSettings?{...next.config,...pendingCameraSettings,track:next.config.track}:next.config;
+ cameraSnapshot=next;state.camera=pendingCameraSettings?{...next.config,...pendingCameraSettings}:next.config;
  if(next.baseView&&!cubeDragging&&(!pendingCameraSettings||pendingCameraSettings.mode===next.config.mode))state.view=canvasView(next.baseView);
- if(activeTakeId&&!recordStartPending&&!next.recording){activeTakeId=null;cubeDragging=false;}
  syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
- if(!next.recording&&(previous.recording||JSON.stringify(previous.config)!==JSON.stringify(next.config)))queueSave(false,true);
+ if(JSON.stringify(previous.config)!==JSON.stringify(next.config))queueSave(false,true);
 }
 function setCameraSettings(value){
  if(!ready)return;endStroke(null);
  const pose=effectiveView(),next=cameraConfig(value),changed=next.mode!==state.camera.mode;
- if(changed){void finishCameraTake();state.view=next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null,recording:null};cubeDragging=false;cameraSampler.reset();}
+ if(changed){state.view=next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null};cubeDragging=false;cameraSampler.reset();}
  pendingCameraSettings=next;state.camera=next;syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
  clearTimeout(cameraSettingsTimer);
  if(changed)void pushCameraSettings();else cameraSettingsTimer=setTimeout(pushCameraSettings,100);
 }
 function pushCameraSettings(){
  const sent=pendingCameraSettings;if(!sent)return Promise.resolve();
- return cameraPublisher.send('settings',{camera:{...sent,track:state.camera.track}}).then(()=>{if(pendingCameraSettings===sent)pendingCameraSettings=null;queueSave(false,true);}).catch(error=>{if(pendingCameraSettings===sent){pendingCameraSettings=null;state.camera=cameraSnapshot.config;syncCameraUI();}toast(error.message);});
+ return cameraPublisher.send('settings',{camera:sent}).then(()=>{if(pendingCameraSettings===sent)pendingCameraSettings=null;queueSave(false,true);}).catch(error=>{if(pendingCameraSettings===sent){pendingCameraSettings=null;state.camera=cameraSnapshot.config;syncCameraUI();}toast(error.message);});
 }
 
-function startCameraTake(){
- if(!ready||state.camera.mode==='midi-auto')return;
- endStroke(null);const pose=effectiveView();cubeDragging=true;state.view=pose;
- if(state.camera.mode!=='rec')return;
- clearTimeout(cameraSettingsTimer);void pushCameraSettings();
- const previous=state.camera.track,id=`${liveSession}-camera-${Date.now()}`;activeTakeId=id;recordStartPending=true;
- state.camera={...state.camera,track:{id,samples:[{t:0,view:pose}]}};cameraSnapshot={...cameraSnapshot,config:state.camera,recording:{id}};
- const now=performance.now();clock.restart(now);clock.play(now);playbackUI();cameraSampler.reset();syncCameraUI();
- cameraPublisher.send('record-start',{takeId:id,view:pose}).catch(error=>{if(activeTakeId===id){activeTakeId=null;state.camera={...state.camera,track:previous};cameraSnapshot={...cameraSnapshot,config:state.camera,recording:null};syncCameraUI();}toast(error.message);}).finally(()=>{if(activeTakeId===id)recordStartPending=false;});
-}
-async function finishCameraTake(){
- const id=activeTakeId;if(!id)return;
- await viewPublisher.flush();
- if(activeTakeId===id)activeTakeId=null;
- try{await cameraPublisher.send('record-end',{takeId:id});queueSave(false,true);}catch(error){toast(error.message);}
- syncCameraUI();
-}
 cameraUI=setupCameraControls({midi:$('#midi-panel'),bottom:$('.camera-mode-controls'),effects:$('#draw-camera-controls'),getCamera:()=>state.camera,onChange:setCameraSettings});
 
 let pendingTransport = null;
@@ -652,27 +639,26 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
-  const frameCamera=cameraSampler.frame({...cameraSnapshot,config:state.camera,...(cubeDragging&&activeTakeId?{recording:{id:activeTakeId}}:{})},state.view,phase,serverAt(now),now);
+  const frameCamera=cameraSampler.frame({...cameraSnapshot,config:state.camera},state.view,phase,serverAt(now),now);
   if(cubeDragging){frameCamera.view=state.view;}
-  painting.setView(frameCamera.view);orientation.update(frameCamera.view);
-  const worldScale=(frameCamera.view.distance??CAMERA_DISTANCE)/CAMERA_DISTANCE/frameCamera.view.scale;$('.canvas-state').textContent=`View ${Math.round(Math.min(BOX_SPEC.width,VIEWPORT_WIDTH*worldScale))} × ${Math.round(Math.min(BOX_SPEC.height,VIEWPORT_HEIGHT*worldScale))}`;
-  paintingBoundary.innerHTML=boxEdges(frameCamera.view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1"/>`).join('');
+  painting.setView(frameCamera.view);syncViewPresentation(frameCamera.view);
   painting.draw(index, phase, { now, cameraViews:frameCamera.cameraViews, placementPreview: !clock.playing });
 }
 function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
 let animationFrame = -1;
 function animate(now) {
+  // Keep the transport alive even if a drawing backend throws this frame.
+  requestAnimationFrame(animate);
   const frame = frameNumber(now);
   if (frame !== animationFrame) {
     animationFrame = frame;
+    timelineUI(now);
     const revealed = lineSchedule.advance(clips, clock.phase(now), clock.duration, now, clock.playing);
     if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
     if (stroke) livePublisher.publish(now);
     if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
     for (let i = 0; i < canvases.length; i++) if (state.camera.mode!=='normal'||now<cameraSampler.movingUntil||(clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
-    timelineUI(now);
   }
-  requestAnimationFrame(animate);
 }
 renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas, inputView=effectiveView()) {
@@ -700,14 +686,19 @@ function endStroke(event) {
   publisher.publish();
   renderTargets([0], now, true);
 }
+// Drawing at 60Hz must not rebuild the navigation SVGs when the camera is still.
+function syncViewPresentation(view) {
+  const key=JSON.stringify(view);if(key===viewPresentationKey)return;
+  viewPresentationKey=key;orientation.update(view);
+  const worldScale=(view.distance??CAMERA_DISTANCE)/CAMERA_DISTANCE/view.scale;
+  $('.canvas-state').textContent=`View ${Math.round(Math.min(BOX_SPEC.width,VIEWPORT_WIDTH*worldScale))} × ${Math.round(Math.min(BOX_SPEC.height,VIEWPORT_HEIGHT*worldScale))}`;
+  paintingBoundary.innerHTML=boxEdges(view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
+}
 function syncViewUI() {
   const percent = `${Math.round(state.view.scale * 100)}%`;
   $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
-  $('.canvas-state').textContent = `View ${Math.round(Math.min(CANVAS_SPEC.width, VIEWPORT_WIDTH / state.view.scale))} × ${Math.round(Math.min(CANVAS_SPEC.height, VIEWPORT_HEIGHT / state.view.scale))}`;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
-  orientation.update(effectiveView());
-  paintingBoundary.innerHTML = boxEdges(effectiveView()).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
-  painting.setView(effectiveView()); canvases[0].dataset.zoom = state.view.scale;
+  const view=effectiveView();syncViewPresentation(view);painting.setView(view);canvases[0].dataset.zoom=state.view.scale;
 }
 function changeView(view) {
   if(state.camera.mode==='midi-auto')view=centered({...state.view,scale:view.scale});
@@ -845,24 +836,23 @@ function editFloatingColor(color, opacity) {
 }
 function setColor(color) { state.color = color; syncFloatingColor(); queueSave(); }
 $('#play').addEventListener('click', () => {
-  endStroke(null); void finishCameraTake(); const now = performance.now();
+  endStroke(null); const now = performance.now();
   if (clock.playing) clock.pause(now); else clock.play(now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('pointerdown', event => {
-  void finishCameraTake();
   if (!ready || event.button !== 0) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('input', event => {
-  cameraSampler.reset();void finishCameraTake();
+  cameraSampler.reset();
   if (!ready) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { void finishCameraTake();cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -958,7 +948,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     clips = structuredClone(project.clips);
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
-    cameraSnapshot={...cameraSnapshot,config:state.camera,event:JSON.stringify(cameraSnapshot.config)===JSON.stringify(state.camera)?cameraSnapshot.event:null,recording:null};cameraSampler.reset();syncCameraUI();
+    cameraSnapshot={...cameraSnapshot,config:state.camera,event:JSON.stringify(cameraSnapshot.config)===JSON.stringify(state.camera)?cameraSnapshot.event:null};cameraSampler.reset();syncCameraUI();
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
     lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
     viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);

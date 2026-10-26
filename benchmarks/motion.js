@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { DEFAULT_CAMERA,CameraSampler,cameraPose } from '../src/camera-motion.js';
+import { DEFAULT_CAMERA,CameraSampler,newCameraEvent } from '../src/camera-motion.js';
 import { VolumePaintingRenderer } from '../src/render/volume.js';
 import { CPUVolumeRenderer } from '../src/render/volume-cpu.js';
 import { DEFAULT_EFFECTS } from '../src/effects.js';
@@ -43,8 +43,10 @@ run.onclick=async()=>{
   let squared=0,bad=0;for(let i=0;i<cameraImage.length;i++){const delta=Math.abs(cameraImage[i]-Math.round(cameraMean[i]));squared+=delta*delta;if(delta>2)bad++;}
   check('Camera Motion Blur matches independent camera projections',Math.sqrt(squared/cameraImage.length)<.15&&bad<128,{rmsError:Math.sqrt(squared/cameraImage.length),channelsOver2:bad});
   check('The actual Three.js camera looks at the origin from its orbital position',Math.abs(gpu.camera.getWorldDirection(new Vector3()).dot(gpu.camera.position.clone().normalize())+1)<1e-6&&Math.abs(gpu.camera.position.length()-5350)<1e-6);
-  const rec={config:{...DEFAULT_CAMERA,mode:'rec',track:{id:'loop',samples:[{t:0,view:DEFAULT_VIEW},{t:2000,view:views.at(-1)}]}}},sampler=new CameraSampler(),sampled=sampler.frame(rec,DEFAULT_VIEW,1000,0,0);
-  gpu.setView(sampled.view);gpu.setProject(project([cameraClip]));gpu.draw(0,1000,{cameraViews:sampled.cameraViews});const recorded=gpu.readPixels();const repeat=sampler.frame(rec,DEFAULT_VIEW,17000,0,1);gpu.setView(repeat.view);gpu.draw(0,17000,{cameraViews:repeat.cameraViews});check('Recorded camera exposure repeats on the 16-second timeline',same(recorded,gpu.readPixels()));
+  const config={...DEFAULT_CAMERA,mode:'midi-auto'},event=newCameraEvent(DEFAULT_VIEW,DEFAULT_VIEW,config,0,'1:60',()=>.65),sampler=new CameraSampler();
+  const sampled=sampler.frame({config,event},DEFAULT_VIEW,1000,200,0);
+  gpu.setView(sampled.view);gpu.setProject(project([cameraClip]));gpu.draw(0,1000,{cameraViews:sampled.cameraViews});const automated=gpu.readPixels();
+  const repeat=sampler.frame({config,event},DEFAULT_VIEW,17000,200,1);gpu.setView(repeat.view);gpu.draw(0,17000,{cameraViews:repeat.cameraViews});check('MIDI camera exposure is independent of timeline phase',same(automated,gpu.readPixels()));
   gpu.setView(DEFAULT_VIEW);sharp.setView(DEFAULT_VIEW);
   // Fast live input: history tracks the actual displayed (smoothed) head.
   gpu.setProject(project([]));sharp.setProject(project([]));const a={x:1800,y:1080,size:40,t:0},b={x:1920,y:1080,size:40,t:FRAME_MS};
