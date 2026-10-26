@@ -12,11 +12,11 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
   const root = document.createElement('div'); root.className = 'orientation-control'; root.setAttribute('aria-label', '3D view orientation');
   root.innerHTML = '<svg viewBox="0 0 132 122" class="orientation-cube" tabindex="0" role="button" aria-label="Rotate 3D view" aria-describedby="cube-help"></svg><div class="orientation-details"><button type="button" aria-label="Front view">正面</button><output class="orientation-readout"></output></div><span id="cube-help" class="sr-only">Drag with one finger. Arrow keys orbit; Shift and arrows rotate. Home returns to front.</span>';
   parent.append(root);
-  const svg = root.querySelector('svg'); let drag = null;
-  const pose = updates => { onStart(); onChange(canvasView({ ...getView(), pitch: 0, yaw: 0, rotation: 0, ...updates })); onFinish(); };
+  const svg = root.querySelector('svg'); let drag = null, disabled = false;
+  const pose = updates => { if(disabled)return; onStart(); onChange(canvasView({ ...getView(), pitch: 0, yaw: 0, rotation: 0, ...updates })); onFinish(); };
   root.querySelector('button').addEventListener('click', () => pose({}));
   svg.addEventListener('pointerdown', event => {
-    if (drag || event.button !== 0) return;
+    if (disabled || drag || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation(); onStart();
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: { ...getView() }, moved: false, face: event.target.closest('[data-face]')?.dataset.face };
     svg.setPointerCapture(event.pointerId);
@@ -35,6 +35,7 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
   };
   for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) svg.addEventListener(name, finish);
   svg.addEventListener('keydown', event => {
+    if(disabled)return;
     const view = getView(), updates = {};
     if (event.key === 'Home') { event.preventDefault(); pose({}); return; }
     if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
@@ -54,5 +55,8 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
     root.querySelector('.orientation-readout').textContent = `X ${Math.round(view.pitch ?? 0)}° Y ${Math.round(view.yaw ?? 0)}° Z ${Math.round(view.rotation ?? 0)}°`;
     svg.setAttribute('aria-description', `X ${Math.round(view.pitch ?? 0)}°, Y ${Math.round(view.yaw ?? 0)}°, Z ${Math.round(view.rotation ?? 0)}°`);
   }
-  update(getView()); return { update };
+  update(getView()); return { update, setDisabled(value){
+    disabled=value;root.classList.toggle('camera-locked',value);svg.setAttribute('aria-disabled',String(value));svg.tabIndex=value?-1:0;root.querySelector('button').disabled=value;
+    if(value&&drag){const id=drag.id;drag=null;if(svg.hasPointerCapture(id))svg.releasePointerCapture(id);onFinish();}
+  } };
 }

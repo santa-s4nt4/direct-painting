@@ -1,3 +1,5 @@
+import { cameraConfig, cameraPose, newCameraEvent, releaseCameraEvent, centered, MAX_CAMERA_SAMPLES } from '../src/camera-motion.js';
+import { DEFAULT_VIEW } from '../src/view.js';
 import { randomUUID } from 'node:crypto';
 import { LOOP_MS } from '../src/transport.js';
 import { createMidiInput } from './midi.js';
@@ -16,6 +18,7 @@ export function validateSnapshot(value, now) {
   if (project.settings?.view !== undefined) project.settings = { ...project.settings, view: importedView(project.settings.view, project.canvas, project.settings.viewVersion), viewVersion: 4 };
   if (project.canvas) project.canvas = { ...CANVAS_SPEC };
   project.clips = project.clips.map(fixedLineStyle);
+  if(project.settings?.camera!==undefined)project.settings={...project.settings,camera:cameraConfig(project.settings.camera)};
   const playback = value?.playback;
   if (!playback || typeof playback.playing !== 'boolean' || !Number.isFinite(playback.phase) || playback.phase < 0) throw new Error('Invalid playback');
   const phase = playback.phase % project.duration;
@@ -43,12 +46,14 @@ export function validateLive(value) {
 }
 export function validateViewControl(value) {
   if (!value || typeof value.session !== 'string' || !value.session.length || value.session.length > 100 || !Number.isSafeInteger(value.revision) || value.revision < 0 || !value.view) throw new Error('Invalid view control');
-  validateView(value.view); return { session: value.session, revision: value.revision, view: canvasView(value.view) };
+  validateView(value.view); if(value.takeId!==undefined&&value.takeId!==null&&(typeof value.takeId!=='string'||value.takeId.length>150))throw new Error('Invalid camera take');
+  return { session: value.session, revision: value.revision, view: canvasView(value.view), ...(value.takeId?{takeId:value.takeId}:{}) };
 }
 export async function createLoopRelay(cacheFile, { midi = false } = {}) {
   let state = null, version = 0, writes = Promise.resolve(), live = null, liveVersion = 0, lastLiveAt = 0;
   const transport = { epoch: randomUUID(), revision: 0 };
   let midiInput;
+  const camera={epoch:randomUUID(),revision:0,event:null,recording:null},cameraControls=new Map();
   const clients = new Set(), controls = new Map(), viewControls = new Map();
   const lineSchedule = new LineSchedule(), releasedLines = new Map();
   try {
@@ -58,7 +63,8 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     version++;
   } catch (error) { if (error.code !== 'ENOENT') console.warn('Output cache could not be restored:', error.message); }
   const fullLive = () => live ? { ...live, from: 0 } : null;
-  const message = (since, includeLive = true) => ({ version, serverNow: Date.now(), transport: { ...transport }, state: since === version ? null : state, ...(includeLive ? { liveVersion, live: fullLive() } : {}) });
+  const cameraSnapshot=()=>({...camera,config:cameraConfig(state?.project.settings?.camera),baseView:state?.project.settings?.view??DEFAULT_VIEW});
+  const message = (since, includeLive = true) => ({ version, serverNow: Date.now(), transport: { ...transport }, camera:cameraSnapshot(), state: since === version ? null : state, ...(includeLive ? { liveVersion, live: fullLive() } : {}) });
   const json = (response, code, data) => { response.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(data)); };
   const emit = (event, data) => { const text = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`; for (const response of clients) response.write(text); };
   const remember = control => {
@@ -88,8 +94,26 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
   if (state) lineSchedule.rebase(state.project.clips, phaseAt(Date.now()), state.project.duration, Date.now());
   // Continue the first-cycle handoff even when the iPad tab sleeps or closes.
   const lineTicker = setInterval(() => revealLines(Date.now()), 1000 / 60); lineTicker.unref();
+  const emitCamera=()=>emit('camera',{...cameraSnapshot(),serverNow:Date.now(),version});
+  const appendCameraPoint=(view,now)=>{
+    if(!state||!camera.recording)return;
+    const config=cameraConfig(state.project.settings?.camera),track=config.track;
+    if(!track)return;
+    const t=Math.min(LOOP_MS-1,Math.max(0,now-camera.recording.startedAt)),samples=[...track.samples];
+    if(t<=samples.at(-1).t)return;
+    const point={t,view:canvasView(view)},index=Math.min(samples.length,MAX_CAMERA_SAMPLES-1);samples[index]=point;
+    state={...state,project:{...state.project,settings:{...state.project.settings,camera:{...config,track:{...track,samples}}}}};camera.revision++;
+    emit('camera',{epoch:camera.epoch,revision:camera.revision,point,index,takeId:track.id,recording:camera.recording,event:camera.event,baseView:view,serverNow:now,version});
+  };
+  const finishCameraRecording=now=>{
+    if(!camera.recording||!state)return;
+    appendCameraPoint(state.project.settings?.view??DEFAULT_VIEW,now);camera.recording=null;camera.revision++;version++;emitCamera();
+    void persist(state).catch(error=>console.warn('Camera recording could not be saved:',error.message));
+  };
+  const cameraTicker=setInterval(()=>{if(camera.recording&&Date.now()-camera.recording.startedAt>=LOOP_MS)finishCameraRecording(Date.now());},1000/60);cameraTicker.unref();
   const restartFromMidi = now => {
     if (!state) return;
+    finishCameraRecording(now);
     transport.revision++;
     state = { ...state, playback: { playing: true, phase: 0, anchor: now }, project: { ...state.project, clips: state.project.clips.map(clip => {
       if (clip.mode !== 'line' || clip.lineIncomplete) return clip;
@@ -101,7 +125,18 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     emit('state', message(-1));
     void persist(state).catch(error => console.warn('MIDI restart could not be saved:', error.message));
   };
-  if (midi) midiInput = await createMidiInput({ configFile: `${cacheFile}.midi.json`, onRestart: restartFromMidi });
+  const receiveCameraNote=message=>{
+    if(!state)return;
+    const config=cameraConfig(state.project.settings?.camera);if(config.mode!=='midi-auto')return;
+    if(message.type==='all-off'||message.type==='off'&&camera.event?.key===`${message.channel}:${message.note}`){
+      const released=releaseCameraEvent(camera.event,message.at);if(released===camera.event)return;camera.event=released;
+    }else if(message.type==='on'&&message.note===config.note){
+      const base=state.project.settings?.view??DEFAULT_VIEW,from=cameraPose(cameraSnapshot(),base,phaseAt(message.at),message.at);
+      camera.event=newCameraEvent(from,base,config,message.at,`${message.channel}:${message.note}`);
+    }else return;
+    camera.revision++;emitCamera();
+  };
+  if (midi) midiInput = await createMidiInput({ configFile: `${cacheFile}.midi.json`, onRestart: restartFromMidi, onNote:receiveCameraNote });
   const readJSON = async request => {
     let bytes = 0; const chunks = [];
     for await (const chunk of request) { bytes += chunk.length; if (bytes > 16 * 1024 * 1024) throw new Error('Project exceeds 16MB'); chunks.push(chunk); }
@@ -117,10 +152,40 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     }
     if (url.pathname === '/api/midi') {
       if (!midiInput) return json(response, 503, { error: 'MIDI input is not enabled on this server' });
-      if (request.method === 'GET') return json(response, 200, { ...midiInput.snapshot(), transport: { ...transport }, playback: state?.playback, serverNow: Date.now() });
+      if (request.method === 'GET') return json(response, 200, { ...midiInput.snapshot(), transport: { ...transport }, playback: state?.playback, camera:cameraSnapshot(), serverNow: Date.now() });
       if (request.method !== 'POST' || !request.headers['content-type']?.startsWith('application/json')) return json(response, 405, { error: 'Use JSON POST or GET' });
       try { await midiInput.configure(await readJSON(request)); return json(response, 200, midiInput.snapshot()); }
       catch (error) { return json(response, 400, { error: error.message }); }
+    }
+    if(url.pathname==='/api/camera'){
+      if(request.method==='GET')return json(response,200,{...cameraSnapshot(),serverNow:Date.now(),version});
+      if(request.method!=='POST'||!request.headers['content-type']?.startsWith('application/json'))return json(response,405,{error:'Use JSON POST'});
+      try{
+        const value=await readJSON(request);
+        if(!state)return json(response,409,{error:'Project not ready'});
+        if(typeof value.session!=='string'||!value.session.length||value.session.length>100||!Number.isSafeInteger(value.revision)||value.revision<0)throw new Error('Invalid camera control');
+        const known=cameraControls.get(value.session);if(known!==undefined&&known>=value.revision)return json(response,200,cameraSnapshot());
+        if(value.kind==='settings'){
+          if(!value.camera||typeof value.camera!=='object')throw new Error('Camera settings required');
+          const incoming=cameraConfig(value.camera),old=cameraConfig(state.project.settings?.camera),now=Date.now(),base=state.project.settings?.view??DEFAULT_VIEW;
+          const pose=cameraPose(cameraSnapshot(),base,phaseAt(now),now);if(incoming.mode!==old.mode||incoming.track?.id!==old.track?.id)finishCameraRecording(now);
+          const current=cameraConfig(state.project.settings?.camera);
+          if(incoming.track?.id===current.track?.id&&current.track?.samples.length>incoming.track?.samples.length)incoming.track=current.track;
+          if(incoming.mode!==old.mode){camera.event=null;state={...state,project:{...state.project,settings:{...state.project.settings,view:incoming.mode==='midi-auto'?centered(pose):pose}}};}
+          else if(incoming.note!==old.note)camera.event=releaseCameraEvent(camera.event,now);
+          state={...state,project:{...state.project,settings:{...state.project.settings,camera:incoming}}};
+        }else if(value.kind==='record-start'){
+          validateView(value.view);if(typeof value.takeId!=='string'||!value.takeId.length||value.takeId.length>150)throw new Error('Invalid camera take ID');
+          const now=Date.now();finishCameraRecording(now);restartFromMidi(now);
+          const view=canvasView(value.view),config={...cameraConfig(state.project.settings?.camera),mode:'rec',track:{id:value.takeId,samples:[{t:0,view}]}};
+          state={...state,playback:{playing:true,phase:0,anchor:now},project:{...state.project,settings:{...state.project.settings,view,camera:config}}};
+          camera.event=null;camera.recording={id:value.takeId,session:value.session,startedAt:now};
+        }else if(value.kind==='record-end'){
+          if(camera.recording?.id===value.takeId&&camera.recording?.session===value.session)finishCameraRecording(Date.now());
+        }else throw new Error('Unknown camera command');
+        cameraControls.set(value.session,value.revision);if(cameraControls.size>128)cameraControls.delete(cameraControls.keys().next().value);
+        camera.revision++;version++;emitCamera();await persist(state);return json(response,200,cameraSnapshot());
+      }catch(error){return json(response,400,{error:error.message});}
     }
     if (!['/api/loop', '/api/live', '/api/view'].includes(url.pathname)) return next();
     if (url.pathname === '/api/loop' && request.method === 'GET') return json(response, 200, message(Number(url.searchParams.get('since')), url.searchParams.get('live') !== '0'));
@@ -129,10 +194,12 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
       const value = await readJSON(request);
       if (url.pathname === '/api/view') {
         const control = validateViewControl(value), known = viewControls.get(control.session);
+        if(control.takeId&&(camera.recording?.id!==control.takeId||camera.recording?.session!==control.session)||camera.recording&&control.takeId!==camera.recording.id)return json(response,200,{version});
         if (!state) return json(response, 409, { error: 'Project not ready' });
         if (known && known.revision >= control.revision) return json(response, 200, { version });
         rememberView(control);
         state = { ...state, project: { ...state.project, settings: { ...state.project.settings, view: control.view } } }; version++;
+        if(camera.recording?.session===control.session&&camera.recording.id===control.takeId)appendCameraPoint(control.view,Date.now());
         emit('view', { view: control.view, version });
         return json(response, 200, { version });
       }
@@ -175,6 +242,10 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
         if (!releasedLines.get(clip.id)) return { ...clip, linePending: false }; // A late first-cycle snapshot cannot reopen a released gate.
         releasedLines.delete(clip.id); return clip; // An acknowledged gate may be explicitly restored by Undo/import.
       }) };
+      const staleCamera=camera.revision>0&&(value.cameraState?.epoch!==camera.epoch||value.cameraState?.revision!==camera.revision);
+      if(staleCamera&&state)candidate.project={...candidate.project,settings:{...candidate.project.settings,camera:state.project.settings?.camera,view:state.project.settings?.view}};
+      else if(state&&JSON.stringify(candidate.project.settings?.camera)!==JSON.stringify(state.project.settings?.camera)){camera.event=null;camera.recording=null;camera.revision++;}
+      if(camera.recording&&!candidate.playback.playing){finishCameraRecording(Date.now());candidate.project={...candidate.project,settings:{...candidate.project.settings,camera:state.project.settings?.camera}};}
       // A snapshot sent before a MIDI trigger must never undo that restart.
       if (transport.revision > 0 && (value.transportState?.epoch !== transport.epoch || value.transportState?.revision !== transport.revision) && state) candidate.playback = { ...state.playback };
       state = candidate; version++;
@@ -185,6 +256,7 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     } catch (error) { json(response, 400, { error: error.message }); }
   };
   handler.restartFromMidi = restartFromMidi;
-  handler.dispose = () => { midiInput?.dispose(); clearInterval(heartbeat); clearInterval(expiry); clearInterval(lineTicker); for (const response of clients) response.end(); clients.clear(); return writes; };
+  handler.receiveCameraNote=receiveCameraNote;
+  handler.dispose = () => { midiInput?.dispose(); clearInterval(heartbeat); clearInterval(expiry); clearInterval(lineTicker); clearInterval(cameraTicker); for (const response of clients) response.end(); clients.clear(); return writes; };
   return handler;
 }

@@ -224,3 +224,14 @@ canvas.color-wheel { width: 180px; height: 180px; border-radius: 50%; cursor: cr
 }
 .orientation-details button { white-space: nowrap; }
 #midi-note { display: block; padding: 8px 10px; border: 1px solid #444; border-radius: 4px; color: #eee; background: #2d2d2d; font-size: 12px; }
+.camera-mode-controls { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; min-width: 0; padding: 3px 0; color: #aaa; font-size: 10px; }
+.camera-mode-controls button { min-height: 30px; padding: 3px 9px; background: #303030; color: #bbb; border: 1px solid #4a4a4a; border-radius: 4px; font-size: 10px; white-space: nowrap; }
+.camera-mode-controls button[aria-pressed=true] { background: #168cff; color: white; border-color: #3aacff; }
+#camera-record-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 5px; }
+#camera-record-status[data-recording=true] { color: #ff7676; }
+.camera-locked .orientation-cube { opacity: .4; cursor: not-allowed; }
+.camera-midi-controls { display: grid; gap: 10px; padding-top: 16px; margin-top: 6px; border-top: 1px solid #444; }
+.camera-midi-controls h3 { font-size: 13px; margin: 0; }
+.camera-adsr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.camera-adsr label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 10px; }
+.camera-adsr input { width: 58px; min-height: 32px; }

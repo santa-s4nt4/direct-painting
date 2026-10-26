@@ -1,9 +1,11 @@
+import { cameraConfig, cameraPose, centered, mergeCamera, CameraSampler } from './camera-motion.js';
+import { setupCameraControls } from './camera-controls.js';
 import { setupMidiPanel } from './midi-panel.js';
-import { BOX_SPEC, workingPlane, drawingPoint, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
+import { BOX_SPEC, workingPlane, drawingPoint, drawingPointOnPlane, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
 import { LineSchedule, FIXED_LINE_WIDTH } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
-import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, canvasView, zoomAt, PinchGesture } from './view.js';
+import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, CAMERA_DISTANCE, canvasView, zoomAt, PinchGesture } from './view.js';
 import './style.css';
 import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
 import { FPS, FRAME_MS, frameNumber } from './timing.js';
@@ -13,7 +15,7 @@ import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
 import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, MAX_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
 import { FixedLoopClock, DEFAULT_LOOP_MS, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
-import { createPublisher, createLivePublisher, createViewPublisher, playbackSnapshot } from './relay.js';
+import { createPublisher, createLivePublisher, createViewPublisher, createCameraPublisher, playbackSnapshot } from './relay.js';
 import { loadProject, saveProject } from './cache.js';
 import { DEFAULT_SETTINGS, MAX_PROJECT_BYTES, normalizeProject, singleCanvasProject, serializeProject, parseProject } from './project.js';
 import { colorHSL, editLayerLightness, pickLayerColor, hasColorGradient, hasFireworkColor, hasSampleColor } from './color.js';
@@ -63,6 +65,7 @@ document.querySelector('#app').innerHTML = `
           <input id="draw-motion-range" type="range" min="0" max="200" step="1" value="100" aria-label="Brush motion blur shutter">
           <p class="control-hint">100% = 1 frame (16.7ms). Moving shapes blur; stationary shapes stay sharp.</p>
         </div>
+        <div id="draw-camera-controls" class="control-section"></div>
         <div class="control-section size-controls" id="circle-controls">
           <span class="section-label">SIZE RANGE</span>
           ${['min', 'max'].map((bound, i) => `<div class="size-bound"><label for="size-${bound}">${bound.toUpperCase()}</label><input id="size-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" inputmode="numeric" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter in pixels"><span>px</span><input id="range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter slider"></div>`).join('')}
@@ -135,12 +138,16 @@ let cacheFailed = false;
 const liveSession = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let liveRevision = 0, viewRevision = 0;
 let transportState = null;
+let cameraSnapshot={epoch:'local',revision:0,config:state.camera,event:null,recording:null},cameraUI=null,pendingCamera=null;
+let activeTakeId=null,recordStartPending=false,cubeDragging=false,cameraSettingsTimer,pendingCameraSettings=null;
+let cameraServerTime=Date.now(),cameraCalibratedAt=performance.now();
+const cameraSampler=new CameraSampler();
 const pinch = new PinchGesture();
 const lineSchedule = new LineSchedule();
 let zoomSaveTimer, viewDirty = false;
 $('.sidebar-scroll').inert = true; $('.loop-controls').inert = true;
 const outputStatus = connected => { $('#output-status').textContent = connected ? 'Live output connected' : 'Output offline'; $('#output-status').dataset.connected = String(connected); };
-const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, clips, duration: clock.duration, settings: state }, transportState, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
+const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, clips, duration: clock.duration, settings: state }, cameraState:{epoch:cameraSnapshot.epoch,revision:cameraSnapshot.revision}, transportState, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
 const livePublisher = createLivePublisher(from => {
   if (!stroke) return null;
   const elapsed = Math.max(performance.now() - stroke.started, stroke.samples.at(-1).t);
@@ -149,8 +156,53 @@ const livePublisher = createLivePublisher(from => {
   return { session: liveSession, revision: liveRevision, id: stroke.id, mode: stroke.mode, color: stroke.color, opacity: stroke.opacity, effects: stroke.effects, ringWidth: stroke.ringWidth, plane: stroke.plane, targets: stroke.targets, from, samples: stroke.samples.slice(from), elapsed, head: { ...stroke.last, t: elapsed }, move: circle?.displayPoint() };
 }, outputStatus);
 
-const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view }), outputStatus);
-const orientation = setupOrientationCube($('.navigation-tools'), { getView: () => state.view, onChange: view => { if (ready) changeView(view); }, onStart: () => { endStroke(null); }, onFinish: () => { if (ready) finishView(); } });
+const viewPublisher = createViewPublisher(() => ({ session: liveSession, revision: viewRevision, view: state.view, takeId:activeTakeId }), outputStatus);
+const cameraPublisher=createCameraPublisher(liveSession,receiveCamera,outputStatus);
+const serverAt=now=>cameraServerTime+now-cameraCalibratedAt;
+function effectiveView(now=performance.now()){return cubeDragging?state.view:cameraPose({...cameraSnapshot,config:state.camera},state.view,clock.phase(now),serverAt(now));}
+const orientation = setupOrientationCube($('.navigation-tools'), { getView:()=>effectiveView(),onChange:view=>{if(ready&&(state.camera.mode!=='rec'||activeTakeId))changeView(view);},onStart:startCameraTake,onFinish:()=>{cubeDragging=false;if(ready){void finishCameraTake();finishView();}} });
+function syncCameraUI(){cameraUI?.sync(!!cameraSnapshot.recording||!!activeTakeId);orientation.setDisabled(state.camera.mode==='midi-auto');}
+function receiveCamera(update){
+ if(!update)return;
+ if(!ready){pendingCamera=update;return;}
+ const previous=cameraSnapshot,next=mergeCamera(previous,update);if(next===previous)return;
+ cameraSnapshot=next;state.camera=pendingCameraSettings?{...next.config,...pendingCameraSettings,track:next.config.track}:next.config;
+ if(next.baseView&&!cubeDragging&&(!pendingCameraSettings||pendingCameraSettings.mode===next.config.mode))state.view=canvasView(next.baseView);
+ if(activeTakeId&&!recordStartPending&&!next.recording){activeTakeId=null;cubeDragging=false;}
+ syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
+ if(!next.recording&&(previous.recording||JSON.stringify(previous.config)!==JSON.stringify(next.config)))queueSave(false,true);
+}
+function setCameraSettings(value){
+ if(!ready)return;endStroke(null);
+ const pose=effectiveView(),next=cameraConfig(value),changed=next.mode!==state.camera.mode;
+ if(changed){void finishCameraTake();state.view=next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null,recording:null};cubeDragging=false;cameraSampler.reset();}
+ pendingCameraSettings=next;state.camera=next;syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
+ clearTimeout(cameraSettingsTimer);
+ if(changed)void pushCameraSettings();else cameraSettingsTimer=setTimeout(pushCameraSettings,100);
+}
+function pushCameraSettings(){
+ const sent=pendingCameraSettings;if(!sent)return Promise.resolve();
+ return cameraPublisher.send('settings',{camera:{...sent,track:state.camera.track}}).then(()=>{if(pendingCameraSettings===sent)pendingCameraSettings=null;queueSave(false,true);}).catch(error=>{if(pendingCameraSettings===sent){pendingCameraSettings=null;state.camera=cameraSnapshot.config;syncCameraUI();}toast(error.message);});
+}
+
+function startCameraTake(){
+ if(!ready||state.camera.mode==='midi-auto')return;
+ endStroke(null);const pose=effectiveView();cubeDragging=true;state.view=pose;
+ if(state.camera.mode!=='rec')return;
+ clearTimeout(cameraSettingsTimer);void pushCameraSettings();
+ const previous=state.camera.track,id=`${liveSession}-camera-${Date.now()}`;activeTakeId=id;recordStartPending=true;
+ state.camera={...state.camera,track:{id,samples:[{t:0,view:pose}]}};cameraSnapshot={...cameraSnapshot,config:state.camera,recording:{id}};
+ const now=performance.now();clock.restart(now);clock.play(now);playbackUI();cameraSampler.reset();syncCameraUI();
+ cameraPublisher.send('record-start',{takeId:id,view:pose}).catch(error=>{if(activeTakeId===id){activeTakeId=null;state.camera={...state.camera,track:previous};cameraSnapshot={...cameraSnapshot,config:state.camera,recording:null};syncCameraUI();}toast(error.message);}).finally(()=>{if(activeTakeId===id)recordStartPending=false;});
+}
+async function finishCameraTake(){
+ const id=activeTakeId;if(!id)return;
+ await viewPublisher.flush();
+ if(activeTakeId===id)activeTakeId=null;
+ try{await cameraPublisher.send('record-end',{takeId:id});queueSave(false,true);}catch(error){toast(error.message);}
+ syncCameraUI();
+}
+cameraUI=setupCameraControls({midi:$('#midi-panel'),bottom:$('.camera-mode-controls'),effects:$('#draw-camera-controls'),getCamera:()=>state.camera,onChange:setCameraSettings});
 
 let pendingTransport = null;
 function receiveTransport(token, playback, serverNow, latency = 0) {
@@ -166,7 +218,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   rebuildCache(); playbackUI(); renderTargets([0],now,true); queueSave(false,false);
 }
-setupMidiPanel($('#midi-panel'), receiveTransport);
+setupMidiPanel($('#midi-panel'), receiveTransport,{onCamera:receiveCamera,onClock:(time,latency)=>{cameraServerTime=time+latency;cameraCalibratedAt=performance.now();},onNotes:notes=>cameraUI.setReceived(notes)});
 
 const trimTrackObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
   for (const { target } of entries) {
@@ -600,8 +652,12 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
-  painting.setView(state.view);
-  painting.draw(index, phase, { now, placementPreview: !clock.playing });
+  const frameCamera=cameraSampler.frame({...cameraSnapshot,config:state.camera,...(cubeDragging&&activeTakeId?{recording:{id:activeTakeId}}:{})},state.view,phase,serverAt(now),now);
+  if(cubeDragging){frameCamera.view=state.view;}
+  painting.setView(frameCamera.view);orientation.update(frameCamera.view);
+  const worldScale=(frameCamera.view.distance??CAMERA_DISTANCE)/CAMERA_DISTANCE/frameCamera.view.scale;$('.canvas-state').textContent=`View ${Math.round(Math.min(BOX_SPEC.width,VIEWPORT_WIDTH*worldScale))} × ${Math.round(Math.min(BOX_SPEC.height,VIEWPORT_HEIGHT*worldScale))}`;
+  paintingBoundary.innerHTML=boxEdges(frameCamera.view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1"/>`).join('');
+  painting.draw(index, phase, { now, cameraViews:frameCamera.cameraViews, placementPreview: !clock.playing });
 }
 function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
 let animationFrame = -1;
@@ -613,16 +669,16 @@ function animate(now) {
     if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
     if (stroke) livePublisher.publish(now);
     if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
-    for (let i = 0; i < canvases.length; i++) if ((clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
+    for (let i = 0; i < canvases.length; i++) if (state.camera.mode!=='normal'||now<cameraSampler.movingUntil||(clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
     timelineUI(now);
   }
   requestAnimationFrame(animate);
 }
 renderTargets([0]); requestAnimationFrame(animate);
-function point(event, canvas) {
+function point(event, canvas, inputView=effectiveView()) {
   const pressure = state.pressure && event.pointerType === 'pen' ? (Number.isFinite(event.pressure) ? Math.max(0, Math.min(1, event.pressure)) : 0.5) : 1;
   const geometry = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? { shape: state.shape, ringWidth: state.ringWidth, width: brushSize(state.widthMin, state.widthMax, pressure, 'pen', true), height: brushSize(state.heightMin, state.heightMax, pressure, 'pen', true), heading: 0, angle: state.angle } : state.mode === 'line' || state.shape === 'ring' ? { shape: 'ring', ringWidth: state.ringWidth } : {};
-  return { ...drawingPoint(canvasPoint(event, canvas.getBoundingClientRect()), state.view), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
+  return { ...(stroke?drawingPointOnPlane(canvasPoint(event,canvas.getBoundingClientRect()),inputView,stroke.plane):drawingPoint(canvasPoint(event, canvas.getBoundingClientRect()),inputView)), pressure, size: brushSize(state.minSize, state.maxSize, pressure, 'pen', true), ...geometry };
 }
 function drawPoint(pointValue) {
   if (stroke.mode === 'move') layers[0].circle.setTarget(pointValue);
@@ -637,7 +693,7 @@ function samplePoint(next) {
 }
 function endStroke(event) {
   if (!stroke || (event && event.pointerId !== stroke.pointerId)) return;
-  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...drawingPoint(canvasPoint(event, stroke.canvas.getBoundingClientRect()), state.view) });
+  if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...drawingPointOnPlane(canvasPoint(event,stroke.canvas.getBoundingClientRect()),effectiveView(),stroke.plane) });
   const current = stroke; stroke = null; liveRevision++;
   if (current.canvas.hasPointerCapture(current.pointerId)) current.canvas.releasePointerCapture(current.pointerId);
   const now = performance.now(); cacheStroke(current, now);
@@ -649,11 +705,12 @@ function syncViewUI() {
   $('#zoom-out').disabled = state.view.scale <= MIN_ZOOM; $('#zoom-in').disabled = state.view.scale >= MAX_ZOOM;
   $('.canvas-state').textContent = `View ${Math.round(Math.min(CANVAS_SPEC.width, VIEWPORT_WIDTH / state.view.scale))} × ${Math.round(Math.min(CANVAS_SPEC.height, VIEWPORT_HEIGHT / state.view.scale))}`;
   $('#reset-view').textContent = percent; $('#reset-view').title = `${percent} · Reset to center · 1920 × 1080`;
-  orientation.update(state.view);
-  paintingBoundary.innerHTML = boxEdges(state.view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
-  painting.setView(state.view); canvases[0].dataset.zoom = state.view.scale;
+  orientation.update(effectiveView());
+  paintingBoundary.innerHTML = boxEdges(effectiveView()).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
+  painting.setView(effectiveView()); canvases[0].dataset.zoom = state.view.scale;
 }
 function changeView(view) {
+  if(state.camera.mode==='midi-auto')view=centered({...state.view,scale:view.scale});
   state.view = canvasView(view); viewRevision++; syncViewUI(); viewDirty = true;
 }
 function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
@@ -665,22 +722,22 @@ function cancelTouchStroke() {
   $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now(), true);
 }
 $('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
-for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(state.view, state.view.scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
+for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(effectiveView(), state.view.scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch') {
       if (!ready || trimDrag) return;
       event.preventDefault(); canvas.setPointerCapture(event.pointerId);
-      const started = pinch.down(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()), state.view);
+      const started = pinch.down(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()), effectiveView());
       if (started) cancelTouchStroke();
       if (pinch.blocked || !state.touch) return;
     }
     if (!ready || stroke || trimDrag || event.button !== 0) return;
-    const startPoint = point(event, canvas);
-    if (!insideBox(pointInSpace(startPoint, workingPlane(state.view)))) return;
+    const inputView=effectiveView(),startPoint = point(event, canvas,inputView);
+    if (!insideBox(pointInSpace(startPoint, workingPlane(inputView)))) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(state.view), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
     history.endGroup(); historyUI();
     if (stroke.mode === 'move') {
@@ -697,8 +754,8 @@ canvases.forEach((canvas, index) => {
     }
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
-    const scale = canvas.getBoundingClientRect().width / VIEWPORT_WIDTH * state.view.scale;
-    const cursorScreen = projectSpace(pointInSpace(cursorPoint, workingPlane(state.view)), state.view);
+    const scale = canvas.getBoundingClientRect().width / VIEWPORT_WIDTH * state.view.scale * CAMERA_DISTANCE / (effectiveView().distance??CAMERA_DISTANCE);
+    const cursorScreen = projectSpace(pointInSpace(cursorPoint,stroke?.plane??workingPlane(effectiveView())),effectiveView());
     cursor.style.left = `${cursorScreen.x / VIEWPORT_WIDTH * 100}%`; cursor.style.top = `${cursorScreen.y / VIEWPORT_HEIGHT * 100}%`;
     cursor.style.width = `${Math.max(3, (cursorPoint.width ?? cursorPoint.size) * scale)}px`;
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
@@ -718,7 +775,7 @@ canvases.forEach((canvas, index) => {
   canvas.addEventListener('wheel', event => {
     if (!event.ctrlKey || !ready || trimDrag) return;
     event.preventDefault(); endStroke(null);
-    changeView(zoomAt(state.view, state.view.scale * Math.exp(-event.deltaY * .01), canvasPoint(event, canvas.getBoundingClientRect())));
+    changeView(zoomAt(effectiveView(), state.view.scale * Math.exp(-event.deltaY * .01), canvasPoint(event, canvas.getBoundingClientRect())));
     clearTimeout(zoomSaveTimer); zoomSaveTimer = setTimeout(finishView, 150);
   }, { passive: false });
   canvas.addEventListener('contextmenu', event => event.preventDefault()); canvas.addEventListener('focus', () => selectCanvas(index));
@@ -788,22 +845,24 @@ function editFloatingColor(color, opacity) {
 }
 function setColor(color) { state.color = color; syncFloatingColor(); queueSave(); }
 $('#play').addEventListener('click', () => {
-  endStroke(null); const now = performance.now();
+  endStroke(null); void finishCameraTake(); const now = performance.now();
   if (clock.playing) clock.pause(now); else clock.play(now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('pointerdown', event => {
+  void finishCameraTake();
   if (!ready || event.button !== 0) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
 $('#loop-progress').addEventListener('input', event => {
+  cameraSampler.reset();void finishCameraTake();
   if (!ready) return;
   endStroke(null);
   const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { void finishCameraTake();cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -899,6 +958,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     clips = structuredClone(project.clips);
     layers.forEach(layer => { layer.circle = null; });
     Object.assign(state, DEFAULT_SETTINGS, project.settings);
+    cameraSnapshot={...cameraSnapshot,config:state.camera,event:JSON.stringify(cameraSnapshot.config)===JSON.stringify(state.camera)?cameraSnapshot.event:null,recording:null};cameraSampler.reset();syncCameraUI();
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
     lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
     viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);
@@ -928,6 +988,7 @@ async function restoreProject() {
   }
 }
 restoreProject().then(() => {
+  if(pendingCamera){const pending=pendingCamera;pendingCamera=null;if(pending.revision>0)receiveCamera(pending);else cameraSnapshot={...cameraSnapshot,epoch:pending.epoch};}
   if (!pendingTransport) return;
   const { token, playback, serverNow, latency, received } = pendingTransport;
   transportState = null; pendingTransport = null;

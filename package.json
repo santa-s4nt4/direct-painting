@@ -12,6 +12,7 @@
     "test:motion-gpu": "node --experimental-loader ./scripts/glsl-loader.mjs scripts/check-motion-gpu.mjs"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.4",
     "vite": "^7.0.0"
   },
   "dependencies": {

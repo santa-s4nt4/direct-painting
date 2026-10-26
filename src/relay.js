@@ -46,7 +46,7 @@ export function createLivePublisher(getFrame, onStatus) {
 
 // Pinches send only a small view transform; never resend every stroke at 60Hz.
 export function createViewPublisher(getView, onStatus) {
-  let running = false, pending = false;
+  let running = false, pending = false, idle = [];
   const send = async () => {
     if (running) { pending = true; return; }
     running = true;
@@ -55,7 +55,18 @@ export function createViewPublisher(getView, onStatus) {
       if (!response.ok) throw new Error('View sync unavailable');
       onStatus(true);
     } catch { onStatus(false); }
-    finally { running = false; if (pending) { pending = false; void send(); } }
+    finally { running = false; if (pending) { pending = false; void send(); } else {for(const resolve of idle)resolve();idle=[];} }
   };
-  return { publish: send };
+  return { publish: send, flush: () => new Promise(resolve=>{idle.push(resolve);void send();}) };
+}
+
+export function createCameraPublisher(session,onCamera,onStatus) {
+ let revision=0,queue=Promise.resolve();
+ return {send(kind,value={}){
+  const body={session,revision:++revision,kind,...value};
+  const request=queue.catch(()=>{}).then(async()=>{
+   const response=await fetch('/api/camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response.json();
+   if(!response.ok)throw new Error(data.error??'Camera sync unavailable');onCamera(data);onStatus(true);return data;
+  });queue=request;return request;
+ }};
 }

@@ -47,7 +47,7 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
     details.append(summary, content); toolbar.append(details); return details;
   };
   const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls'), $('#line-tool-controls')]);
-  const blur = section('Effects', [$('#draw-blur-controls'), $('#draw-motion-controls')], true, 'Applied to new strokes. Edit existing strokes in Layer.');
+  const blur = section('Effects', [$('#draw-blur-controls'), $('#draw-motion-controls'), $('#draw-camera-controls')], true, 'Brush effects: edit existing strokes in Layer. Camera effect: whole canvas.');
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
   $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option><option value="rect-ring">Rectangle · outline</option>';
@@ -101,6 +101,7 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
   const view = document.createElement('div'); view.className = 'view-tools';
   view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
   view.append(fps); controls.append(floating, view);
+  const cameraModes=document.createElement('div');cameraModes.className='camera-mode-controls';cameraModes.setAttribute('role','group');cameraModes.setAttribute('aria-label','Camera modes');controls.append(cameraModes);
   const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove();
   workspace.replaceChildren(stage, controls, timeline);
   studio.replaceChildren(sidebar, workspace);
