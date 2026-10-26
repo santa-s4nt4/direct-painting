@@ -11,12 +11,12 @@ import { BOX_SPEC, IDENTITY_PLANE, lineGeometry, pointInSpace, multiply } from '
 import { viewRotation } from '../view.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
 import { sameGeometry } from './stroke.js';
-import { layerEffects } from '../effects.js';
+import { layerEffects, DEFAULT_RING_WIDTH } from '../effects.js';
 export const volumeVertex = `
 precision highp float;
 in vec3 position;
 uniform vec4 bounds;
-uniform int cameraCount;
+uniform highp int cameraCount;
 uniform vec4 cameraBounds;
 uniform vec2 resolution;
 uniform mat4 planeMatrix,projectionMatrix,modelViewMatrix;
@@ -100,7 +100,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
     const v=sample.visual??visual??{x:0,y:0,size:1},shape=sample.visual===null?0:{circle:1,rect:2,ring:3,'rect-ring':4,capsule:5}[v.shape]??1;
     const rect=shape===2||shape===4,w=rect||shape===5?(v.width??v.size):Math.max(1,Math.round(v.size)),h=rect||shape===5?(v.height??v.size):w;
     shader.uniforms.motionBrush.value[i].set(Math.round(v.x),Math.round(v.y),w,h);
-    shader.uniforms.motionInfo.value[i].set((v.angle??0)*Math.PI/180,sample.opacity*(item.clip.opacity??1),shape,item.clip.ringWidth??5);
+    shader.uniforms.motionInfo.value[i].set((v.angle??0)*Math.PI/180,sample.opacity*(item.clip.opacity??1),shape,item.clip.ringWidth??DEFAULT_RING_WIDTH);
     const color=Number.parseInt(colorAtTime(item.clip,sample.time,v).slice(1),16);
     shader.uniforms.motionColor.value[i].set((color>>16)/255,((color>>8)&255)/255,(color&255)/255);
    });
@@ -137,7 +137,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
    const clip=item.clip;if(!clip.enabled||!clip.targets.includes(side)||!gestureVisible(clip,phase,this.duration))continue;item.lastUsed=this.frame;
    if(clip.mode==='line'&&clip.linePending){
     if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration);const visual=m.gesture.render(t);if(visual.active!==false)add(m,t,gestureOpacity(m.clip,t),visual);}}
-    else for(const p of clip.samples)add({...item,clip:{...clip,ringWidth:Math.min(clip.ringWidth??5,12,Math.floor(p.size/4))}},0,1,{...p,shape:'ring'});
+    else for(const p of clip.samples)add({...item,clip:{...clip,ringWidth:Math.min(clip.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))}},0,1,{...p,shape:'ring'});
     continue;
    }
    const t=gestureTime(clip,phase,this.duration),opacity=(placementPreview&&clip.mode==='place'&&t<1?1:gestureOpacity(clip,t));

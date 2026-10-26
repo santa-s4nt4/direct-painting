@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-26T14:00:50.036Z",
+  "backend": "ANGLE OpenGL ES 3.0 offscreen (not browser UI)",
+  "regression": "Precisions of uniform 'cameraCount' differ between VERTEX and FRAGMENT shaders.",
+  "checks": [
+    {
+      "name": "normal layer",
+      "version": "OpenGL ES 3.0 (ANGLE 2.1 git hash: unknown hash)",
+      "paintedPixels": 556,
+      "glError": 0,
+      "passed": true
+    },
+    {
+      "name": "Analog layer",
+      "version": "OpenGL ES 3.0 (ANGLE 2.1 git hash: unknown hash)",
+      "paintedPixels": 556,
+      "glError": 0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

@@ -1,6 +1,6 @@
 import { MOTION_SAMPLES } from './motion-blur.js';
 export const motionUniforms = `
-uniform int cameraCount;
+uniform highp int cameraCount;
 uniform mat3 cameraInverse[16];
 uniform mat4 planeMatrix;
 uniform int motionCount;
