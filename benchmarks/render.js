@@ -58,11 +58,11 @@ button.onclick = async () => {
     const effectClip = clip('fx', 'return', { duration: 100, samples: [{ x: 500, y: 500, size: 160, t: 0 }, { x: 500, y: 500, size: 160, t: 100 }] });
     const drawFX = (effects, time = 50) => { gpu.setProject(project([{ ...effectClip, effects }])); gpu.draw(0, time); return gpu.readPixels(); };
     const off = { ...DEFAULT_EFFECTS, blur: false }, sharp = drawFX(off), masks = gpu.stats.masksCreated;
-    const soft = drawFX(DEFAULT_EFFECTS);
-    if (gpuPixel(sharp, 590, 500)[3] !== 0 || gpuPixel(soft, 590, 500)[3] < 3) throw new Error('Default blur did not spread this layer');
+    const soft = drawFX({ ...DEFAULT_EFFECTS, blur: true });
+    if (gpuPixel(sharp, 590, 500)[3] !== 0 || gpuPixel(soft, 590, 500)[3] < 3) throw new Error('Enabled blur did not spread this layer');
     const restored = drawFX(off);
     if (restored.some((v, i) => v !== sharp[i]) || gpu.stats.masksCreated !== masks) throw new Error('Toggling effects changed or rebuilt the source geometry');
-    report.checks.push({ name: 'Blur defaults to 16px, toggles reversibly and reuses masks', passed: true });
+    report.checks.push({ name: 'Blur defaults OFF at 16px, toggles reversibly and reuses masks', passed: true });
     const retired = drawFX({ ...off, glitch: true, chromatic: true });
     if (retired.some((v, i) => v !== sharp[i])) throw new Error('Retired effects still affect the painting');
     const beforeViewMasks = gpu.stats.masksCreated;
@@ -100,7 +100,7 @@ button.onclick = async () => {
     gpu.setView(DEFAULT_VIEW);
     report.checks.push({ name: 'Perspective camera, tilted plane and combined roll project the recorded point correctly', passed: true });
     const untouched = clip('untouched', 'return', { color: '#ff0000', duration: 100, samples: [{ x: 900, y: 500, size: 80, t: 0 }, { x: 900, y: 500, size: 80, t: 100 }] });
-    gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS } }, untouched])); gpu.draw(0, 50);
+    gpu.setProject(project([{ ...effectClip, effects: { ...DEFAULT_EFFECTS, blur: true } }, untouched])); gpu.draw(0, 50);
     if (gpuPixel(gpu.readPixels(), 945, 500)[3] !== 0 || gpuPixel(gpu.readPixels(), 900, 500)[0] !== 255) throw new Error('An effect leaked into another layer');
     report.checks.push({ name: 'Effects are isolated per layer', passed: true });
     for (const mode of ['trail', 'return', 'move']) {
@@ -117,7 +117,7 @@ button.onclick = async () => {
     }
     const reference = new FullPassReference(referenceCanvas);
     try {
-      const roiClips = [clip('left', 'trail', { effects: DEFAULT_EFFECTS, samples: [{ x: 2, y: 10, size: 120, t: 0 }, { x: 1000, y: 700, size: 200, t: 200 }] }), clip('right', 'return', { effects: { blur: true, blurRadius: 192 }, color: '#ff8800', samples: [{ x: 3800, y: 2100, size: 100, t: 0 }, { x: 3838, y: 2150, size: 100, t: 200 }] }), clip('overlap', 'return', { effects: DEFAULT_EFFECTS, color: '#ffffff', samples: [{ x: 300, y: 300, size: 400, t: 0 }, { x: 900, y: 650, size: 80, t: 200 }] })];
+      const roiClips = [clip('left', 'trail', { effects: { ...DEFAULT_EFFECTS, blur: true }, samples: [{ x: 2, y: 10, size: 120, t: 0 }, { x: 1000, y: 700, size: 200, t: 200 }] }), clip('right', 'return', { effects: { ...DEFAULT_EFFECTS, blur: true, blurRadius: 192 }, color: '#ff8800', samples: [{ x: 3800, y: 2100, size: 100, t: 0 }, { x: 3838, y: 2150, size: 100, t: 200 }] }), clip('overlap', 'return', { effects: { ...DEFAULT_EFFECTS, blur: true }, color: '#ffffff', samples: [{ x: 300, y: 300, size: 400, t: 0 }, { x: 900, y: 650, size: 80, t: 200 }] })];
       gpu.setProject(project(roiClips)); reference.setProject(project(roiClips));
       let worst = 0;
       for (const phase of [100, 2000, 50]) {
@@ -127,7 +127,7 @@ button.onclick = async () => {
       }
       gpu.setProject(project([])); reference.setProject(project([]));
       const livePoint = { x: 1920, y: 1080, size: 100, t: 0 };
-      const liveProbe = { id: 'region-live', mode: 'trail', color: '#ff00ff', effects: DEFAULT_EFFECTS, targets: [0], samples: [livePoint], last: livePoint, started: 0 };
+      const liveProbe = { id: 'region-live', mode: 'trail', color: '#ff00ff', effects: { ...DEFAULT_EFFECTS, blur: true }, targets: [0], samples: [livePoint], last: livePoint, started: 0 };
       for (const now of [0, 100]) {
         if (now) { liveProbe.last = { x: 3000, y: 2000, size: 3000, t: now }; liveProbe.samples.push(liveProbe.last); }
         gpu.setLiveStroke(liveProbe, now); reference.setLiveStroke(liveProbe, now);
@@ -162,12 +162,12 @@ button.onclick = async () => {
     gpu.setProject({ ...p, clips: p.clips.map((c, i) => i === 0 ? { ...c, color: '#ff00ff' } : c) }); gpu.draw(0, 1100); gpu.finish();
     report.checks.push({ name: 'color edits reuse existing geometry and masks', passed: before === gpu.stats.masksCreated });
     if (before !== gpu.stats.masksCreated) throw new Error('Color edit invalidated raster geometry');
-    const effectProject = { ...p, clips: p.clips.map(c => ({ ...c, effects: { ...DEFAULT_EFFECTS } })) };
+    const effectProject = { ...p, clips: p.clips.map(c => ({ ...c, effects: { ...DEFAULT_EFFECTS, blur: true } })) };
     gpu.setProject(effectProject); gpu.draw(0, 900); gpu.finish();
     const effectTimes = [];
     for (let i = 0; i < 30; i++) { effectTimes.push(measure(() => { gpu.draw(0, 900 + i * 1000 / 60); gpu.finish(); })); await pause(); }
     report.benchmark.gpu10LayersBlur = summary(effectTimes);
-    const effectLive = { ...live, id: 'effect-live', effects: DEFAULT_EFFECTS, started: performance.now() };
+    const effectLive = { ...live, id: 'effect-live', effects: { ...DEFAULT_EFFECTS, blur: true }, started: performance.now() };
     report.benchmark.gpuFirstPointWith10BlurLayersMs = +measure(() => { gpu.setLiveStroke(effectLive, effectLive.started); gpu.draw(0, 1100, { now: effectLive.started }); gpu.finish(); }).toFixed(2);
     gpu.setLiveStroke(null);
     // Late packets must extend the path from the last received source sample,

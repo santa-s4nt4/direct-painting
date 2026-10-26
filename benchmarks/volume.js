@@ -5,7 +5,7 @@ import { workingPlane,pointInSpace,projectSpace,BOX_SPEC } from '../src/space.js
 import { CANVAS_WIDTH as W,CANVAS_HEIGHT as H } from '../src/canvas.js';
 import { DEFAULT_SETTINGS } from '../src/project.js';
 const result=document.querySelector('#result'),run=document.querySelector('#run');
-const marker=(extra={})=>({id:'ring',mode:'move',shape:'ring',color:'#ff784f',targets:[0],enabled:true,opacity:1,ringWidth:7,effects:{blur:false,blurRadius:16},plane:workingPlane(DEFAULT_VIEW),duration:100,start:0,fadeMs:200,samples:[{x:W/2+200,y:H/2,size:30,pressure:0,t:0},{x:W/2+200,y:H/2,size:200,pressure:1,t:100}],...extra});
+const marker=(extra={})=>({id:'ring',mode:'move',shape:'ring',color:'#ff784f',targets:[0],enabled:true,opacity:1,ringWidth:7,effects:{blur:false,blurRadius:16,motionBlur:false,motionBlurAmount:100},plane:workingPlane(DEFAULT_VIEW),duration:100,start:0,fadeMs:200,samples:[{x:W/2+200,y:H/2,size:30,pressure:0,t:0},{x:W/2+200,y:H/2,size:200,pressure:1,t:100}],...extra});
 const project=clips=>({version:1,duration:10000,space:BOX_SPEC,clips});
 const pixel=(data,x,y)=>[...data.slice(((1079-y)*1920+x)*4,((1079-y)*1920+x)*4+4)];
 const nextFrame=()=>new Promise(r=>requestAnimationFrame(r));
@@ -43,7 +43,7 @@ run.onclick=async()=>{
   gpu.setProject(project([{...cross,id:'depth-line',points3D:[[0,0,0],[0,0,300]]}]));gpu.draw(0,0);check('A view-aligned 3D line retains a visible round end cap',pixel(gpu.readPixels(),960,540)[0]>200);
   cpu=new CPUVolumeRenderer(document.querySelector('#cpu'));cpu.setView(sideways.view);cpu.setProject(project([sideways.c]));cpu.draw(0,0);
   check('CPU fallback also renders a new front-facing plane after a 90-degree orbit',cpu.ctx.getImageData(Math.floor(sideways.expected.x),Math.floor(sideways.expected.y),1,1).data[0]>200);cpu.dispose();cpu=null;
-  const clips=Array.from({length:10},(_,i)=>marker({id:`layer-${i}`,duration:1000,fadeMs:5000,shape:'rect-ring',plane:workingPlane(canvasView({...DEFAULT_VIEW,yaw:i*13,pitch:i*7})),ringWidth:18,effects:{blur:true,blurRadius:16},samples:[{x:W/2+(i-5)*35,y:H/2,size:1600,shape:'rect-ring',width:1600,height:1600,angle:i%2?45:0,t:0}]}));
+  const clips=Array.from({length:10},(_,i)=>marker({id:`layer-${i}`,duration:1000,fadeMs:5000,shape:'rect-ring',plane:workingPlane(canvasView({...DEFAULT_VIEW,yaw:i*13,pitch:i*7})),ringWidth:18,effects:{blur:true,blurRadius:16,motionBlur:false,motionBlurAmount:100},samples:[{x:W/2+(i-5)*35,y:H/2,size:1600,shape:'rect-ring',width:1600,height:1600,angle:i%2?45:0,t:0}]}));
   result.textContent='Measuring 10 spatial layers…';await nextFrame();gpu.setView(DEFAULT_VIEW);gpu.setProject(project(clips));gpu.draw(0,0);gpu.finish();const times=[];
   for(let i=0;i<24;i++){await nextFrame();const start=performance.now();gpu.draw(0,i*1000/60);gpu.finish();times.push(performance.now()-start);}
   report.performance={layers:10,size:1600,blur:16,meanMs:times.reduce((a,b)=>a+b,0)/times.length,p95Ms:times.toSorted((a,b)=>a-b)[22],stats:{...gpu.stats}};

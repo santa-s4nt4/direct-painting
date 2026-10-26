@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.js",
-    "test:midi": "node scripts/check-midi.mjs"
+    "test:midi": "node scripts/check-midi.mjs",
+    "test:motion-gpu": "node --experimental-loader ./scripts/glsl-loader.mjs scripts/check-motion-gpu.mjs"
   },
   "devDependencies": {
     "vite": "^7.0.0"

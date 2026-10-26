@@ -1,0 +1,63 @@
+{
+  "backend" : "macOS offscreen OpenGL (actual production GLSL; not browser WebGL2)",
+  "checks" : [
+    {
+      "maxChannelError" : 0,
+      "name" : "moving ellipse",
+      "paintedPixels" : 19860,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "moving Ring",
+      "paintedPixels" : 19860,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "rotating rectangle",
+      "paintedPixels" : 26601,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "rotating rectangle Ring",
+      "paintedPixels" : 26601,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "pressure change",
+      "paintedPixels" : 14774,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "3D front-facing Ring",
+      "paintedPixels" : 19860,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "stationary Ring",
+      "paintedPixels" : 2836,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 0,
+      "name" : "box clipping",
+      "paintedPixels" : 2488,
+      "passed" : true
+    },
+    {
+      "maxChannelError" : 1,
+      "name" : "opacity and color",
+      "paintedPixels" : 19860,
+      "passed" : true
+    }
+  ],
+  "date" : "2026-10-26T11:11:19Z",
+  "glError" : 0,
+  "passed" : true,
+  "renderer" : "Apple M4 Max"
+}
