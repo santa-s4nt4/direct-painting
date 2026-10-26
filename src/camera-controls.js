@@ -1,7 +1,14 @@
 export function setupCameraControls({midi,bottom,effects,getCamera,onChange}) {
  let received=[];
- const panel=document.createElement('section');panel.className='camera-midi-controls';
- panel.innerHTML=`<h3>Camera motion</h3><label class="checkbox-control"><input id="camera-midi-enabled" type="checkbox" aria-label="MIDI camera motion"><span>Camera motion ON / OFF</span></label><label for="camera-note">反応するMIDIノート</label><select id="camera-note" aria-label="Camera MIDI note"></select><p>ノートを送ると候補に追加されます。Note Onで移動、Note Offで戻ります。ADSRの変更は次のNote Onから適用します。</p><div class="camera-adsr">${[['attack','Attack',.4,'s'],['decay','Decay',.3,'s'],['sustain','Sustain',65,'%'],['release','Release',.9,'s']].map(([key,title,value,unit])=>`<label>${title}<input id="camera-${key}" type="number" min="0" max="${key==='sustain'?100:16}" step="${key==='sustain'?1:.05}" value="${value}" aria-label="Camera ${title}">${unit}</label>`).join('')}</div>`;
+ const panel=document.createElement('details');panel.className='camera-midi-controls sidebar-section';panel.open=true;
+ panel.innerHTML=`
+  <summary><span>Camera motion</span><span class="section-chevron" aria-hidden="true">⌄</span></summary>
+  <div class="sidebar-content midi-content">
+   <label class="checkbox-control"><input id="camera-midi-enabled" type="checkbox" aria-label="MIDI camera motion"><span>Camera motion ON / OFF</span></label>
+   <div class="midi-field"><label for="camera-note">反応するMIDIノート</label><select id="camera-note" aria-label="Camera MIDI note" aria-describedby="camera-note-help"></select><p id="camera-note-help" class="control-hint">ノートを送ると候補に追加されます。<br>Note Onごとに次のランダムな位置へ移動します。</p></div>
+   <fieldset class="camera-adsr"><legend class="section-label">Envelope · ADSR</legend><div class="camera-adsr-grid">${[['attack','Attack','s'],['decay','Decay','s'],['sustain','Sustain','%'],['release','Release','s']].map(([key,title,unit])=>`<label class="camera-adsr-field" for="camera-${key}"><span>${title}</span><span class="camera-adsr-value"><input id="camera-${key}" type="number" inputmode="decimal" min="0" max="${key==='sustain'?100:16}" step="${key==='sustain'?1:.05}" aria-label="Camera ${title}" aria-describedby="camera-adsr-help"><span aria-hidden="true">${unit}</span></span></label>`).join('')}</div></fieldset>
+   <p id="camera-adsr-help" class="control-hint">SustainはDecayへ配分する移動量。Note OffではReleaseで目的地へ進み、戻りません。変更は次のNote Onから適用します。</p>
+  </div>`;
  midi.append(panel);
  bottom.innerHTML='<span>Camera</span>'+[['normal','normal'],['midi-auto','midi auto']].map(([mode,label])=>`<button type="button" data-camera-mode="${mode}" aria-label="Camera mode ${label}" aria-pressed="${mode==='normal'}">${label}</button>`).join('')+'<output id="camera-mode-status" aria-live="polite"></output>';
  const change=patch=>onChange({...getCamera(),...patch});
@@ -27,5 +34,6 @@ export function setupCameraControls({midi,bottom,effects,getCamera,onChange}) {
   effects.querySelector('#camera-motion-blur').checked=config.blur;const amount=effects.querySelector('#camera-blur-amount');if(amount!==document.activeElement)amount.value=config.blurAmount;amount.disabled=!config.blur;
   bottom.querySelector('#camera-mode-status').textContent=config.mode==='midi-auto'?`MIDI ${config.note} · 立方体ロック`:'';
  }
+ sync();
  return {sync,setReceived(notes){received=notes;sync();}};
 }

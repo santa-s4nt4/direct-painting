@@ -70,7 +70,7 @@ document.querySelector('#app').innerHTML = `
           <span class="section-label">SIZE RANGE</span>
           ${['min', 'max'].map((bound, i) => `<div class="size-bound"><label for="size-${bound}">${bound.toUpperCase()}</label><input id="size-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" inputmode="numeric" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter in pixels"><span>px</span><input id="range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i === 0 ? 15 : 100}" aria-label="${i === 0 ? 'Minimum' : 'Maximum'} diameter slider"></div>`).join('')}
         </div>
-        <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="${MAX_RING_WIDTH}" step="1" value="5" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
+        <div class="control-section" id="ring-controls" hidden><div class="effect-value"><label for="ring-width">Stroke</label><input id="ring-width" type="number" min="1" max="${MAX_RING_WIDTH}" step="1" value="${DEFAULT_RING_WIDTH}" aria-label="Ring stroke width in pixels"><span>px</span></div></div>
         <div class="control-section" id="rectangle-controls" hidden>
           ${['width', 'height'].map(axis => `<span class="section-label">${axis.toUpperCase()} RANGE</span>${['Min', 'Max'].map((bound, i) => `<div class="size-bound"><label for="${axis}-${bound}">${bound.toUpperCase()}</label><input id="${axis}-${bound}" type="number" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" inputmode="numeric" aria-label="Rectangle ${axis} ${bound.toLowerCase()} in pixels"><span>px</span><input id="${axis}-range-${bound}" type="range" min="1" max="${MAX_BRUSH_SIZE}" step="1" value="${i ? 1600 : 20}" aria-label="Rectangle ${axis} ${bound.toLowerCase()} slider"></div>`).join('')}`).join('')}
           <div class="effect-value"><label for="shape-angle">ANGLE</label><input id="shape-angle" type="number" min="-180" max="180" step="1" value="0" aria-label="Rectangle angle in degrees"><span>°</span></div><div class="angle-presets"><button type="button" data-draw-angle="0">0°</button><button type="button" data-draw-angle="45">45°</button></div>
@@ -86,9 +86,9 @@ document.querySelector('#app').innerHTML = `
       </div>
         <div class="loop-controls">
           <span class="section-label">LOOP</span>
-          <div class="playback-actions"><button id="play" class="secondary-button" aria-label="Pause loop">PAUSE</button><button id="restart" class="icon-button" aria-label="Restart loop" title="Restart loop">↺</button></div>
+          <div class="playback-actions"><button id="restart" class="icon-button" aria-label="Restart loop" title="Restart loop">↺</button></div>
           <div class="loop-duration" aria-label="Fixed timeline: 120 BPM, 8 bars, 16 seconds"><span>120 BPM</span><span>8 BARS · 16s</span></div>
-          <input id="loop-progress" class="loop-progress" type="range" min="0" max="${DEFAULT_LOOP_MS - 1}" step="1" value="0" aria-label="Loop position" aria-valuetext="0.00 of 16.00 seconds" title="Seek to pause and choose the start time.">
+          <input id="loop-progress" class="loop-progress" type="range" min="0" max="${DEFAULT_LOOP_MS - 1}" step="1" value="0" aria-label="Loop position" aria-valuetext="0.00 of 16.00 seconds" title="Choose the playback position.">
           <span id="loop-time" class="time-readout">0.00 / 16.00s</span>
         </div>
       <div class="workspace-bottom">
@@ -144,7 +144,7 @@ let cameraServerTime=Date.now(),cameraCalibratedAt=performance.now();
 const cameraSampler=new CameraSampler();
 const pinch = new PinchGesture();
 const lineSchedule = new LineSchedule();
-let zoomSaveTimer, viewDirty = false;
+let zoomSaveTimer, viewDirty = false, timelinePointer = null;
 $('.sidebar-scroll').inert = true; $('.loop-controls').inert = true;
 const outputStatus = connected => { $('#output-status').textContent = connected ? 'Live output connected' : 'Output offline'; $('#output-status').dataset.connected = String(connected); };
 const publisher = createPublisher(() => ({ project: { version: 1, canvas: { ...CANVAS_SPEC }, space: { ...BOX_SPEC }, clips, duration: clock.duration, settings: state }, cameraState:{epoch:cameraSnapshot.epoch,revision:cameraSnapshot.revision}, transportState, playback: playbackSnapshot(clock, performance.now()), viewState: { session: liveSession, revision: viewRevision, view: state.view }, liveState: { session: liveSession, revision: liveRevision, id: stroke?.id ?? null } }), outputStatus);
@@ -163,7 +163,7 @@ function effectiveView(now=performance.now()){return cubeDragging?state.view:cam
 const orientation = setupOrientationCube($('.navigation-tools'), {
  getView:()=>effectiveView(),
  onChange:view=>{if(ready)changeView(view);},
- onStart:()=>{if(ready){endStroke(null);state.view=effectiveView();cubeDragging=true;}},
+ onStart:()=>{if(ready){state.view=effectiveView();cubeDragging=true;}},
  onFinish:()=>{cubeDragging=false;if(ready)finishView();}
 });
 function syncCameraUI(){cameraUI?.sync();orientation.setDisabled(state.camera.mode==='midi-auto');}
@@ -189,6 +189,7 @@ function pushCameraSettings(){
  return cameraPublisher.send('settings',{camera:sent}).then(()=>{if(pendingCameraSettings===sent)pendingCameraSettings=null;queueSave(false,true);}).catch(error=>{if(pendingCameraSettings===sent){pendingCameraSettings=null;state.camera=cameraSnapshot.config;syncCameraUI();}toast(error.message);});
 }
 
+$('.orientation-details').append($('.camera-mode-controls'));
 cameraUI=setupCameraControls({midi:$('#midi-panel'),bottom:$('.camera-mode-controls'),effects:$('#draw-camera-controls'),getCamera:()=>state.camera,onChange:setCameraSettings});
 
 let pendingTransport = null;
@@ -201,7 +202,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   endStroke(null);
   clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending:false } : c);
   const now = performance.now(), phase = playback.playing ? serverNow - playback.anchor + latency : playback.phase;
-  clock.seek(phase, now); if (playback.playing) clock.play(now); else clock.pause(now);
+  clock.seek(phase, now); clock.play(now);
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   rebuildCache(); playbackUI(); renderTargets([0],now,true); queueSave(false,false);
 }
@@ -343,7 +344,7 @@ function rebuildCache() {
           if (trimDrag?.pointerId !== event.pointerId) return;
           trimDrag = null; history.endGroup(); track.classList.remove('trimming');
           if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-          historyUI(); publisher.publish(true);
+          clock.play(performance.now());playbackUI();historyUI(); publisher.publish(true);
         };
         trimDrag = { pointerId: event.pointerId, group: {}, finish };
         track.classList.add('trimming'); handle.setPointerCapture(event.pointerId); historyUI();
@@ -368,7 +369,7 @@ function rebuildCache() {
         else if (event.key === 'Home') value = bound === 'in' ? 0 : range.in + MIN_TRIM_MS;
         else if (event.key === 'End') value = bound === 'out' ? gestureLength(current()) : range.out - MIN_TRIM_MS;
         else return;
-        event.preventDefault(); clock.pause(performance.now());
+        event.preventDefault(); clock.play(performance.now());
         const preview = trimGesture(current(), bound, value, clock.duration), trimmed = trimRange(preview);
         clock.seek((preview.start ?? 0) + (bound === 'out' ? trimmed.out - trimmed.in - 1 : 0), performance.now());
         update(item => trimGesture(item, bound, value, clock.duration)); publisher.publish(true);
@@ -564,14 +565,12 @@ document.addEventListener('keydown', event => {
   if (key === 'z' || key === 'y' && event.ctrlKey) { event.preventDefault(); restoreHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo'); }
 });
 function playbackUI() {
-  $('#play').textContent = clock.playing ? 'PAUSE' : 'PLAY';
-  $('#play').setAttribute('aria-label', clock.playing ? 'Pause loop' : 'Play loop');
   $('#loop-progress').max = clock.duration - 1;
   timelineUI(performance.now());
 }
 function timelineUI(now) {
   const phase = clock.phase(now), seek = $('#loop-progress');
-  seek.value = Math.min(clock.duration - 1, Math.round(phase));
+  if(timelinePointer===null)seek.value = Math.min(clock.duration - 1, Math.round(phase));
   seek.style.setProperty('--progress', `${phase / clock.duration * 100}%`);
   seek.setAttribute('aria-valuetext', `${(phase / 1000).toFixed(2)} of ${(clock.duration / 1000).toFixed(2)} seconds`);
   $('#loop-time').textContent = `${(phase / 1000).toFixed(2)} / ${(clock.duration / 1000).toFixed(2)}s`;
@@ -835,24 +834,23 @@ function editFloatingColor(color, opacity) {
   syncFloatingColor(); queueSave();
 }
 function setColor(color) { state.color = color; syncFloatingColor(); queueSave(); }
-$('#play').addEventListener('click', () => {
-  endStroke(null); const now = performance.now();
-  if (clock.playing) clock.pause(now); else clock.play(now);
-  playbackUI(); renderTargets([0], now, true); publisher.publish(true);
-});
 $('#loop-progress').addEventListener('pointerdown', event => {
   if (!ready || event.button !== 0) return;
+  timelinePointer=event.pointerId;event.currentTarget.setPointerCapture(event.pointerId);
   endStroke(null);
-  const now = performance.now(); clock.pause(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
+  const now = performance.now(); clock.play(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
+});
+for(const name of ['pointerup','pointercancel','lostpointercapture'])$('#loop-progress').addEventListener(name,event=>{
+  if(event.pointerId!==timelinePointer)return;timelinePointer=null;timelineUI(performance.now());
 });
 $('#loop-progress').addEventListener('input', event => {
   cameraSampler.reset();
   if (!ready) return;
   endStroke(null);
-  const now = performance.now(); clock.pause(now); clock.seek(Number(event.target.value), now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
+  const now = performance.now(); clock.seek(Number(event.target.value), now); clock.play(now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); clock.play(performance.now()); playbackUI(); renderTargets([0], performance.now(), true); publisher.publish(true); });
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -955,7 +953,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     syncSizeUI(); syncShapeUI(); syncEffectsUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
     const now = performance.now(); clock.resize(project.duration, now); clock.seek(playback.phase, now);
-    if (playback.playing) clock.play(now); else clock.pause(now);
+    clock.play(now);
     rebuildCache(); playbackUI(); renderTargets([0], now, true);
   } finally { ready = wasReady; }
 }

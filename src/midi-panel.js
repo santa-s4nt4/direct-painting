@@ -2,8 +2,15 @@ import { RESTART_NOTE } from './transport.js';
 
 // Receive MIDI on the host, so iPad Safari and HTTP Ethernet connections work.
 export function setupMidiPanel(parent, onTransport, options = {}) {
-  const panel = document.createElement('section'); panel.className = 'midi-panel';
-  panel.innerHTML = `<h2>MIDI入力</h2><p>インターフェースを、このアプリを起動したMacへ接続してください。</p><label for="midi-device">入力デバイス（Mac）</label><select id="midi-device" aria-label="MIDI input device"><option value="">OFF（入力なし）</option></select><label for="midi-note">頭出しするノート番号</label><output id="midi-note" aria-label="Timeline restart MIDI note">${RESTART_NOTE}（固定）</output><p class="midi-status" role="status">MIDI入力を準備中…</p><p class="midi-last" aria-live="polite"></p><p>ノート${RESTART_NOTE}のNote On → 0秒から再生<br>120 BPM · 4/4 · 8小節 · 16秒</p>`;
+  const panel = document.createElement('details'); panel.className = 'midi-panel sidebar-section'; panel.open = true;
+  panel.innerHTML = `
+    <summary><span>MIDI入力</span><span class="section-chevron" aria-hidden="true">⌄</span></summary>
+    <div class="sidebar-content midi-content">
+      <p class="control-hint">インターフェースを、このアプリを起動したMacへ接続してください。</p>
+      <div class="midi-field"><label for="midi-device">入力デバイス（Mac）</label><select id="midi-device" aria-label="MIDI input device"><option value="">OFF（入力なし）</option></select></div>
+      <div class="midi-connection"><p class="midi-status" role="status">MIDI入力を準備中…</p><p class="midi-last" aria-live="polite"></p></div>
+      <div class="midi-field"><label for="midi-note">頭出しするノート番号</label><output id="midi-note" aria-label="Timeline restart MIDI note">${RESTART_NOTE}（固定）</output><p class="control-hint">Note On → 0秒から再生<br>120 BPM · 4/4 · 8小節 · 16秒</p></div>
+    </div>`;
   parent.append(panel);
   const device = panel.querySelector('#midi-device'), status = panel.querySelector('.midi-status'), last = panel.querySelector('.midi-last');
   let busy = false, stopped = false, timer, latency = 0;
