@@ -8,7 +8,7 @@ The world box is 3840×3480×3480, centered at the origin with Y down. Source co
 
 Both presentation and accumulation targets are 1920×1080. The default view shows the central Full HD region at 100%. Zoom is 50–500%; pan covers the box height, and roll/pitch/yaw wrap through a full rotation. The same functions transform input, GPU geometry, CPU projected polygons, box clipping and the editor wireframe. See `src/space.js` and `src/view.js`.
 
-`camera-view.js` positions the actual PerspectiveCamera around the origin and calls `lookAt(0,0,0)`, including roll through the up vector. The focal length remains 5000 while orbit distance can vary. `space.js` uses the same distance for projection and inverse input. An active stroke retains its input plane while the camera moves. `camera-motion.js` owns normal / MIDI ADSR poses; the server shares timestamped MIDI events with editor/output. Retired rec settings migrate to normal and discard their camera track.
+`camera-view.js` positions the actual PerspectiveCamera around the origin and calls `lookAt(0,0,0)`, including roll through the up vector. The focal length remains 5000 while orbit distance can vary. `space.js` uses the same distance for projection and inverse input. An active stroke retains its input plane while the camera moves. `camera-motion.js` owns normal / eased MIDI poses with independent position and zoom axes; the server shares timestamped MIDI events with editor/output. Retired rec settings migrate to normal and discard their camera track.
 
 ## GPU passes
 

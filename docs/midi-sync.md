@@ -2,7 +2,7 @@
 
 タイムラインは120 BPM、4/4、8小節の16,000ms固定です。可変Duration入力と、長い描画・フェードに合わせた自動延長を廃止しました。編集画面はFixedLoopClock、JSON読込はnormalizeProject、配信サーバーはvalidateSnapshotで同じ長さを適用します。旧プロジェクトの元サンプルは削除せず保持し、再生窓は16秒になります。
 
-MIDIタブには、頭出しとは別に **Camera motion ON / OFF・反応するMIDIノート・ADSR** もあります。ノートを一度受信すると候補から選べます。[カメラの設定](camera-motion.md)を参照してください。
+MIDIタブには、頭出しとは別に **Camera motion ON / OFF・反応するMIDIノート・変化させる項目・移動時間・イージング・拡大範囲** もあります。ノートを一度受信すると候補から選べます。Note Offやデバイス切断でカメラ移動は中断されません。[カメラの設定](camera-motion.md)を参照してください。
 
 ## 接続
 
