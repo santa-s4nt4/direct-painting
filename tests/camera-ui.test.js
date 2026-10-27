@@ -70,6 +70,10 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   const start=performance.now()+50,cubeFace=d.querySelector('.orientation-cube polygon'),boxEdge=d.querySelector('.painting-boundary line');
   tick(start);let previous=phase();
   for(let i=1;i<=60;i++){tick(start+i*1000/60);const current=phase();assert.ok(current>previous&&current-previous<=18,'Playback advances each 60Hz frame');previous=current;}
+  const fpsLabel=d.querySelector('.sidebar-footer .fps-label');
+  assert.equal(fpsLabel.previousElementSibling.id,'cache-status');
+  assert.match(fpsLabel.textContent,/^\d+\.\d fps · GPU$/);
+  assert.ok(parseFloat(fpsLabel.textContent)>50&&parseFloat(fpsLabel.textContent)<=60.1,'FPS is measured from successful painting frames');
   assert.equal(d.querySelector('.orientation-cube polygon'),cubeFace,'A still camera does not rebuild cube SVG each painting frame');assert.equal(d.querySelector('.painting-boundary line'),boxEdge);assert.ok(renderer.lastPhase>900);
   failDraw=true;assert.throws(()=>tick(start+1100),/drawing backend failure/);assert.ok(raf,'A renderer exception cannot cancel future timeline frames');const failedPhase=phase();failDraw=false;tick(start+1200);assert.ok(phase()>failedPhase);
   assert.equal(d.querySelector('#play'),null,'Pause button is removed');assert.ok(d.querySelector('.orientation-details .camera-mode-controls'));assert.ok(d.querySelector('.orientation-details > .orientation-front [aria-label="Front view"]'));

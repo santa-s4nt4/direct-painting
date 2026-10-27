@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FPS, FRAME_MS, frameNumber } from '../src/timing.js';
+import { FPS, FRAME_MS, frameNumber, FrameRateMeter } from '../src/timing.js';
 import { createLivePublisher } from '../src/relay.js';
 import { singleCanvasProject } from '../src/project.js';
 
@@ -10,6 +10,24 @@ test('60Hz frame grid retains 60 updates on 60Hz, 120Hz and 144Hz displays', () 
     const frames = new Set(Array.from({ length: refreshRate }, (_, i) => frameNumber(i * 1000 / refreshRate)));
     assert.equal(frames.size, 60, `${refreshRate}Hz display`);
   }
+});
+
+test('measured FPS reflects delivered 30fps frames and CPU submission time', () => {
+  const meter = new FrameRateMeter();
+  for (let i = 0; i <= 15; i++) meter.record(i * 1000 / 30, 4);
+  assert.deepEqual(meter.sample(500), { fps: 30, drawMs: 4 });
+  assert.deepEqual(meter.sample(1000), { fps: 0, drawMs: 0 }, 'Idle painting does not claim 60fps');
+});
+
+test('forced redraws in one frame do not inflate measured FPS; hidden-tab time can reset', () => {
+  const meter = new FrameRateMeter();
+  for (let i = 0; i <= 30; i++) {
+    meter.record(i * FRAME_MS, 2); meter.record(i * FRAME_MS + 1, 4);
+  }
+  assert.deepEqual(meter.sample(501), { fps: 30 * 1000 / 501, drawMs: 3 });
+  meter.reset(10000); assert.equal(meter.sample(10100), null);
+  for (let i = 0; i <= 15; i++) meter.record(10100 + i * 1000 / 30, 1);
+  assert.equal(meter.sample(10600).fps, 30);
 });
 
 test('live Pencil updates use the same 60fps grid without duplicate sends inside a frame', async () => {
