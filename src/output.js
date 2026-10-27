@@ -3,14 +3,31 @@ import { DEFAULT_VIEW } from './view.js';
 import { LOOP_MS } from './transport.js';
 import './output.css';
 import { frameNumber } from './timing.js';
-import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT } from './canvas.js';
 import { createPaintingRenderer } from './render/index.js';
 import { outputPhase } from './relay.js';
 
+const FULL_HD = { width: 1920, height: 1080 };
+const HD = { width: 1280, height: 720 };
+function preferredOutputSize() {
+  return window.innerWidth >= FULL_HD.width && window.innerHeight >= FULL_HD.height ? FULL_HD : HD;
+}
+
 const side = 0;
 document.title = 'direct-painting · Output';
-document.querySelector('#app').innerHTML = `<canvas id="output" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="direct-painting 1920 by 1080 output"></canvas>`;
-const scene = createPaintingRenderer(document.querySelector('#output'));
+const initialSize = preferredOutputSize();
+document.querySelector('#app').innerHTML = `<canvas id="output" width="${initialSize.width}" height="${initialSize.height}" aria-label="direct-painting ${initialSize.width} by ${initialSize.height} output"></canvas>`;
+const scene = createPaintingRenderer(document.querySelector('#output'), initialSize);
+const outputCanvas = scene.canvas;
+outputCanvas.setAttribute('aria-label', `direct-painting ${scene.outputWidth} by ${scene.outputHeight} output`);
+let requestedOutputSize = initialSize;
+function resizeOutput() {
+  const next = preferredOutputSize();
+  if (next.width === requestedOutputSize.width && next.height === requestedOutputSize.height) return;
+  requestedOutputSize = next;
+  scene.setOutputSize(next.width, next.height);
+  outputCanvas.setAttribute('aria-label', `direct-painting ${scene.outputWidth} by ${scene.outputHeight} output`);
+}
+window.addEventListener('resize', resizeOutput, { passive: true });
 let snapshot = null, version = -1, liveVersion = -1, serverTime = 0, calibratedAt = performance.now(), renderedAt = -Infinity;
 let cameraSnapshot=null;const cameraSampler=new CameraSampler();
 let calibrated = false, connectedStream = false, polling = false, pollTimer;
