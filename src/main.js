@@ -3,12 +3,12 @@ import { setupCameraControls } from './camera-controls.js';
 import { setupMidiPanel } from './midi-panel.js';
 import { BOX_SPEC, workingPlane, drawingPoint, drawingPointOnPlane, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
-import { LineSchedule, FIXED_LINE_WIDTH } from './line-tool.js';
+import { LineSchedule, FIXED_LINE_WIDTH, finishFirstCycle } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
 import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, CAMERA_DISTANCE, canvasView, zoomAt, PinchGesture } from './view.js';
 import './style.css';
 import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
-import { FPS, FRAME_MS, frameNumber } from './timing.js';
+import { FRAME_MS, frameNumber, FrameRateMeter } from './timing.js';
 import { setupEditorShell } from './editor-shell.js';
 import { brushSize, canvasPoint, timestamp } from './drawing.js';
 import { SmoothedCircle } from './motion.js';
@@ -22,6 +22,7 @@ import { colorHSL, editLayerLightness, pickLayerColor, hasColorGradient, hasFire
 import { dimensionRange, resizeDimension } from './geometry.js';
 import { editLayer, removeLayerSides, moveLayer } from './layers.js';
 import { EditHistory } from './history.js';
+import { largestShapePose } from './trace-motion.js';
 
 const icons = {
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -32,6 +33,8 @@ const icons = {
   line: '<path d="M5 19 19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/>',
   ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
   rectangle: '<rect x="4" y="5" width="16" height="14" rx="1"/>',
+  motionMove: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',
+  motionTrace: '<path d="M4 18V6h6l4 12h6V6"/><circle cx="4" cy="18" r="1"/>',
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const modes = ['move', 'line'];
@@ -53,6 +56,17 @@ document.querySelector('#app').innerHTML = `
         <div class="control-section">
           <span class="section-label">SHAPE</span>
           <select id="shape" aria-label="Drawing shape"><option value="circle">CIRCLE</option><option value="rect">RECTANGLE</option></select>
+        </div>
+        <div id="trace-controls" class="control-section">
+          <span class="section-label">MOTION</span>
+          <select id="trace-mode" aria-label="Motion type"><option value="move">Move</option><option value="trace">Trace</option></select>
+          <div id="trace-duration-control" class="effect-value"><label for="trace-duration">Draw time</label><input id="trace-duration" type="number" min="0.1" max="10" step="0.1" value="0.5" inputmode="decimal" aria-label="Trace drawing time in seconds"><span>s</span></div>
+          <label class="checkbox-control"><input id="intersection-markers" type="checkbox"><span>White intersection markers</span></label>
+          <div id="intersection-timing" class="intersection-timing" aria-label="Intersection marker timing">
+            <div class="effect-value"><label for="intersection-in">In</label><input id="intersection-in" type="number" min="0" max="10" step="0.1" value="0" inputmode="decimal" aria-label="Intersection marker fade in seconds"><span>s</span></div>
+            <div class="effect-value"><label for="intersection-hold">Hold</label><input id="intersection-hold" type="number" min="0" max="10" step="0.1" value="0.2" inputmode="decimal" aria-label="Intersection marker hold seconds"><span>s</span></div>
+            <div class="effect-value"><label for="intersection-out">Out</label><input id="intersection-out" type="number" min="0" max="10" step="0.1" value="0" inputmode="decimal" aria-label="Intersection marker fade out seconds"><span>s</span></div>
+          </div>
         </div>
         <div id="draw-blur-controls" class="control-section">
           <label class="checkbox-control"><input id="draw-blur" type="checkbox"><span>Blur</span></label>
@@ -116,11 +130,21 @@ const shell = setupEditorShell({ icon, onTool: tool => {
   const outline = ['ring', 'rect-ring'].includes(state.shape);
   setShape(tool === 'ellipse' ? (outline ? 'ring' : 'circle') : (outline ? 'rect-ring' : 'rect'));
   setMode('move');
-}, onShape: shape => setShape(shape), onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
-const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => {
-  const label = document.querySelector('.fps-label');
-  if (label) label.textContent = `${FPS} fps · ${backend === 'cpu' ? 'CPU' : backend === 'webgl2-lost' ? 'GPU paused' : 'GPU'}`;
-} });
+}, onShape: shape => setShape(shape), onMotion: trace => {
+  if (!ready || trimDrag || state.mode === 'line') return;
+  endStroke(null); state.traceMotion = trace; syncTraceUI(); queueSave();
+}, onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
+const frameRateMeter = new FrameRateMeter(performance.now()), fpsLabel = $('.fps-label');
+let paintingBackend = 'webgl2', measuredFrameRate = null;
+function syncFrameRate(now) {
+  const sample = frameRateMeter.sample(now);
+  if (sample) measuredFrameRate = sample;
+  const backend = paintingBackend === 'cpu' ? 'CPU' : paintingBackend === 'webgl2-lost' ? 'GPU paused' : 'GPU';
+  const text = `${measuredFrameRate ? measuredFrameRate.fps.toFixed(1) : '—'} fps · ${backend}`;
+  if (fpsLabel.textContent !== text) fpsLabel.textContent = text;
+  if (sample) fpsLabel.title = `Actual painting frames per second (0 while idle). CPU submission: ${sample.drawMs.toFixed(1)} ms/frame.`;
+}
+const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => { paintingBackend = backend; syncFrameRate(performance.now()); } });
 const canvases = [painting.canvas];
 const paintingBoundary = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); paintingBoundary.classList.add('painting-boundary'); paintingBoundary.setAttribute('viewBox', `0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`); paintingBoundary.setAttribute('aria-hidden', 'true'); paintingBoundary.innerHTML = '';
 canvases[0].after(paintingBoundary);
@@ -200,7 +224,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   if (!playback || token.revision === 0) return;
   if (!ready) { pendingTransport = { token, playback, serverNow, latency, received:performance.now() }; return; }
   endStroke(null);
-  clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending:false } : c);
+  clips = clips.map(finishFirstCycle);
   const now = performance.now(), phase = playback.playing ? serverNow - playback.anchor + latency : playback.phase;
   clock.seek(phase, now); clock.play(now);
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
@@ -244,7 +268,7 @@ function rebuildCache() {
   const listScrollTop = $('#layer-list').scrollTop;
   for (const row of document.querySelectorAll('.cached-layer')) for (const details of row.querySelectorAll('details[data-fold]')) layerDisclosure.set(`${row.dataset.layerId}:${details.dataset.fold}`, details.open);
   trimTrackObserver?.disconnect();
-  scene.setProject({ clips, duration: clock.duration });
+  scene.setProject({ clips, duration: clock.duration, settings: state });
   $('#layer-count').textContent = String(clips.length);
   if (!clips.some(clip => clip.id === selectedLayerId)) selectedLayerId = null;
   refreshSelectedLayer = () => {};
@@ -286,13 +310,14 @@ function rebuildCache() {
     const scope = () => 'all';
     const current = root;
     const sync = [];
+    const refreshTracePeak = item => item.trace ? { ...item, trace: { ...item.trace, sourceShape: item.shape, peak: largestShapePose(item) } } : item;
     sync.push(() => { row.style.setProperty('--layer-accent', current().color); row.style.setProperty('--layer-tint', `${current().color}18`); row.classList.toggle('layer-muted', !current().enabled); });
     const update = (edit, rebuild = false, dragging = false) => {
       if (stroke || trimDrag && !dragging) return;
       clips = clips.map(item => item.id === clip.id ? editLayer(item, scope(), value => fitGestureTrim(edit(value), clock.duration)) : item);
 
       if (rebuild) rebuildCache();
-      else { scene.setProject({ clips, duration: clock.duration }); sync.forEach(fn => fn()); }
+      else { scene.setProject({ clips, duration: clock.duration, settings: state }); sync.forEach(fn => fn()); }
       playbackUI(); renderTargets([0], performance.now(), true); queueSave();
     };
     const number = (container, text, aria, get, min, max, step, edit, unit = 'px') => {
@@ -473,17 +498,29 @@ function rebuildCache() {
     const geometry = section('SHAPE');
     const shape = document.createElement('select'); shape.className = 'layer-shape'; shape.setAttribute('aria-label', `Layer ${index + 1} shape`);
     for (const [value, text] of [['circle', 'CIRCLE'], ['ring', 'RING · OUTLINE'], ['rect', 'RECTANGLE'], ['rect-ring', 'RECTANGLE · OUTLINE']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; shape.append(option); }
-    shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => ({ ...item, shape: shape.value }), true)); geometry.append(shape);
+    shape.value = current().shape ?? 'circle'; shape.addEventListener('change', () => update(item => refreshTracePeak({ ...item, shape: shape.value }), true)); geometry.append(shape);
     const sizes = section(clip.mode === 'line' ? 'LINE' : ['rect', 'rect-ring'].includes(shape.value) ? 'RECTANGLE DIMENSIONS' : 'CIRCLE DIAMETER');
     geometry.hidden = clip.mode === 'line';
     if (clip.mode === 'line') { const width = document.createElement('p'); width.className = 'control-hint'; width.textContent = `Width · ${FIXED_LINE_WIDTH}px (fixed)`; sizes.append(width); }
     else if (['rect', 'rect-ring'].includes(shape.value)) {
-      for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeDimension(item, axis, bound, value));
-      number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => ({ ...item, angle: value, followDirection: false }), '°');
+      for (const axis of ['width', 'height']) for (const bound of ['min', 'max']) number(sizes, `${axis === 'width' ? 'W' : 'H'} ${bound.toUpperCase()}`, `${axis} ${bound} in pixels`, item => dimensionRange(item, axis)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => refreshTracePeak(resizeDimension(item, axis, bound, value)));
+      number(sizes, 'ANGLE', 'angle in degrees', item => item.angle ?? 0, -180, 180, 1, (item, value) => refreshTracePeak({ ...item, angle: value, followDirection: false }), '°');
       const presets = document.createElement('div'); presets.className = 'angle-presets';
-      for (const angle of [0,45]) { const button = document.createElement('button'); button.textContent = `${angle}°`; button.setAttribute('aria-label', `Layer ${index + 1} angle ${angle} degrees`); button.addEventListener('click', () => update(item => ({ ...item, angle }))); presets.append(button); } sizes.append(presets);
-    } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => resizeGesture(item, bound, value));
+      for (const angle of [0,45]) { const button = document.createElement('button'); button.textContent = `${angle}°`; button.setAttribute('aria-label', `Layer ${index + 1} angle ${angle} degrees`); button.addEventListener('click', () => update(item => refreshTracePeak({ ...item, angle }))); presets.append(button); } sizes.append(presets);
+    } else for (const bound of ['min', 'max']) number(sizes, bound.toUpperCase(), `${bound} recorded circle diameter in pixels`, item => layerSizeRange(item)[bound], 1, MAX_BRUSH_SIZE, 1, (item, value) => refreshTracePeak(resizeGesture(item, bound, value)));
     if (clip.mode !== 'line' && ['ring', 'rect-ring'].includes(shape.value)) number(sizes, 'STROKE', 'ring stroke width in pixels', item => item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => ({ ...item, ringWidth: value }));
+    const traceControls = document.createElement('div'); traceControls.className = 'layer-trace-controls';
+    const traceToggleLabel = document.createElement('label'); traceToggleLabel.className = 'checkbox-control';
+    const traceToggle = document.createElement('input'); traceToggle.type = 'checkbox'; traceToggle.setAttribute('aria-label', `Layer ${index + 1} trace motion`);
+    traceToggleLabel.append(traceToggle, document.createTextNode('Trace motion')); traceControls.append(traceToggleLabel);
+    const traceDrawTime = number(traceControls, 'DRAW', 'trace drawing time in seconds', item => (item.trace?.drawMs ?? state.traceDurationMs) / 1000, 0.1, 10, 0.1, (item, value) => item.trace ? { ...item, trace: { ...item.trace, drawMs: Math.round(value * 1000) } } : item, 's');
+    const traceStroke = number(traceControls, 'STROKE', 'trace stroke width in pixels', item => item.trace?.strokeWidth ?? item.ringWidth ?? DEFAULT_RING_WIDTH, 1, MAX_RING_WIDTH, 1, (item, value) => item.trace ? { ...item, trace: { ...item.trace, strokeWidth: value } } : item);
+    traceToggle.addEventListener('change', () => update(item => {
+      if (!traceToggle.checked) { const { trace, ...rest } = item; return rest; }
+      return { ...item, trace: { pending: false, drawMs: state.traceDurationMs, strokeWidth: item.ringWidth ?? DEFAULT_RING_WIDTH, sourceShape: item.shape, peak: largestShapePose(item) } };
+    }, true));
+    sync.push(() => { traceToggle.checked = Boolean(current().trace); traceDrawTime.disabled = traceStroke.disabled = !current().trace; });
+    traceControls.hidden = clip.mode !== 'move' || Boolean(clip.procedural);
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
@@ -517,7 +554,7 @@ function rebuildCache() {
     const identity = document.createElement('span'); identity.className = 'layer-identity'; identity.append(label, timing);
     const chevron = document.createElement('span'); chevron.className = 'layer-chevron'; chevron.textContent = '⌄'; chevron.setAttribute('aria-hidden', 'true');
     const body = document.createElement('div'); body.className = 'layer-body'; body.dataset.layerId = clip.id;
-    body.append(paints, gradientTiming, effectsPanel, blending, actions, layerFold(clip.id, 'shape', 'SHAPE & SIZE', [geometry, sizes]), layerFold(clip.id, 'timing', 'TIMING & TRIM', [envelope, track, summary]));
+    body.append(paints, gradientTiming, effectsPanel, blending, actions, layerFold(clip.id, 'shape', 'SHAPE & SIZE', [geometry, sizes]), layerFold(clip.id, 'motion', 'MOTION', [traceControls]), layerFold(clip.id, 'timing', 'TIMING & TRIM', [envelope, track, summary]));
     actions.append(reorder);
     const card = layerFold(clip.id, 'card', [toggle, identity, chevron, remove], []);
     card.open = false;
@@ -605,7 +642,11 @@ function cacheStroke(current, now) {
   const duration = Math.max(now - current.started, current.samples.at(-1).t);
   if (current.samples.at(-1).t < duration) current.samples.push({ ...current.last, t: duration });
   if (current.tool === 'line') cacheLineGesture(current, duration);
-  else clips = [...clips, { id: current.id, mode: current.mode, shape: current.shape, plane: current.plane, angle: current.angle, followDirection: false, color: current.color, opacity: current.opacity, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true }];
+  else {
+    const clip = { id: current.id, mode: current.mode, shape: current.shape, plane: current.plane, angle: current.angle, followDirection: false, color: current.color, opacity: current.opacity, ringWidth: current.ringWidth, effects: { ...current.effects }, blendMode: 'analog', targets: current.targets, samples: current.samples, sizeRange: current.sizeRange, duration, start: current.start, fadeMs: state.fadeMs, enabled: true };
+    if (current.traceEnabled) clip.trace = { pending: true, drawMs: current.traceDurationMs, strokeWidth: current.ringWidth || DEFAULT_RING_WIDTH, peak: largestShapePose(clip) };
+    clips = [...clips, clip];
+  }
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   $('.canvas-empty').hidden = true;
   current.targets.forEach(index => { layers[index].circle = null; });
@@ -635,6 +676,7 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   const layer = layers[index];
   const frame = frameNumber(now);
   if (!force && frame === layer.lastFrame) return;
+  const drawStartedAt = performance.now();
   layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
@@ -642,6 +684,7 @@ function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
   if(cubeDragging){frameCamera.view=state.view;}
   painting.setView(frameCamera.view);syncViewPresentation(frameCamera.view);
   painting.draw(index, phase, { now, cameraViews:frameCamera.cameraViews, placementPreview: !clock.playing });
+  if (paintingBackend !== 'webgl2-lost') frameRateMeter.record(now, performance.now() - drawStartedAt);
 }
 function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
 let animationFrame = -1;
@@ -653,11 +696,12 @@ function animate(now) {
     animationFrame = frame;
     timelineUI(now);
     const revealed = lineSchedule.advance(clips, clock.phase(now), clock.duration, now, clock.playing);
-    if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
+    if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? finishFirstCycle(c) : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
     if (stroke) livePublisher.publish(now);
     if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
     for (let i = 0; i < canvases.length; i++) if (state.camera.mode!=='normal'||now<cameraSampler.movingUntil||(clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
   }
+  syncFrameRate(now);
 }
 renderTargets([0]); requestAnimationFrame(animate);
 function point(event, canvas, inputView=effectiveView()) {
@@ -730,7 +774,7 @@ canvases.forEach((canvas, index) => {
     if (!insideBox(pointInSpace(startPoint, workingPlane(inputView)))) return;
     event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
     const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, last: startPoint, started: now, start: clock.phase(now), samples: [] };
+    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, traceEnabled: state.traceMotion && state.mode !== 'line', traceDurationMs: state.traceDurationMs, last: startPoint, started: now, start: clock.phase(now), samples: [] };
     stroke.samples.push({ ...stroke.last, t: 0 });
     history.endGroup(); historyUI();
     if (stroke.mode === 'move') {
@@ -790,12 +834,43 @@ function updateSize(bound, rawValue) {
   $(`#size-${bound}`).addEventListener('input', event => updateSize(bound, event.target.value));
   $(`#size-${bound}`).addEventListener('change', syncSizeUI);
 });
+function syncTraceUI() {
+  $('#trace-mode').value = state.traceMotion ? 'trace' : 'move';
+  $('#trace-mode').disabled = state.mode === 'line';
+  shell.setMotion(state.traceMotion);
+  $('#trace-duration-control').hidden = !state.traceMotion;
+  $('#trace-duration').value = (state.traceDurationMs / 1000).toString();
+  $('#intersection-markers').checked = state.intersections;
+  $('#intersection-timing').hidden = !state.intersections;
+  for (const [id, key] of [['intersection-in', 'intersectionFadeInMs'], ['intersection-hold', 'intersectionHoldMs'], ['intersection-out', 'intersectionFadeOutMs']]) $(`#${id}`).value = (state[key] / 1000).toString();
+}
+$('#trace-mode').addEventListener('change', event => {
+  if (!ready || trimDrag) return;
+  endStroke(null); state.traceMotion = event.target.value === 'trace'; syncTraceUI(); queueSave();
+});
+$('#trace-duration').addEventListener('input', event => {
+  if (!event.target.value || !Number.isFinite(Number(event.target.value))) return;
+  state.traceDurationMs = Math.round(Math.max(100, Math.min(10000, Number(event.target.value) * 1000)));
+  syncTraceUI(); queueSave();
+});
+$('#trace-duration').addEventListener('change', syncTraceUI);
+$('#intersection-markers').addEventListener('change', event => {
+  if (!ready || trimDrag) return;
+  state.intersections = event.target.checked; syncTraceUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+});
+for (const [id, key] of [['intersection-in', 'intersectionFadeInMs'], ['intersection-hold', 'intersectionHoldMs'], ['intersection-out', 'intersectionFadeOutMs']]) $(`#${id}`).addEventListener('input', event => {
+  if (!event.target.value || !Number.isFinite(Number(event.target.value))) return;
+  state[key] = Math.round(Math.max(0, Math.min(10000, Number(event.target.value) * 1000)));
+  scene.setIntersectionTiming(state);
+  renderTargets([0], performance.now(), true); queueSave();
+});
 function syncShapeUI() {
   $('#shape').value = state.mode === 'line' ? 'ring' : state.shape;
   $('#line-tool-controls').hidden = state.mode !== 'line';
   $('#circle-controls').hidden = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape); $('#ring-controls').hidden = state.mode !== 'line' && !['ring', 'rect-ring'].includes(state.shape); $('#ring-width').value = state.ringWidth; shell.setShape(state.shape); $('#rectangle-controls').hidden = state.mode === 'line' || !['rect', 'rect-ring'].includes(state.shape);
   for (const axis of ['width', 'height']) for (const bound of ['Min', 'Max']) { $(`#${axis}-${bound}`).value = $(`#${axis}-range-${bound}`).value = state[`${axis}${bound}`]; }
   $('#shape-angle').value = state.angle; $('#shape').disabled = state.mode === 'line';
+  syncTraceUI();
 }
 function setShape(shape) { if (!ready || trimDrag) return; endStroke(null); state.shape = shape; syncShapeUI(); queueSave(); }
 for (const button of document.querySelectorAll('[data-draw-angle]')) button.addEventListener('click', () => { endStroke(null); state.angle = Number(button.dataset.drawAngle); syncShapeUI(); queueSave(); });
@@ -832,7 +907,7 @@ function editFloatingColor(color, opacity) {
       else if (color !== value.color) next = pickLayerColor(hasSampleColor(value) ? { ...next, colorEditMode: 'color' } : next, color);
       return next;
     }));
-    scene.setProject({ clips, duration: clock.duration }); refreshSelectedLayer(); renderTargets([0], performance.now(), true);
+    scene.setProject({ clips, duration: clock.duration, settings: state }); refreshSelectedLayer(); renderTargets([0], performance.now(), true);
   }
   syncFloatingColor(); queueSave();
 }
@@ -853,7 +928,7 @@ $('#loop-progress').addEventListener('input', event => {
   const now = performance.now(); clock.seek(Number(event.target.value), now); clock.play(now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
   playbackUI(); renderTargets([0], now, true); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(c => c.mode === 'line' && !c.lineIncomplete ? { ...c, linePending: false } : c); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); clock.play(performance.now()); playbackUI(); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(finishFirstCycle); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); clock.play(performance.now()); playbackUI(); renderTargets([0], performance.now(), true); publisher.publish(true); });
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -930,6 +1005,7 @@ $('#import-file').addEventListener('change', async event => {
   } catch (error) { toast(`Could not import JSON: ${error.message}`); }
 });
 document.addEventListener('visibilitychange', () => {
+  frameRateMeter.reset(performance.now()); measuredFrameRate = null; syncFrameRate(performance.now());
   if (document.hidden) { trimDrag?.finish(); endStroke(null); if (dirty) flushSave(); }
 });
 window.addEventListener('beforeunload', event => { if (dirty || stroke) { event.preventDefault(); event.returnValue = ''; } });
@@ -953,7 +1029,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     setMode(state.mode, true); setColor(state.color); setSync(state.sync); selectCanvas(state.active);
     lineSchedule.rebase(clips, playback.phase, project.duration, performance.now());
     viewRevision++; syncViewUI(); colorPanel.setVisible(state.colorPanelVisible);
-    syncSizeUI(); syncShapeUI(); syncEffectsUI();
+    syncSizeUI(); syncShapeUI(); syncEffectsUI(); syncTraceUI();
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
     const now = performance.now(); clock.resize(project.duration, now); clock.seek(playback.phase, now);
     clock.play(now);

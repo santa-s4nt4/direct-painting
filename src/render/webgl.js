@@ -2,10 +2,11 @@ import { canvasView, viewRotation, CAMERA_DISTANCE } from '../view.js';
 import {
   WebGLRenderer, WebGLRenderTarget, Scene, PerspectiveCamera, Mesh, PlaneGeometry,
   RawShaderMaterial, InstancedBufferGeometry, InstancedBufferAttribute, DynamicDrawUsage,
+  BufferGeometry, BufferAttribute, Points, NormalBlending,
   Vector2, Vector4, Vector3, GLSL3, NoBlending, CustomBlending, OneFactor,
   OneMinusSrcAlphaFactor, AddEquation, DoubleSide, NearestFilter, LinearFilter, NoColorSpace,
 } from 'three';
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, MAX_BRUSH_SIZE } from '../canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, MAX_BRUSH_SIZE, MARKER_DIAMETER } from '../canvas.js';
 import { DEFAULT_RING_WIDTH, layerEffects, paintingStyle } from '../effects.js';
 import { prepareShapeClip } from '../geometry.js';
 import { CachedGesture, gestureTime, gestureVisible, gestureOpacity } from '../loop.js';
@@ -25,15 +26,25 @@ export function material(vertexShader, fragmentShader, uniforms, blending = NoBl
   return new RawShaderMaterial({ glslVersion: GLSL3, vertexShader, fragmentShader, uniforms, blending, depthTest: false, depthWrite: false, toneMapped: false, side: DoubleSide, transparent: blending !== NoBlending, blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor, blendEquation: AddEquation });
 }
 function color(vector, hex) { const value = Number.parseInt(hex.slice(1), 16); vector.set((value >> 16) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255); }
+const markerVertex = `precision highp float;
+in vec3 position;
+uniform vec2 logicalSize;
+uniform float pixelScale;
+out float markerAlpha;
+void main(){gl_Position=vec4(position.x/logicalSize.x*2.-1.,1.-position.y/logicalSize.y*2.,0.,1.);gl_PointSize=${MARKER_DIAMETER}.*pixelScale;markerAlpha=position.z;}`;
+const markerFragment = `precision highp float;
+in float markerAlpha;
+out vec4 result;
+void main(){float radius=length(gl_PointCoord-vec2(.5));float edge=1.-smoothstep(.46,.5,radius);if(edge<=0.)discard;result=vec4(1.,1.,1.,markerAlpha*edge);}`;
 
 export class WebGLPaintingRenderer {
   backend = 'webgl2'; items = []; duration = 10000; live = new LiveStroke(); frame = 0; view = canvasView();
   stats = { backend: 'webgl2', frames: 0, stamps: 0, maskPasses: 0, masksCreated: 0, maskBytes: 0, drawCalls: 0, copyPixels: 0, blurPixels: 0, maskRebuilds: 0, cpuPixelUploads: 0 };
-  constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024, volume = false } = {}) {
+  constructor(canvas, { onBackendChange = () => {}, cacheBytes = 96 * 1024 * 1024, volume = false, width = VW, height = VH } = {}) {
     this.volume = volume; this.targetWidth = volume ? VW : W; this.targetHeight = volume ? VH : H;
     this.canvas = canvas; this.onBackendChange = onBackendChange; this.cacheBytes = cacheBytes;
     this.renderer = new WebGLRenderer({ canvas, alpha: false, antialias: false, depth: true, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(1); this.renderer.setSize(VW, VH, false); this.renderer.autoClear = false;
+    this.renderer.setPixelRatio(1); this.setOutputSize(width, height); this.renderer.autoClear = false;
     this.renderer.info.autoReset = false;
     this.renderer.debug.onShaderError = (gl, program, vertex, fragment) => { throw new Error([gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].join('\n')); };
     this.quad = new PlaneGeometry(1, 1);
@@ -48,6 +59,14 @@ export class WebGLPaintingRenderer {
     this.stampMaterial = material(stampVertex, stampFragment, { targetBounds: { value: new Vector4() }, edgeSize: { value: 5 } });
     this.stampMesh = new Mesh(this.stampGeometry, this.stampMaterial); this.stampMesh.frustumCulled = false;
     this.stampScene = new Scene(); this.stampScene.add(this.stampMesh);
+    this.markerScene = new Scene(); this.markerGeometry = new BufferGeometry();
+    this.markerCapacity = 64; this.markerData = new Float32Array(this.markerCapacity * 3);
+    this.markerAttribute = new BufferAttribute(this.markerData, 3).setUsage(DynamicDrawUsage);
+    this.markerGeometry.setAttribute('position', this.markerAttribute); this.markerGeometry.setDrawRange(0, 0);
+    this.markerMaterial = new RawShaderMaterial({ glslVersion: GLSL3, vertexShader: markerVertex, fragmentShader: markerFragment,
+      uniforms: { logicalSize: { value: new Vector2(volume ? VW : W, volume ? VH : H) }, pixelScale: { value: 1 } },
+      transparent: true, blending: NormalBlending, depthTest: false, depthWrite: false, toneMapped: false });
+    this.markerPoints = new Points(this.markerGeometry, this.markerMaterial); this.markerPoints.frustumCulled = false; this.markerScene.add(this.markerPoints);
     this.normalMaterial = this.layerMaterial(normalFragment, CustomBlending);
     this.copyMaterial = material(screenVertex, copyFragment, { image: { value: null } });
     this.presentMaterial = material(presentVertex, presentFragment, { image: { value: this.accumulator.texture } });
@@ -59,6 +78,7 @@ export class WebGLPaintingRenderer {
     this.renderer.compile(this.stampScene, this.camera);
     this.passMesh.material = this.normalMaterial; this.renderer.compile(this.passScene, this.camera);
     this.renderer.compile(this.scene, this.camera);
+    this.renderer.compile(this.markerScene, this.camera);
     this.prepareEffects();
     this.contextLost = false;
     this.lost = event => { event.preventDefault(); this.contextLost = true; this.notify('webgl2-lost'); };
@@ -72,6 +92,29 @@ export class WebGLPaintingRenderer {
     this.notify('webgl2');
   }
   notify(backend) { this.canvas.dataset.renderer = backend; this.onBackendChange(backend); }
+  // Screen-space overlays are rendered directly after camera exposure is
+  // composited. They intentionally never enter the camera-motion-blur jobs.
+  drawSharpOverlayMarkers(markers = []) {
+    if (!markers.length) { this.markerGeometry.setDrawRange(0, 0); return; }
+    if (markers.length > this.markerCapacity) {
+      this.markerCapacity = 2 ** Math.ceil(Math.log2(markers.length));
+      this.markerData = new Float32Array(this.markerCapacity * 3);
+      this.markerAttribute = new BufferAttribute(this.markerData, 3).setUsage(DynamicDrawUsage);
+      this.markerGeometry.setAttribute('position', this.markerAttribute);
+    }
+    for (let i = 0; i < markers.length; i++) this.markerData.set([markers[i].x, markers[i].y, Math.max(0, Math.min(1, markers[i].alpha ?? 1))], i * 3);
+    this.markerGeometry.setDrawRange(0, markers.length); this.markerAttribute.clearUpdateRanges(); this.markerAttribute.addUpdateRange(0, markers.length * 3); this.markerAttribute.needsUpdate = true;
+    this.markerMaterial.uniforms.pixelScale.value = this.outputWidth / (this.volume ? VW : W);
+    this.renderer.render(this.markerScene, this.camera);
+  }
+  setOutputSize(width, height) {
+    const gl = this.renderer.getContext(), limits = gl.getParameter(gl.MAX_VIEWPORT_DIMS), maxRenderbuffer = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+    const supported = (w, h) => w <= limits[0] && h <= limits[1] && w <= maxRenderbuffer && h <= maxRenderbuffer;
+    if (!supported(width, height) && supported(1280, 720)) { width = 1280; height = 720; }
+    this.outputWidth = width; this.outputHeight = height;
+    this.renderer.setSize(width, height, false);
+    this.canvas.dataset.resolution = `${width}x${height}`;
+  }
   layerMaterial(fragment, blending) {
     return material(layerVertex, fragment, {
       bounds: { value: new Vector4() }, maskBounds: { value: new Vector4() }, resolution: { value: new Vector2(W, H) }, maskTexture: { value: null },
@@ -286,8 +329,8 @@ export class WebGLPaintingRenderer {
   dispose() {
     for (const item of this.items) this.release(item);
     for (const rt of [this.accumulator, this.alternate, this.liveTarget, this.effectSource, this.blurA, this.blurB]) rt?.dispose();
-    for (const m of [this.stampMaterial, this.normalMaterial, this.analogMaterial, this.copyMaterial, this.presentMaterial, this.effectMaterial, this.blurMaterial]) m?.dispose();
-    this.quad.dispose(); this.stampGeometry.dispose(); this.painting.geometry.dispose(); this.renderer.dispose();
+    for (const m of [this.stampMaterial, this.normalMaterial, this.analogMaterial, this.copyMaterial, this.presentMaterial, this.effectMaterial, this.blurMaterial, this.markerMaterial]) m?.dispose();
+    this.quad.dispose(); this.stampGeometry.dispose(); this.markerGeometry.dispose(); this.painting.geometry.dispose(); this.renderer.dispose();
     this.canvas.removeEventListener('webglcontextlost', this.lost); this.canvas.removeEventListener('webglcontextrestored', this.restored);
   }
 }

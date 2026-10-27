@@ -5,7 +5,7 @@ import { sampleAt } from '../loop.js';
 
 // Geometry has no Canvas/WebGL dependency. The saved x/y/pressure/t data remains
 // the source of truth; a future 3D renderer can consume it without UI changes.
-const GEOMETRY_KEYS = ['mode', 'shape', 'angle', 'duration', 'ringWidth', 'linePending', 'lineIncomplete'];
+const GEOMETRY_KEYS = ['mode', 'shape', 'angle', 'duration', 'ringWidth', 'linePending', 'lineIncomplete', 'trace'];
 const POINT_KEYS = ['x', 'y', 'size', 't', 'shape', 'width', 'height', 'ringWidth', 'angle', 'step', 'active', 'opacity', 'color', 'colorProgress'];
 export function sameGeometry(a, b) {
   if (!a || !b || GEOMETRY_KEYS.some(key => a[key] !== b[key]) || a.procedural?.kind !== b.procedural?.kind) return false;

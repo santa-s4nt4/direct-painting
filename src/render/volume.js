@@ -7,11 +7,13 @@ import { Matrix3, Matrix4, Vector2, Vector3, Vector4 } from 'three';
 import { WebGLPaintingRenderer, target, material } from './webgl.js';
 import { screenVertex, blurFragment, analogFragment, analogComposite } from './shaders.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
-import { BOX_SPEC, IDENTITY_PLANE, lineGeometry, pointInSpace, multiply } from '../space.js';
+import { BOX_SPEC, IDENTITY_PLANE, lineGeometry, pointInSpace, projectSpace, insideBox, multiply } from '../space.js';
 import { viewRotation } from '../view.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
 import { sameGeometry } from './stroke.js';
 import { layerEffects, DEFAULT_RING_WIDTH } from '../effects.js';
+import { tracePlaybackClip, traceHead } from '../trace-motion.js';
+import { IntersectionDetector, IntersectionPulseTracker } from '../intersections.js';
 export const volumeVertex = `
 precision highp float;
 in vec3 position;
@@ -47,6 +49,7 @@ export function spatialFragment(fragment){
 export class VolumePaintingRenderer extends WebGLPaintingRenderer {
  constructor(canvas, options={}){
   super(canvas,{...options,volume:true});
+  this.intersectionPulses=new IntersectionPulseTracker();this.intersectionDetector=new IntersectionDetector();this.setIntersectionTiming({});
   this.presentMaterial.vertexShader=screenVertex;this.presentMaterial.depthTest=false;this.presentMaterial.depthWrite=false;this.presentMaterial.needsUpdate=true;
   this.passMesh.material=this.presentMaterial;this.renderer.compile(this.passScene,this.camera);
  }
@@ -65,7 +68,9 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   this.passMesh.matrixAutoUpdate=false;this.passMesh.matrix.identity();positionCamera(this.camera,this.view);this.passMesh.matrixWorldNeedsUpdate=true;
  }
  setProject(project){
-  super.setProject(project);
+  this.intersections=project.settings?.intersections===true;
+  this.setIntersectionTiming(project.settings??{});this.intersectionPulses.reset();
+  super.setProject({...project,clips:project.clips.map(tracePlaybackClip)});
   for(const item of this.items){
    const previous=item.markers??[];
    item.markers=(item.clip.linePending?item.clip.lineMarkers??[]:[]).map((source,i)=>{
@@ -74,6 +79,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
    });
   }
  }
+ setIntersectionTiming(settings){this.intersectionTiming={fadeInMs:settings.intersectionFadeInMs??0,holdMs:settings.intersectionHoldMs??200,fadeOutMs:settings.intersectionFadeOutMs??0};}
  prepareEffects(){
   if(this.effectMaterial)return;
   this.effectMaterial=material(screenVertex,processedFragment,{resolution:{value:new Vector2(VW,VH)},image:{value:null},belowTexture:{value:null},mixAmount:{value:.5}});
@@ -129,26 +135,32 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
  draw(side,phase,{now=performance.now(),placementPreview=false,cameraViews=null}={}){
   if(this.contextLost)return;
   this.frame++;this.renderer.info.reset();this.current=this.accumulator;this.clearTarget(this.current);this.composed=false;
-  const jobs=[],add=(item,time,opacity,visual)=>{
+  const jobs=[],intersectionEntries=[],markers=[],add=(item,time,opacity,visual)=>{
    const exposure=item.exposure??(cameraViews?cameraExposure(item.clip,time,visual,item.gesture?t=>item.gesture.render(t):null,cameraViews):(item.gesture?motionExposure(item.clip,time,visual,t=>item.gesture.render(t)):null));
    jobs.push({item:exposure?{...item,exposure,cameraExposure:!!cameraViews}:item,time,opacity,visual});
   };
   for(const item of this.items){
    const clip=item.clip;if(!clip.enabled||!clip.targets.includes(side)||!gestureVisible(clip,phase,this.duration))continue;item.lastUsed=this.frame;
    if(clip.mode==='line'&&clip.linePending){
-    if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration);const visual=m.gesture.render(t);if(visual.active!==false)add(m,t,gestureOpacity(m.clip,t),visual);}}
-    else for(const p of clip.samples)add({...item,clip:{...clip,ringWidth:Math.min(clip.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))}},0,1,{...p,shape:'ring'});
+    if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration),visual=m.gesture.render(t),alpha=gestureOpacity(m.clip,t)*(m.clip.opacity??1);if(visual.active!==false){add(m,t,gestureOpacity(m.clip,t),visual);intersectionEntries.push({clip:m.clip,owner:clip.id,visual,time:t,alpha});}}}
+    else for(const p of clip.samples){const preview={...item,clip:{...clip,ringWidth:Math.min(clip.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))}},visual={...p,shape:'ring'};add(preview,0,1,visual);intersectionEntries.push({clip:preview.clip,visual,time:0,alpha:1});}
     continue;
    }
    const t=gestureTime(clip,phase,this.duration),opacity=(placementPreview&&clip.mode==='place'&&t<1?1:gestureOpacity(clip,t));
-   if(clip.mode==='line'&&clip.points3D){const g=lineGeometry(clip,this.view);add({...item,clip:{...clip,plane:g.plane,origin:g.origin}},t,opacity,g.visual);}
-   else if(item.moving){const visual=item.gesture.render(t);if(visual.active!==false)add(item,t,opacity*(visual.opacity??1),visual);}
+   if(clip.mode==='line'&&clip.points3D){const g=lineGeometry(clip,this.view),lineClip={...clip,plane:g.plane,origin:g.origin};add({...item,clip:lineClip},t,opacity,g.visual);intersectionEntries.push({clip:lineClip,visual:g.visual,time:t,alpha:opacity*(clip.opacity??1)});}
+   else if(item.moving){const visual=item.gesture.render(t);if(visual.active!==false){const alpha=opacity*(visual.opacity??1)*(clip.opacity??1);add(item,t,opacity*(visual.opacity??1),visual);intersectionEntries.push({clip,visual,time:t,alpha});}}
    else{this.paintMask(item,clip.mode==='line'?1:Math.min(t,clip.duration),null,t);add(item,t,opacity,null);}
+   if(clip.trace&&!clip.trace.pending){
+    const alpha=opacity*(clip.opacity??1),head=traceHead(clip,t),space=head&&pointInSpace(head,clip.plane,clip.origin);
+    if(space&&insideBox(space)){const point=projectSpace(space,this.view);if(Number.isFinite(point.x)&&Number.isFinite(point.y))markers.push({x:point.x,y:point.y,alpha});}
+    intersectionEntries.push({clip,visual:null,time:t,alpha});
+   }
   }
   const live=this.live;
   if(live.id&&live.targets?.includes(side)){
    const clip={id:live.id,mode:live.mode,color:live.color,opacity:live.opacity,effects:live.effects,ringWidth:live.ringWidth,plane:live.plane};
-   const visual=live.move??live.head,exposure=cameraViews?cameraExposure(clip,live.elapsed,visual,t=>live.motionAt(t),cameraViews,{live:true}):motionExposure(clip,live.elapsed,visual,t=>live.motionAt(t),{live:true});
+   const visual=live.move??live.head;intersectionEntries.push({clip,visual,time:live.elapsed,alpha:live.opacity??1});
+   const exposure=cameraViews?cameraExposure(clip,live.elapsed,visual,t=>live.motionAt(t),cameraViews,{live:true}):motionExposure(clip,live.elapsed,visual,t=>live.motionAt(t),{live:true});
    add({clip,bounds:{},target:null,exposure},live.time(now),1,visual);
   }
   const r=viewRotation(this.view);
@@ -157,6 +169,11 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   for(const job of jobs)this.compose(job.item,job.time,job.opacity,job.visual);
   this.accumulator=this.current;this.paintingTexture=this.current.texture;this.presentMaterial.uniforms.image.value=this.current.texture;
   this.passMesh.material=this.presentMaterial;this.renderer.setRenderTarget(null);this.renderer.setClearColor(0,1);this.renderer.clear(true,true,false);this.renderer.render(this.passScene,this.camera);
+  // Intersection markers use the current camera projection and are appended
+  // after every camera-exposure layer has been composited, so they stay sharp.
+  if(this.intersections)markers.push(...this.intersectionPulses.update(side,this.intersectionDetector.find(intersectionEntries,this.view),phase,this.intersectionTiming,this.view,intersectionEntries));
+  else this.intersectionPulses.reset();
+  this.drawSharpOverlayMarkers(markers);
   this.stats.frames++;this.stats.drawCalls=this.renderer.info.render.calls;
   if(this.stats.maskBytes>this.cacheBytes)for(const item of this.items.filter(i=>i.target&&i.lastUsed!==this.frame).sort((a,b)=>a.lastUsed-b.lastUsed)){this.release(item);if(this.stats.maskBytes<=this.cacheBytes)break;}
  }

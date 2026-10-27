@@ -1,12 +1,13 @@
 import { validatePlane, insideBox, pointInSpace, BOX_SPEC } from './space.js';
 import { MAX_BRUSH_SIZE } from './canvas.js';
-import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH } from './effects.js';
+import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH, MAX_RING_WIDTH } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
 import { TrailField, PersistentField, SmoothedCircle, TRAIL_LIFETIME } from './motion.js';
 import { prepareShapeClip } from './geometry.js';
 import { layerVariants, EYE_FIELDS } from './layers.js';
 import { validateP5Source } from './p5-motion.js';
 import { hasColorGradient, colorAtTime } from './color.js';
+import { activeMotionDuration } from './trace-motion.js';
 
 export { LOOP_MS as DEFAULT_LOOP_MS } from './transport.js';
 import { LOOP_MS as DEFAULT_LOOP_MS } from './transport.js';
@@ -51,7 +52,7 @@ export function resizeGesture(clip, bound, value) {
   return { ...clip, diameterRange, samples };
 }
 export function fadeDuration(clip) { return clip.mode === 'trail' ? TRAIL_LIFETIME : clip.fadeMs ?? DEFAULT_FADE_MS; }
-export function gestureLength(clip) { return clip.mode === 'place' ? (clip.fadeInMs ?? 300) + (clip.holdMs ?? 1000) + (clip.fadeOutMs ?? 1000) : clip.duration + fadeDuration(clip); }
+export function gestureLength(clip) { return clip.mode === 'place' ? (clip.fadeInMs ?? 300) + (clip.holdMs ?? 1000) + (clip.fadeOutMs ?? 1000) : activeMotionDuration(clip) + fadeDuration(clip); }
 export const MIN_TRIM_MS = 50;
 export function trimRange(clip) { return { in: clip.trimIn ?? 0, out: clip.trimOut ?? gestureLength(clip) }; }
 export function playbackLength(clip) { const range = trimRange(clip); return range.out - range.in; }
@@ -84,8 +85,9 @@ export function gestureOpacity(clip, time) {
     if (time < fadeIn + hold) return 1;
     return fadeOut ? Math.max(0, 1 - (time - fadeIn - hold) / fadeOut) ** 2 : 0;
   }
-  if (clip.mode === 'trail' || time <= clip.duration) return 1;
-  return Math.max(0, 1 - (time - clip.duration) / fadeDuration(clip)) ** 2;
+  const duration = activeMotionDuration(clip);
+  if (clip.mode === 'trail' || time <= duration) return 1;
+  return Math.max(0, 1 - (time - duration) / fadeDuration(clip)) ** 2;
 }
 export function minimumLoop(clips) { return Math.max(1000, ...clips.flatMap(layerVariants).flatMap(clip=>[playbackLength(clip),...(clip.lineMarkers??[]).map(playbackLength)])); }
 
@@ -215,6 +217,13 @@ export function validateProject(project) {
     }
     if (clip.opacity !== undefined && (!Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) throw new Error('Invalid layer opacity');
     validateEffects(clip.effects); validateRingWidth(clip.ringWidth); validatePlane(clip.plane);
+    if (clip.trace !== undefined) {
+      const trace = clip.trace, peak = trace?.peak;
+      if (clip.mode !== 'move' || clip.procedural || !trace || typeof trace !== 'object' || Array.isArray(trace) || typeof trace.pending !== 'boolean' || !Number.isInteger(trace.drawMs) || trace.drawMs < 100 || trace.drawMs > 10000 || !Number.isInteger(trace.strokeWidth) || trace.strokeWidth < 1 || trace.strokeWidth > MAX_RING_WIDTH || !peak || !['x', 'y', 'size'].every(key => Number.isFinite(peak[key])) || peak.size < 1 || peak.size > MAX_BRUSH_SIZE || !Number.isFinite(peak.t) || peak.t < 0 || peak.t > clip.duration + 750) throw new Error('Invalid trace motion');
+      if (trace.sourceShape !== undefined && !['circle', 'ring', 'rect', 'rect-ring'].includes(trace.sourceShape)) throw new Error('Invalid trace shape');
+      if (['rect', 'rect-ring'].includes(trace.sourceShape ?? clip.shape) && ['width', 'height'].some(key => !Number.isFinite(peak[key]) || peak[key] < 1 || peak[key] > MAX_BRUSH_SIZE)) throw new Error('Invalid trace rectangle');
+      if (peak.angle !== undefined && (!Number.isFinite(peak.angle) || Math.abs(peak.angle) > 720)) throw new Error('Invalid trace angle');
+    }
     if(clip.origin!==undefined&&(!Array.isArray(clip.origin)||clip.origin.length!==3||!insideBox(clip.origin)))throw new Error('Invalid drawing plane origin');
     if(clip.points3D!==undefined&&(clip.mode!=='line'||!Array.isArray(clip.points3D)||clip.points3D.length!==clip.samples.length||clip.points3D.some(p=>!Array.isArray(p)||p.length!==3||!insideBox(p))))throw new Error('Invalid spatial line points');
     if(clip.lineMarkers!==undefined){

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { LOOP_MS } from '../src/transport.js';
 import { createMidiInput } from './midi.js';
 import { validatePlane } from '../src/space.js';
-import { LineSchedule, fixedLineStyle } from '../src/line-tool.js';
+import { LineSchedule, firstCyclePending, finishFirstCycle, fixedLineStyle } from '../src/line-tool.js';
 import { validateView, canvasView, importedView } from '../src/view.js';
 import { MAX_BRUSH_SIZE, CANVAS_SPEC } from '../src/canvas.js';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
@@ -14,6 +14,11 @@ import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH } from '../src/e
 
 export function validateSnapshot(value, now) {
   const project = { ...validateProject(value?.project), duration: LOOP_MS };
+  if (project.settings !== undefined) {
+    if (!project.settings || typeof project.settings !== 'object' || Array.isArray(project.settings)) throw new Error('Invalid drawing settings');
+    for (const key of ['traceMotion', 'intersections']) if (project.settings[key] !== undefined && typeof project.settings[key] !== 'boolean') throw new Error(`Invalid ${key}`);
+    if (project.settings.traceDurationMs !== undefined && (!Number.isInteger(project.settings.traceDurationMs) || project.settings.traceDurationMs < 100 || project.settings.traceDurationMs > 10000)) throw new Error('Invalid trace duration');
+  }
   if (project.settings?.viewVersion !== undefined && project.settings.viewVersion !== 2 && project.settings.viewVersion !== 3 && project.settings.viewVersion !== 4) throw new Error('Invalid canvas view version');
   if (project.settings?.view !== undefined) project.settings = { ...project.settings, view: importedView(project.settings.view, project.canvas, project.settings.viewVersion), viewVersion: 4 };
   if (project.canvas) project.canvas = { ...CANVAS_SPEC };
@@ -55,7 +60,7 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
   let midiInput;
   const camera={epoch:randomUUID(),revision:0,event:null},cameraControls=new Map();
   const clients = new Set(), controls = new Map(), viewControls = new Map();
-  const lineSchedule = new LineSchedule(), releasedLines = new Map();
+  const lineSchedule = new LineSchedule(), releasedFirstCycles = new Map();
   try {
     const saved = JSON.parse(await readFile(cacheFile, 'utf8'));
     state = validateSnapshot(saved, Date.now());
@@ -87,8 +92,8 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     if (!state) return;
     const revealed = lineSchedule.advance(state.project.clips, phaseAt(now), state.project.duration, now, state.playback.playing);
     if (!revealed.size) return;
-    for (const id of revealed) releasedLines.set(id, false);
-    state = { ...state, project: { ...state.project, clips: state.project.clips.map(clip => revealed.has(clip.id) ? { ...clip, linePending: false } : clip) } }; version++;
+    for (const id of revealed) releasedFirstCycles.set(id, false);
+    state = { ...state, project: { ...state.project, clips: state.project.clips.map(clip => revealed.has(clip.id) ? finishFirstCycle(clip) : clip) } }; version++;
     emit('state', message(-1)); void persist(state).catch(error => console.warn('Line reveal could not be saved:', error.message));
   };
   if (state) lineSchedule.rebase(state.project.clips, phaseAt(Date.now()), state.project.duration, Date.now());
@@ -99,8 +104,8 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     if (!state) return;
     transport.revision++;
     state = { ...state, playback: { playing: true, phase: 0, anchor: now }, project: { ...state.project, clips: state.project.clips.map(clip => {
-      if (clip.mode !== 'line' || clip.lineIncomplete) return clip;
-      releasedLines.set(clip.id, false); return { ...clip, linePending: false };
+      if (clip.mode === 'line' && !clip.lineIncomplete || firstCyclePending(clip)) releasedFirstCycles.set(clip.id, false);
+      return finishFirstCycle(clip);
     }) } };
     version++;
     lineSchedule.rebase(state.project.clips, 0, LOOP_MS, now);
@@ -203,12 +208,12 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
       }
       if (live && candidate.project.clips.some(clip => clip.id === live.id)) { live = null; liveVersion++; }
       const ids = new Set(candidate.project.clips.map(clip => clip.id));
-      for (const id of releasedLines.keys()) if (!ids.has(id)) releasedLines.delete(id);
+      for (const id of releasedFirstCycles.keys()) if (!ids.has(id)) releasedFirstCycles.delete(id);
       candidate.project = { ...candidate.project, clips: candidate.project.clips.map(clip => {
-        if (clip.mode !== 'line' || !releasedLines.has(clip.id)) return clip;
-        if (!clip.linePending) { releasedLines.set(clip.id, true); return clip; }
-        if (!releasedLines.get(clip.id)) return { ...clip, linePending: false }; // A late first-cycle snapshot cannot reopen a released gate.
-        releasedLines.delete(clip.id); return clip; // An acknowledged gate may be explicitly restored by Undo/import.
+        if (!releasedFirstCycles.has(clip.id)) return clip;
+        if (!firstCyclePending(clip)) { releasedFirstCycles.set(clip.id, true); return clip; }
+        if (!releasedFirstCycles.get(clip.id)) return finishFirstCycle(clip); // A late first-cycle snapshot cannot reopen a released gate.
+        releasedFirstCycles.delete(clip.id); return clip; // An acknowledged gate may be explicitly restored by Undo/import.
       }) };
       const staleCamera=camera.revision>0&&(value.cameraState?.epoch!==camera.epoch||value.cameraState?.revision!==camera.revision);
       if(staleCamera&&state)candidate.project={...candidate.project,settings:{...candidate.project.settings,camera:state.project.settings?.camera,view:state.project.settings?.view}};

@@ -9,6 +9,6 @@ export function createPaintingRenderer(canvas, options = {}) {
     // Replace it before input handlers are attached; all attributes are kept.
     canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
     const replacement = canvas.cloneNode(false); canvas.replaceWith(replacement);
-    return new CPUVolumeRenderer(replacement, options);
+    return new CPUVolumeRenderer(replacement, { ...options, width: canvas.width, height: canvas.height });
   }
 }

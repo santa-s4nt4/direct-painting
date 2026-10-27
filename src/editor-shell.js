@@ -1,8 +1,6 @@
-import { FPS } from './timing.js';
-
 const $ = selector => document.querySelector(selector);
 
-export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
+export function setupEditorShell({ icon, onTool, onShape, onMotion = () => {}, onTab = () => {} }) {
   const main = $('main'), studio = $('.studio'), toolbar = $('.toolbar'), workspace = $('.workspace');
   const layers = $('.layers-panel'), history = $('.history-actions');
   const clear = $('#clear'), save = $('#save-project'), importButton = $('#import-project'), importFile = $('#import-file');
@@ -47,11 +45,12 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
     details.append(summary, content); toolbar.append(details); return details;
   };
   const shape = section('Shape', [$('#shape'), $('#circle-controls'), $('#ring-controls'), $('#rectangle-controls'), $('#line-tool-controls')]);
+  const motion = section('Motion', [$('#trace-controls')]);
   const blur = section('Effects', [$('#draw-blur-controls'), $('#draw-motion-controls'), $('#draw-camera-controls')], true, 'Brush effects: edit existing strokes in Layer. Camera effect: whole canvas.');
   const input = section('Input', [$('.input-controls')]);
   const fades = section('Timing', [$('#fade-seconds').closest('.effect-value'), $('#fade-range')]);
   $('#shape').innerHTML = '<option value="circle">Ellipse</option><option value="ring">Ring · outline</option><option value="rect">Rectangle</option><option value="rect-ring">Rectangle · outline</option>';
-  toolbar.replaceChildren(shape, blur, input, fades);
+  toolbar.replaceChildren(shape, motion, blur, input, fades);
   for (const label of toolbar.querySelectorAll('label > span')) {
     const names = { PRESSURE: 'Apple Pencil pressure', TOUCH: 'Draw with touch' };
     if (names[label.textContent]) label.textContent = names[label.textContent];
@@ -91,16 +90,26 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
   }).join('');
   for (const button of floating.querySelectorAll('[data-paint-tool]')) button.addEventListener('click', () => onTool(button.dataset.paintTool));
   const ring = document.createElement('button'); ring.className = 'ring-tool'; ring.setAttribute('aria-label', 'Ring outline shape'); ring.title = 'Toggle ellipse or rectangle outline'; ring.innerHTML = `${icon('ring')}<span>Ring</span>`; ring.addEventListener('click', () => onShape(({ circle: 'ring', ring: 'circle', rect: 'rect-ring', 'rect-ring': 'rect' })[$('#shape').value])); floating.append(ring);
-  let currentMode = 'move', currentShape = 'circle';
+  const motionButton = document.createElement('button'); motionButton.className = 'motion-tool'; motionButton.type = 'button'; floating.append(motionButton);
+  motionButton.addEventListener('click', () => onMotion(!currentTrace));
+  let currentMode = 'move', currentShape = 'circle', currentTrace = false;
   const syncTools = () => {
     const selected = currentMode === 'line' ? 'line' : ['rect', 'rect-ring'].includes(currentShape) ? 'rectangle' : 'ellipse';
     for (const button of floating.querySelectorAll('[data-paint-tool]')) button.setAttribute('aria-pressed', String(button.dataset.paintTool === selected));
     ring.disabled = currentMode === 'line'; ring.setAttribute('aria-pressed', String(['ring', 'rect-ring'].includes(currentShape)));
+    const name = currentTrace ? 'Trace' : 'Move';
+    motionButton.innerHTML = `${icon(currentTrace ? 'motionTrace' : 'motionMove')}<span>${name}</span>`;
+    motionButton.setAttribute('aria-label', `Motion: ${name}`);
+    motionButton.setAttribute('aria-pressed', String(currentTrace));
+    motionButton.title = `Switch motion to ${currentTrace ? 'Move' : 'Trace'}`;
+    motionButton.disabled = currentMode === 'line';
   };
-  const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = `${FPS} fps`;
+  syncTools();
+  const fps = document.createElement('span'); fps.className = 'fps-label'; fps.textContent = '— fps'; fps.setAttribute('aria-label', 'Measured rendering frame rate');
+  footer.append(fps);
   const view = document.createElement('div'); view.className = 'view-tools';
   view.innerHTML = '<div class="zoom-controls" role="group" aria-label="Canvas zoom"><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset-view" aria-label="Reset canvas view" title="Reset zoom and position">100%</button><button id="zoom-in" aria-label="Zoom in">+</button></div>';
-  view.append(fps); controls.append(floating, view);
+  controls.append(floating, view);
   const cameraModes=document.createElement('div');cameraModes.className='camera-mode-controls';cameraModes.setAttribute('role','group');cameraModes.setAttribute('aria-label','Camera modes');controls.append(cameraModes);
   const timeline = $('.loop-controls'); timeline.querySelector('.section-label').remove();
   workspace.replaceChildren(stage, controls, timeline);
@@ -113,6 +122,7 @@ export function setupEditorShell({ icon, onTool, onShape, onTab = () => {} }) {
   return {
     setMode(mode) { currentMode = mode; syncTools(); },
     setShape(shape) { currentShape = shape; syncTools(); },
+    setMotion(trace) { currentTrace = Boolean(trace); syncTools(); },
     clearSelectionProperties() { selected = null; noSelection(); },
     showLayer(id, body, activate = true) {
       if (selected) { const previous = properties.querySelector('.layer-body'); const owner = [...document.querySelectorAll('.cached-layer')].find(row => row.dataset.layerId === selected); if (previous && owner) owner.append(previous); }

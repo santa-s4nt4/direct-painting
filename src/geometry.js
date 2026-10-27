@@ -19,5 +19,5 @@ export function prepareShapeClip(clip) {
   return { ...clip, samples: clip.samples.map(sample => ({ ...sample, shape: clip.shape, ...(['rect', 'rect-ring'].includes(clip.shape) ? { width: sample.width ?? sample.size, height: sample.height ?? sample.size, angle: clip.angle ?? 0, ringWidth: clip.ringWidth ?? DEFAULT_RING_WIDTH } : clip.shape === 'ring' ? { ringWidth: clip.ringWidth ?? DEFAULT_RING_WIDTH } : {}) })) };
 }
 export function renderSignature(clip) {
-  return JSON.stringify([clip.mode, clip.linePending, clip.lineIncomplete, clip.procedural?.kind, clip.shape, clip.ringWidth, clip.color, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
+  return JSON.stringify([clip.mode, clip.linePending, clip.lineIncomplete, clip.trace, clip.procedural?.kind, clip.shape, clip.ringWidth, clip.color, hasColorGradient(clip), clip.duration, clip.angle, clip.samples]);
 }

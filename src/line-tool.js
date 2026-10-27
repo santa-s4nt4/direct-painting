@@ -7,18 +7,26 @@ export function fixedLineStyle(clip) {
 }
 
 const wrap = (value, duration) => ((value % duration) + duration) % duration;
+export function firstCyclePending(clip) {
+  return clip.mode === 'line' ? clip.linePending && !clip.lineIncomplete : !!clip.trace?.pending;
+}
+export function finishFirstCycle(clip) {
+  if (clip.mode === 'line' && clip.linePending && !clip.lineIncomplete) return { ...clip, linePending: false };
+  if (clip.trace?.pending) return { ...clip, trace: { ...clip.trace, pending: false } };
+  return clip;
+}
 // The first cycle shows endpoint rings. The editor and relay share this gate;
 // the relay keeps output playback running when the iPad tab sleeps or closes.
 export class LineSchedule {
   pending = new Map(); previous = null; duration = null;
   rebase(clips, phase, duration, now) {
     this.pending.clear(); this.previous = now; this.duration = duration;
-    for (const clip of clips) if (clip.mode === 'line' && clip.linePending && !clip.lineIncomplete) this.pending.set(clip.id, { start: clip.start ?? 0, remaining: duration - wrap(phase - (clip.start ?? 0), duration) });
+    for (const clip of clips) if (firstCyclePending(clip)) this.pending.set(clip.id, { start: clip.start ?? 0, remaining: duration - wrap(phase - (clip.start ?? 0), duration) });
   }
   advance(clips, phase, duration, now, playing) {
     if (this.duration !== duration) this.rebase(clips, phase, duration, now);
     const elapsed = this.previous === null ? 0 : Math.max(0, now - this.previous); this.previous = now;
-    const pendingClips = clips.filter(c => c.mode === 'line' && c.linePending && !c.lineIncomplete), ids = new Set(pendingClips.map(c => c.id));
+    const pendingClips = clips.filter(firstCyclePending), ids = new Set(pendingClips.map(c => c.id));
     for (const id of this.pending.keys()) if (!ids.has(id)) this.pending.delete(id);
     const revealed = new Set();
     for (const clip of pendingClips) {
