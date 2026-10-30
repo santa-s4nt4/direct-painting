@@ -26,9 +26,10 @@ export function motionExposure(clip, time, current, sample, { live = false } = {
   return exposure.some(s=>s.opacity>0) && exposure.some(({visual}) => geometry.some(key => visual?.[key] !== current[key])) ? exposure : null;
 }
 export function visualBounds(visual) {
-  const rect = ['rect','rect-ring','capsule'].includes(visual.shape);
-  const width = visual.width ?? visual.size, height = visual.height ?? visual.size;
-  const radius = (rect ? Math.hypot(width + (visual.shape === 'capsule' ? height : 0),height) : visual.size) / 2 + 3;
+  const rect = ['rect','rect-ring','capsule','trace-rect'].includes(visual.shape);
+  const stroke=visual.strokeWidth??0;
+  const width = (visual.width ?? visual.size)+stroke, height = (visual.height ?? visual.size)+stroke;
+  const radius = (rect ? Math.hypot(width + (visual.shape === 'capsule' ? height : 0),height) : visual.size+stroke) / 2 + 3;
   return { x:Math.floor(visual.x-radius), y:Math.floor(visual.y-radius), width:Math.ceil(radius*2+2), height:Math.ceil(radius*2+2) };
 }
 export function exposureBounds(exposure) {

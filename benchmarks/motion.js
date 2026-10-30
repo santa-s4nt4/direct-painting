@@ -23,7 +23,7 @@ run.onclick=async()=>{
   const source=clip();let example;
   for(const shape of ['circle','ring','rect','rect-ring']){
    const c=clip({shape,ringWidth:10,samples:source.samples.map(p=>({...p,shape,width:120,height:80,angle:35}))});
-   const actual=draw(gpu,c,80),expected=new Float32Array(actual.length),steps=gpu.analogMaterial.uniforms.motionCount.value;
+   const actual=draw(gpu,c,80),expected=new Float32Array(actual.length),steps=gpu.normalMaterial.uniforms.motionCount.value;
    if(steps<8||steps>32)throw new Error("Moving fixture did not integrate its shutter");
    for(let i=0;i<steps;i++){const image=draw(sharp,{...c,effects:{...DEFAULT_EFFECTS,motionBlur:false}},80-FRAME_MS*(steps-1-i)/(steps-1));for(let p=0;p<image.length;p++)expected[p]+=image[p]/steps;}
    let error=0,changed=0;const crisp=draw(sharp,{...c,effects:{...DEFAULT_EFFECTS,motionBlur:false}},80);

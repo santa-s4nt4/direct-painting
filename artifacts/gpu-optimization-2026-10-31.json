@@ -1,0 +1,804 @@
+{
+  "localDate": "2026-10-31",
+  "timezone": "Asia/Tokyo",
+  "baselineCommit": "13c6873",
+  "hardware": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+  "methodology": {
+    "resolution": "1920x1080",
+    "warmupFramesPerImplementation": 20,
+    "samplesPerImplementation": 32,
+    "timer": "EXT_disjoint_timer_query_webgl2",
+    "comparison": "Old and new implementations alternate in one Chrome WebGL2 renderer/context. Each query resolves asynchronously before the next measured frame.",
+    "scope": "Synthetic ten-layer workloads; measured GPU elapsed time is separate from CPU submission.",
+    "limitations": [
+      "Headless Chrome on the shared Apple M4 GPU, with other local applications running. Timings vary with contention and clock frequency; these are not guaranteed frame rates or M4 MacBook Air power/temperature measurements.",
+      "The saved-project case is a read-only snapshot at one phase and is not representative of a whole loop.",
+      "AA changes subpixel boundary coverage. CPU fallback retains its existing polygon/mask implementation."
+    ]
+  },
+  "comparison": [
+    {
+      "name": "10 overlapping rings",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.7000000029802322,
+          "p95Ms": 1.3999999985098839
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 15.302208,
+          "p95Ms": 22.802999
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 18662400,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.8999999985098839,
+          "p95Ms": 1.3000000044703484
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 11.283541,
+          "p95Ms": 17.601874
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 0,
+        "perFrame": {
+          "copyPixels": 5760578,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      }
+    },
+    {
+      "name": "10 blurred rings",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.9000000059604645,
+          "p95Ms": 1.2999999970197678
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 40.217958,
+          "p95Ms": 87.689458
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 19958400,
+          "blurPixels": 2592000,
+          "drawCalls": 60
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 1.1000000014901161,
+          "p95Ms": 1.3999999985098839
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 24.167499,
+          "p95Ms": 58.794874
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 6918510,
+          "blurPixels": 891896,
+          "drawCalls": 60
+        }
+      }
+    },
+    {
+      "name": "10 small separated shapes",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.6000000014901161,
+          "p95Ms": 1
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 10.138625,
+          "p95Ms": 16.049916
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 18662400,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.7000000029802322,
+          "p95Ms": 0.8999999985098839
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 2.619708,
+          "p95Ms": 7.64075
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 0,
+          "blurPixels": 0,
+          "drawCalls": 11
+        }
+      }
+    },
+    {
+      "name": "10 camera-blurred rings",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 1.5,
+          "p95Ms": 2
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 51.686124,
+          "p95Ms": 68.2625
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 18662400,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 1.5,
+          "p95Ms": 2.3000000044703484
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 45.252875,
+          "p95Ms": 64.894583
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 5934116,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      }
+    },
+    {
+      "name": "10 completed traces",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.6000000014901161,
+          "p95Ms": 0.7999999970197678
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 12.882333,
+          "p95Ms": 18.459124
+        },
+        "residentMaskBytes": 15079840,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 18662400,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.7000000029802322,
+          "p95Ms": 1.0999999940395355
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 9.187083,
+          "p95Ms": 13.5725
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 3347879,
+          "blurPixels": 0,
+          "drawCalls": 20
+        }
+      }
+    },
+    {
+      "name": "10 drawing traces",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.7999999970197678,
+          "p95Ms": 1.1000000014901161
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 9.399375,
+          "p95Ms": 14.918
+        },
+        "residentMaskBytes": 15079840,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 18662400,
+          "blurPixels": 0,
+          "drawCalls": 21
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 1,
+          "p95Ms": 1.5
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 6.282249,
+          "p95Ms": 13.832333
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 3347879,
+          "blurPixels": 0,
+          "drawCalls": 21
+        }
+      }
+    },
+    {
+      "name": "saved project",
+      "before": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.5,
+          "p95Ms": 0.7999999970197678
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 4.008708,
+          "p95Ms": 6.293041
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 0,
+          "blurPixels": 0,
+          "drawCalls": 2
+        }
+      },
+      "after": {
+        "cpuSubmission": {
+          "samples": 32,
+          "medianMs": 0.5,
+          "p95Ms": 0.8000000044703484
+        },
+        "gpu": {
+          "samples": 32,
+          "medianMs": 3.578708,
+          "p95Ms": 7.907666
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 0,
+          "blurPixels": 0,
+          "drawCalls": 2
+        }
+      }
+    }
+  ],
+  "browserChecks": {
+    "date": "2026-10-30T17:50:58.139Z",
+    "checks": [
+      {
+        "name": "Unused Blur targets are not allocated",
+        "passed": true
+      },
+      {
+        "name": "translucent pigment overlap and mixed source-over layers: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "Blur halos across saved planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "camera exposure on rotated planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "offscreen layer culling: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "circle Trace matches independently stroked Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 7461,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 6,
+        "rmsError": 0.013375944641845989,
+        "channelsOver2": 9
+      },
+      {
+        "name": "rect Trace matches independently stroked Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 8676,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.01261520980873955,
+        "channelsOver2": 0
+      },
+      {
+        "name": "Trace head disappears at draw completion while its stroke remains",
+        "passed": true,
+        "beforeEnd": 255,
+        "afterEnd": 0
+      },
+      {
+        "name": "A Trace wider than its radius has no false central hole",
+        "passed": true
+      },
+      {
+        "name": "Ten disjoint shapes need no compositing copies and one drawing pass each",
+        "passed": true,
+        "copyPixels": 0,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 10,
+        "culledLayers": 0
+      },
+      {
+        "name": "No WebGL errors",
+        "passed": true
+      }
+    ],
+    "performance": {
+      "cpuSubmission": {
+        "samples": 24,
+        "medianMs": 1,
+        "p95Ms": 1.3999999985098839
+      },
+      "gpu": {
+        "samples": 24,
+        "medianMs": 7.5225,
+        "p95Ms": 8.26
+      },
+      "perFrame": {
+        "copyPixels": 980100,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 1,
+        "culledLayers": 0,
+        "drawCalls": 20
+      }
+    },
+    "passed": true
+  },
+  "existingVolumeChecks": {
+    "date": "2026-10-30T17:56:37.943Z",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+    "space": {
+      "width": 3840,
+      "height": 3480,
+      "depth": 3480
+    },
+    "checks": [
+      {
+        "name": "Volume composition uses Full HD targets; unused Blur buffers and 4K live masks are not allocated",
+        "passed": true
+      },
+      {
+        "name": "Rectangle defaults are 1600 x 1600",
+        "passed": true
+      },
+      {
+        "name": "Pressure Ring starts at the recorded small size with an empty center",
+        "passed": true
+      },
+      {
+        "name": "Pressure Ring expands with the same recorded pressure as Move",
+        "passed": true
+      },
+      {
+        "name": "Initial line Ring disappears after its inherited release fade",
+        "passed": true
+      },
+      {
+        "name": "Line previews exactly match the Circle Ring Move tool across pressure and fade",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "Drawing faces the screen at yaw 0, pitch 0",
+        "passed": true,
+        "expected": {
+          "x": 1180,
+          "y": 660
+        },
+        "world": [
+          220,
+          120,
+          0
+        ]
+      },
+      {
+        "name": "Drawing faces the screen at yaw 90, pitch 0",
+        "passed": true,
+        "expected": {
+          "x": 1180,
+          "y": 660
+        },
+        "world": [
+          1.3471114790620885e-14,
+          120,
+          220
+        ]
+      },
+      {
+        "name": "Drawing faces the screen at yaw 180, pitch 0",
+        "passed": true,
+        "expected": {
+          "x": 1180,
+          "y": 660
+        },
+        "world": [
+          -220,
+          120,
+          -2.694222958124177e-14
+        ]
+      },
+      {
+        "name": "Drawing faces the screen at yaw 137, pitch -80",
+        "passed": true,
+        "expected": {
+          "x": 1180,
+          "y": 660
+        },
+        "world": [
+          -163.40723998992956,
+          -4.8427994767603835,
+          189.93320197401366
+        ]
+      },
+      {
+        "name": "A stroke retains depth instead of being flattened onto the original canvas",
+        "passed": true
+      },
+      {
+        "name": "A completed line connects endpoints in different drawing planes",
+        "passed": true
+      },
+      {
+        "name": "A view-aligned 3D line retains a visible round end cap",
+        "passed": true
+      },
+      {
+        "name": "CPU fallback also renders a new front-facing plane after a 90-degree orbit",
+        "passed": true
+      },
+      {
+        "name": "Ten spatial Move layers reuse analytic geometry without allocating saved masks",
+        "passed": true
+      }
+    ],
+    "performance": {
+      "layers": 10,
+      "size": 1600,
+      "blur": 16,
+      "meanMs": 2.2791666661699614,
+      "p95Ms": 4.200000002980232,
+      "stats": {
+        "backend": "webgl2",
+        "frames": 38,
+        "stamps": 0,
+        "maskPasses": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "drawCalls": 60,
+        "copyPixels": 495578250,
+        "blurPixels": 64408500,
+        "maskRebuilds": 0,
+        "cpuPixelUploads": 0,
+        "compositePixels": 1029764741,
+        "directLayers": 11,
+        "culledLayers": 0
+      }
+    },
+    "passed": true
+  },
+  "existingMotionChecks": {
+    "date": "2026-10-30T17:57:22.517Z",
+    "checks": [
+      {
+        "name": "Default effects are Blur OFF and Motion blur ON at a 16.7ms shutter",
+        "passed": true
+      },
+      {
+        "name": "circle: analytic GPU shutter matches independently rendered temporal frames",
+        "passed": true,
+        "maxChannelError": 1,
+        "changedChannels": 36804
+      },
+      {
+        "name": "ring: analytic GPU shutter matches independently rendered temporal frames",
+        "passed": true,
+        "maxChannelError": 1,
+        "changedChannels": 41052
+      },
+      {
+        "name": "rect: analytic GPU shutter matches independently rendered temporal frames",
+        "passed": true,
+        "maxChannelError": 1,
+        "changedChannels": 30420
+      },
+      {
+        "name": "rect-ring: analytic GPU shutter matches independently rendered temporal frames",
+        "passed": true,
+        "maxChannelError": 1,
+        "changedChannels": 34056
+      },
+      {
+        "name": "Stationary rings stay pixel-identical, with an empty center",
+        "passed": true
+      },
+      {
+        "name": "Seeking back / MIDI-style restart leaves no prior-frame ghost",
+        "passed": true
+      },
+      {
+        "name": "Turning Motion blur OFF and ON is reversible without saved masks",
+        "passed": true
+      },
+      {
+        "name": "Gaussian Blur can be enabled independently alongside Motion blur",
+        "passed": true
+      },
+      {
+        "name": "Camera Motion Blur matches independent camera projections",
+        "passed": true,
+        "rmsError": 0.007630993394387469,
+        "channelsOver2": 0
+      },
+      {
+        "name": "The actual Three.js camera looks at the origin from its orbital position",
+        "passed": true
+      },
+      {
+        "name": "MIDI camera exposure is independent of timeline phase",
+        "passed": true
+      },
+      {
+        "name": "Live drawing blurs toward its preceding displayed position",
+        "passed": true
+      },
+      {
+        "name": "Network output and local live input integrate the same shutter",
+        "passed": true
+      },
+      {
+        "name": "CPU fallback also integrates spatial motion with matching interior pixels",
+        "passed": true,
+        "maxInteriorError": 0
+      },
+      {
+        "name": "Ten moving 3D layers do not create saved masks or upload CPU pixels",
+        "passed": true
+      }
+    ],
+    "defaultEffects": {
+      "blur": false,
+      "blurRadius": 16,
+      "motionBlur": true,
+      "motionBlurAmount": 100
+    },
+    "performance": {
+      "layers": 10,
+      "size": 1600,
+      "shutterMs": 16.666666666666668,
+      "meanMs": 1.7666666659836967,
+      "p95Ms": 2.6999999955296516,
+      "stats": {
+        "backend": "webgl2",
+        "frames": 43,
+        "stamps": 0,
+        "maskPasses": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "drawCalls": 20,
+        "copyPixels": 452565496,
+        "blurPixels": 4592,
+        "maskRebuilds": 0,
+        "cpuPixelUploads": 0,
+        "compositePixels": 500941370,
+        "directLayers": 42,
+        "culledLayers": 0
+      }
+    },
+    "passed": true
+  },
+  "nativeShaderChecks": {
+    "backend": "macOS offscreen OpenGL (actual production GLSL; not browser WebGL2)",
+    "checks": [
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "moving ellipse",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.009470959511795734
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "moving Ring",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.010206207261596576
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "rotating rectangle",
+        "paintedPixels": 26961,
+        "passed": true,
+        "rmsError": 0.010462860537027335
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "rotating rectangle Ring",
+        "paintedPixels": 26961,
+        "passed": true,
+        "rmsError": 0.011825962754115557
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "pressure change",
+        "paintedPixels": 15042,
+        "passed": true,
+        "rmsError": 0.0071497431534631945
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "3D front-facing Ring",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.010206207261596576
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 0,
+        "name": "stationary Ring",
+        "paintedPixels": 3184,
+        "passed": true,
+        "rmsError": 0
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "box clipping",
+        "paintedPixels": 2520,
+        "passed": true,
+        "rmsError": 0.003928371006591931
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "opacity and color",
+        "paintedPixels": 19960,
+        "passed": true,
+        "rmsError": 0.0175304243907838
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera orbit",
+        "paintedPixels": 9838,
+        "passed": true,
+        "rmsError": 0.008701363948709491
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera roll",
+        "paintedPixels": 20255,
+        "passed": true,
+        "rmsError": 0.011599509089229212
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera radius",
+        "paintedPixels": 20238,
+        "passed": true,
+        "rmsError": 0.007382045703287951
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera joint object",
+        "paintedPixels": 35031,
+        "passed": true,
+        "rmsError": 0.009547032697824667
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera box edge",
+        "paintedPixels": 6643,
+        "passed": true,
+        "rmsError": 0.004709951377170325
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera edge-on",
+        "paintedPixels": 25560,
+        "passed": true,
+        "rmsError": 0.008448281292080861
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera opacity",
+        "paintedPixels": 9819,
+        "passed": true,
+        "rmsError": 0.012936066673748026
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera stored plane",
+        "paintedPixels": 11960,
+        "passed": true,
+        "rmsError": 0.011886974144877563
+      }
+    ],
+    "date": "2026-10-30T17:57:11Z",
+    "glError": 0,
+    "passed": true,
+    "renderer": "Apple M4"
+  },
+  "nodeTests": {
+    "passed": 189,
+    "failed": 0,
+    "targetedFinalTraceIntersectionTests": 14
+  },
+  "productionBuildPassed": true
+}

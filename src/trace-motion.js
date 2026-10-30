@@ -51,8 +51,8 @@ function traceSamples(clip) {
   const count = Math.max(8, Math.ceil(perimeter / spacing));
   const angle = (peak.angle ?? clip.angle ?? 0) * Math.PI / 180;
   const point = (x, y, t) => ({
-    x: Math.round(peak.x + x * Math.cos(angle) - y * Math.sin(angle)),
-    y: Math.round(peak.y + x * Math.sin(angle) + y * Math.cos(angle)),
+    x: peak.x + x * Math.cos(angle) - y * Math.sin(angle),
+    y: peak.y + x * Math.sin(angle) + y * Math.cos(angle),
     size: strokeWidth,
     shape: 'circle',
     // Samples are spaced evenly along the contour; invert smoothstep so
@@ -76,6 +76,7 @@ function traceSamples(clip) {
       points.push(point(Math.cos(arcAngle) * radius, Math.sin(arcAngle) * radius, i / count));
     }
   }
+  if (points.length) Object.assign(points.at(-1), { x: points[0].x, y: points[0].y });
   samplesByClip.set(clip, points);
   return points;
 }
@@ -108,4 +109,15 @@ export function traceHead(clip, time) {
   const drawMs = clip.trace?.drawMs;
   if (drawMs == null || time >= drawMs) return null;
   return atTime(traceSamples(clip), Math.max(0, time));
+}
+
+// GPU outlines are analytic; CPU/intersections keep the sampled path above.
+export function traceVisual(clip, time) {
+  const trace = clip.trace, peak = trace?.peak;
+  if (!peak || trace.pending) return null;
+  const rect = ['rect', 'rect-ring'].includes(trace.sourceShape ?? clip.shape);
+  return { ...peak, shape: rect ? 'trace-rect' : 'trace-circle', angle: peak.angle ?? clip.angle ?? 0,
+    width: rect ? peak.width ?? peak.size : peak.size, height: rect ? peak.height ?? peak.size : peak.size,
+    strokeWidth: trace.strokeWidth ?? 20,
+    traceProgress: easeInOut(Math.max(0, Math.min(1, time / trace.drawMs))) };
 }

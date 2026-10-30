@@ -5,10 +5,23 @@ import { DEFAULT_CAMERA,cameraConfig,ease,cameraEase,mixView,newCameraEvent,auto
 import { DEFAULT_VIEW,canvasView,CAMERA_DISTANCE,transformAt } from '../src/view.js';
 import { workingPlane,pointInSpace,projectSpace,drawingPoint,drawingPointOnPlane } from '../src/space.js';
 import { positionCamera } from '../src/render/camera-view.js';
-import { cameraExposure,cameraProjection } from '../src/render/camera-exposure.js';
+import { cameraExposure,cameraProjection,cameraCircleConic } from '../src/render/camera-exposure.js';
 import { normalizeProject,serializeProject,parseProject } from '../src/project.js';
 const near=(a,b,e=1e-6)=>assert.ok(Math.abs(a-b)<e,`${a} != ${b}`);
 const camera=()=>new PerspectiveCamera(2*Math.atan(1080/(2*CAMERA_DISTANCE))*180/Math.PI,1920/1080,1,20000);
+
+test('screen-space circle coefficients preserve source distances through orbit, zoom and perspective',()=>{
+ const plane=workingPlane(canvasView({...DEFAULT_VIEW,yaw:25,pitch:-15})),clip={plane},center={x:2070,y:1170};
+ for(const pose of [{},{yaw:65,pitch:35,rotation:28,scale:.5,distance:8000},{yaw:-80,pitch:60,rotation:-40,scale:2,distance:4500}]){
+  const view=canvasView({...DEFAULT_VIEW,...pose}),inverse=cameraProjection(clip,[{view}],{x:1600,y:800,width:900,height:800}).inverse[0],m=cameraCircleConic(inverse,center.x,center.y);
+  assert.ok(m);const projected=projectSpace(pointInSpace(center,plane),view);near(m[2],projected.x);near(m[5],projected.y);
+  for(const [dx,dy]of [[0,0],[200,0],[0,-400],[-180,260],[600,-300]]){
+   const p=projectSpace(pointInSpace({x:center.x+dx,y:center.y+dy},plane),view),x=p.x-m[2],y=p.y-m[5],q=m[0]*x*x+m[3]*x*y+m[6]*y*y,z=m[1]*x+m[4]*y+m[7];
+   near(q/(z*z),dx*dx+dy*dy,1e-5);
+  }
+ }
+ assert.equal(cameraCircleConic(Array(9).fill(0),1920,1080),null);
+});
 
 test('camera motion defaults, legacy ADSR duration migration and project roundtrip',()=>{
  assert.deepEqual(cameraConfig(),DEFAULT_CAMERA);assert.equal(DEFAULT_CAMERA.duration,800);assert.equal(DEFAULT_CAMERA.easing,'smooth');assert.equal(DEFAULT_CAMERA.motion,'both');

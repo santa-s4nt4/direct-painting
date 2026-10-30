@@ -46,7 +46,7 @@ function outputs() {
 
 export default defineConfig({
   plugins: [outputs()],
-  build: { rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), renderChecks: resolve(import.meta.dirname, 'benchmarks/render.html'), trail: resolve(import.meta.dirname, 'benchmarks/trail.html'), volume: resolve(import.meta.dirname, 'benchmarks/volume.html'), motion: resolve(import.meta.dirname, 'benchmarks/motion.html') } } },
+  build: { rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), renderChecks: resolve(import.meta.dirname, 'benchmarks/render.html'), trail: resolve(import.meta.dirname, 'benchmarks/trail.html'), volume: resolve(import.meta.dirname, 'benchmarks/volume.html'), motion: resolve(import.meta.dirname, 'benchmarks/motion.html'), gpuLoad: resolve(import.meta.dirname, 'benchmarks/gpu-load.html') } } },
   server: { host: '0.0.0.0', port: editorPort, strictPort: true, hmr: { clientPort: editorPort }, watch: { ignored: ['**/.direct-painting/**'] } },
   preview: { host: '0.0.0.0', port: 4180, strictPort: true },
 });

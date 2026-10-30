@@ -14,7 +14,7 @@ run.onclick=async()=>{
  const check=(name,passed,extra={})=>{report.checks.push({name,passed,...extra});if(!passed)throw new Error(name);};
  try{
   gpu=new VolumePaintingRenderer(document.querySelector('#gpu'));gpu.setView(DEFAULT_VIEW);
-  check('Volume composition uses Full HD targets; live Move never allocates a 4K mask',gpu.accumulator.width===1920&&gpu.effectSource.width===1920&&gpu.liveTarget.width===1);
+  check('Volume composition uses Full HD targets; unused Blur buffers and 4K live masks are not allocated',gpu.accumulator.width===1920&&!gpu.effectSource&&gpu.liveTarget.width===1);
   check('Rectangle defaults are 1600 x 1600',DEFAULT_SETTINGS.widthMax===1600&&DEFAULT_SETTINGS.heightMax===1600);
   const m=marker(),p={...m.samples.at(-1),t:0};
   const line={id:'line',mode:'line',color:m.color,targets:[0],enabled:true,duration:0,start:0,fadeMs:200,ringWidth:5,effects:m.effects,samples:[p],points3D:[pointInSpace(p,m.plane)],lineMarkers:[m],linePending:true,lineIncomplete:true};

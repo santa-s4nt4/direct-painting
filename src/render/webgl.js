@@ -50,7 +50,7 @@ export class WebGLPaintingRenderer {
     this.quad = new PlaneGeometry(1, 1);
     this.camera = new PerspectiveCamera(2 * Math.atan(VH / (2 * CAMERA_DISTANCE)) * 180 / Math.PI, VW / VH, 1, 20000); this.camera.position.z = CAMERA_DISTANCE;
     this.passScene = new Scene(); this.passMesh = new Mesh(this.quad); this.passMesh.frustumCulled = false; this.passScene.add(this.passMesh);
-    this.accumulator = target(this.targetWidth, this.targetHeight);
+    this.accumulator = target(this.targetWidth, this.targetHeight, volume);
     this.liveTarget = target(volume ? 1 : W, volume ? 1 : H); // Allocate once at startup, never at Pencil down.
     this.stampGeometry = new InstancedBufferGeometry(); this.stampGeometry.index = this.quad.index; this.stampGeometry.attributes.position = this.quad.attributes.position;
     this.brushData = new Float32Array(CAPACITY * 4); this.appearanceData = new Float32Array(CAPACITY * 3);
@@ -79,7 +79,6 @@ export class WebGLPaintingRenderer {
     this.passMesh.material = this.normalMaterial; this.renderer.compile(this.passScene, this.camera);
     this.renderer.compile(this.scene, this.camera);
     this.renderer.compile(this.markerScene, this.camera);
-    this.prepareEffects();
     this.contextLost = false;
     this.lost = event => { event.preventDefault(); this.contextLost = true; this.notify('webgl2-lost'); };
     this.restored = () => {
@@ -121,6 +120,7 @@ export class WebGLPaintingRenderer {
       fillColor: { value: new Vector3(1, 1, 1) },
       sourceTime: { value: 0 }, layerOpacity: { value: 1 }, trail: { value: 0 },
       directShape: { value: 0 }, directBrush: { value: new Vector4() }, directAngle: { value: 0 }, edgeSize: { value: 5 },
+      smoothEdges: { value: 0 }, traceProgress: { value: 1 }, traceEnd: { value: new Vector2(0, -1) },
       image: { value: null }, belowTexture: { value: null }, mixAmount: { value: .5 },
     }, blending);
   }

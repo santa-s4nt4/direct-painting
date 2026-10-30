@@ -49,6 +49,7 @@ func render(_ test:[String:Any],_ frames:[[String:Any]],_ temporal:Bool)->[UInt8
  let current=frames.last!,point=current["visual"] as! [String:Any],color=floats(current["color"]!)
  glUniform1i(location("directShape"),shape);uniform4("directBrush",brush(current));glUniform1f(location("directAngle"),(point["angle"] as! NSNumber).floatValue * .pi / 180);glUniform1f(location("edgeSize"),10);glUniform1f(location("layerOpacity"),(current["opacity"] as! NSNumber).floatValue);glUniform3f(location("fillColor"),color[0],color[1],color[2]);
  glUniform1i(location("motionCount"),temporal ? GLsizei(frames.count):0)
+ glUniform1i(location("smoothEdges"),1)
  if temporal{
   uniform4("motionBrush[0]",frames.flatMap{brush($0)});uniform4("motionInfo[0]",frames.flatMap{f->[GLfloat] in let p=f["visual"] as! [String:Any];return[(p["angle"] as! NSNumber).floatValue * .pi / 180,(f["opacity"] as! NSNumber).floatValue,GLfloat(shape),10]})
   let colors=frames.flatMap{floats($0["color"]!)};colors.withUnsafeBufferPointer{glUniform3fv(location("motionColor[0]"),GLsizei(frames.count),$0.baseAddress)}
