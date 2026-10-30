@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FPS, FRAME_MS, frameNumber, FrameRateMeter } from '../src/timing.js';
+import { FPS, FRAME_MS, frameNumber, RENDER_FPS, RENDER_FRAME_MS, renderFrameNumber, FrameRateMeter } from '../src/timing.js';
 import { createLivePublisher } from '../src/relay.js';
 import { singleCanvasProject } from '../src/project.js';
 
@@ -9,6 +9,15 @@ test('60Hz frame grid retains 60 updates on 60Hz, 120Hz and 144Hz displays', () 
   for (const refreshRate of [60, 120, 144]) {
     const frames = new Set(Array.from({ length: refreshRate }, (_, i) => frameNumber(i * 1000 / refreshRate)));
     assert.equal(frames.size, 60, `${refreshRate}Hz display`);
+  }
+});
+
+test('presentation is capped at 30fps across display refresh rates while input and shutter stay at 60Hz', () => {
+  assert.equal(RENDER_FPS, 30); assert.equal(RENDER_FRAME_MS, 1000 / 30);
+  assert.equal(FRAME_MS, 1000 / 60);
+  for (const refreshRate of [30, 60, 90, 120, 144]) {
+    const frames = new Set(Array.from({ length: refreshRate }, (_, i) => renderFrameNumber(i * 1000 / refreshRate)));
+    assert.equal(frames.size, 30, `${refreshRate}Hz display`);
   }
 });
 
@@ -21,10 +30,10 @@ test('measured FPS reflects delivered 30fps frames and CPU submission time', () 
 
 test('forced redraws in one frame do not inflate measured FPS; hidden-tab time can reset', () => {
   const meter = new FrameRateMeter();
-  for (let i = 0; i <= 30; i++) {
-    meter.record(i * FRAME_MS, 2); meter.record(i * FRAME_MS + 1, 4);
+  for (let i = 0; i <= 15; i++) {
+    meter.record(i * RENDER_FRAME_MS, 2); meter.record(i * RENDER_FRAME_MS + 1, 4);
   }
-  assert.deepEqual(meter.sample(501), { fps: 30 * 1000 / 501, drawMs: 3 });
+  assert.deepEqual(meter.sample(501), { fps: 15 * 1000 / 501, drawMs: 3 });
   meter.reset(10000); assert.equal(meter.sample(10100), null);
   for (let i = 0; i <= 15; i++) meter.record(10100 + i * 1000 / 30, 1);
   assert.equal(meter.sample(10600).fps, 30);

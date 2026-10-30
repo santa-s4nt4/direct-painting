@@ -8,7 +8,7 @@ import { setupColorPanel } from './color-panel.js';
 import { DEFAULT_VIEW, MIN_ZOOM, MAX_ZOOM, CAMERA_DISTANCE, canvasView, zoomAt, PinchGesture } from './view.js';
 import './style.css';
 import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './canvas.js';
-import { FRAME_MS, frameNumber, FrameRateMeter } from './timing.js';
+import { FRAME_MS, frameNumber, RENDER_FPS, renderFrameNumber, FrameRateMeter } from './timing.js';
 import { setupEditorShell } from './editor-shell.js';
 import { brushSize, canvasPoint, timestamp } from './drawing.js';
 import { SmoothedCircle } from './motion.js';
@@ -142,13 +142,13 @@ function syncFrameRate(now) {
   const backend = paintingBackend === 'cpu' ? 'CPU' : paintingBackend === 'webgl2-lost' ? 'GPU paused' : 'GPU';
   const text = `${measuredFrameRate ? measuredFrameRate.fps.toFixed(1) : '—'} fps · ${backend}`;
   if (fpsLabel.textContent !== text) fpsLabel.textContent = text;
-  if (sample) fpsLabel.title = `Actual painting frames per second (0 while idle). CPU submission: ${sample.drawMs.toFixed(1)} ms/frame.`;
+  if (sample) fpsLabel.title = `Actual painting frames per second (${RENDER_FPS} fps maximum, 0 while idle). CPU submission: ${sample.drawMs.toFixed(1)} ms/frame.`;
 }
 const painting = createPaintingRenderer($('#canvas-0'), { onBackendChange: backend => { paintingBackend = backend; syncFrameRate(performance.now()); } });
 const canvases = [painting.canvas];
 const paintingBoundary = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); paintingBoundary.classList.add('painting-boundary'); paintingBoundary.setAttribute('viewBox', `0 0 ${VIEWPORT_WIDTH} ${VIEWPORT_HEIGHT}`); paintingBoundary.setAttribute('aria-hidden', 'true'); paintingBoundary.innerHTML = '';
 canvases[0].after(paintingBoundary);
-const layers = [{ circle: null, lastFrame: -Infinity }];
+const layers = [{ circle: null, lastFrame: -Infinity, needsRender: false }];
 const state = { ...DEFAULT_SETTINGS, effects: { ...DEFAULT_EFFECTS }, view: { ...DEFAULT_VIEW } };
 let colorContext = { id: null, field: 'fill' }, refreshSelectedLayer = () => {};
 const colorPanel = setupColorPanel($('.canvas-stage'), { onChange: editFloatingColor, onVisibility: visible => { state.colorPanelVisible = visible; queueSave(); } });
@@ -197,14 +197,14 @@ function receiveCamera(update){
  const previous=cameraSnapshot,next=mergeCamera(previous,update);if(next===previous)return;
  cameraSnapshot=next;state.camera=pendingCameraSettings?{...next.config,...pendingCameraSettings}:next.config;
  if(next.baseView&&!cubeDragging&&(!pendingCameraSettings||pendingCameraSettings.mode===next.config.mode))state.view=canvasView(next.baseView);
- syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
+ syncCameraUI();syncViewUI();renderTargets([0], performance.now());
  if(JSON.stringify(previous.config)!==JSON.stringify(next.config))queueSave(false,true);
 }
 function setCameraSettings(value){
  if(!ready)return;endStroke(null);
  const pose=effectiveView(),next=cameraConfig(value),modeChanged=next.mode!==state.camera.mode,changed=modeChanged||next.motion!==state.camera.motion;
  if(changed){state.view=modeChanged&&next.mode==='midi-auto'?centered(pose):pose;cameraSnapshot={...cameraSnapshot,event:null};cubeDragging=false;cameraSampler.reset();}
- pendingCameraSettings=next;state.camera=next;syncCameraUI();syncViewUI();renderTargets([0],performance.now(),true);
+ pendingCameraSettings=next;state.camera=next;syncCameraUI();syncViewUI();renderTargets([0], performance.now());
  clearTimeout(cameraSettingsTimer);
  if(changed)void pushCameraSettings();else cameraSettingsTimer=setTimeout(pushCameraSettings,100);
 }
@@ -228,7 +228,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   const now = performance.now(), phase = playback.playing ? serverNow - playback.anchor + latency : playback.phase;
   clock.seek(phase, now); clock.play(now);
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
-  rebuildCache(); playbackUI(); renderTargets([0],now,true); queueSave(false,false);
+  rebuildCache(); playbackUI(); renderTargets([0], now); queueSave(false,false);
 }
 setupMidiPanel($('#midi-panel'), receiveTransport,{onCamera:receiveCamera,onClock:(time,latency)=>{cameraServerTime=time+latency;cameraCalibratedAt=performance.now();},onNotes:notes=>cameraUI.setReceived(notes)});
 
@@ -288,7 +288,7 @@ function rebuildCache() {
       visibility.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation(); if (stroke || trimDrag) return;
         clips = clips.map(item => item.id === clip.id ? editLayer(item, 'all', value => ({ ...value, enabled: !clip.enabled })) : item);
-        rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+        rebuildCache(); renderTargets([0], performance.now()); queueSave();
       });
       const identity = document.createElement('span'); identity.className = 'layer-identity';
       const name = document.createElement('span'); name.textContent = `${String(index + 1).padStart(2, '0')} ${clip.procedural?.label ?? layerName(clip)}`;
@@ -296,7 +296,7 @@ function rebuildCache() {
       const remove = document.createElement('button'); remove.className = 'layer-remove'; remove.innerHTML = icon('trash'); remove.setAttribute('aria-label', `Delete layer ${index + 1}`);
       remove.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation(); if (stroke || trimDrag) return;
-        clips = clips.filter(item => item.id !== clip.id); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+        clips = clips.filter(item => item.id !== clip.id); rebuildCache(); renderTargets([0], performance.now()); queueSave();
       });
       const card = layerFold(clip.id, 'card', [visibility, identity, remove], []); card.open = false;
       card.querySelector('summary').addEventListener('click', event => {
@@ -318,7 +318,7 @@ function rebuildCache() {
 
       if (rebuild) rebuildCache();
       else { scene.setProject({ clips, duration: clock.duration, settings: state }); sync.forEach(fn => fn()); }
-      playbackUI(); renderTargets([0], performance.now(), true); queueSave();
+      playbackUI(); renderTargets([0], performance.now()); queueSave();
     };
     const number = (container, text, aria, get, min, max, step, edit, unit = 'px') => {
       const label = document.createElement('label'); label.append(text);
@@ -432,7 +432,7 @@ function rebuildCache() {
       if (stroke) return;
       const selected = scope();
       clips = selected === 'all' ? clips.filter(item => item.id !== clip.id) : clips.map(item => item.id === clip.id ? removeLayerSides(item, [Number(selected)]) : item).filter(item => item.targets.length);
-      rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+      rebuildCache(); renderTargets([0], performance.now()); queueSave();
     });
     const actions = document.createElement('div'); actions.className = 'layer-actions';
     const reorder = document.createElement('div'); reorder.className = 'layer-reorder';
@@ -444,7 +444,7 @@ function rebuildCache() {
       button.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation();
         if (!ready || stroke || trimDrag) return;
-        clips = moveLayer(clips, clip.id, direction); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+        clips = moveLayer(clips, clip.id, direction); rebuildCache(); renderTargets([0], performance.now()); queueSave();
         const moved = [...document.querySelectorAll('.cached-layer')].find(item => item.dataset.layerId === clip.id);
         const next = moved?.querySelector(`.layer-reorder button[data-direction="${direction}"]`);
         if (next && !next.disabled) next.focus({ preventScroll: true });
@@ -670,23 +670,32 @@ function setMode(mode, restoring = false) {
   $('.studio').dataset.mode = mode;
   shell.setMode(mode);
   layers.forEach(layer => layer.circle = null);
-  renderTargets([0], performance.now(), true); queueSave();
+  renderTargets([0], performance.now()); queueSave();
 }
-function renderCanvas(index, now, force = false, phase = clock.phase(now)) {
+function renderCanvas(index, now, phase = clock.phase(now)) {
   const layer = layers[index];
-  const frame = frameNumber(now);
-  if (!force && frame === layer.lastFrame) return;
-  const drawStartedAt = performance.now();
-  layer.lastFrame = frame;
   layer.circle?.update(now);
   painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
+  const frame = renderFrameNumber(now);
+  if (frame === layer.lastFrame) return;
+  const drawStartedAt = performance.now();
+  layer.lastFrame = frame;
   const frameCamera=cameraSampler.frame({...cameraSnapshot,config:state.camera},state.view,phase,serverAt(now),now);
   if(cubeDragging){frameCamera.view=state.view;}
   painting.setView(frameCamera.view);syncViewPresentation(frameCamera.view);
   painting.draw(index, phase, { now, cameraViews:frameCamera.cameraViews, placementPreview: !clock.playing });
+  layer.needsRender = false;
   if (paintingBackend !== 'webgl2-lost') frameRateMeter.record(now, performance.now() - drawStartedAt);
 }
-function renderTargets(targets, now = performance.now(), force = false, phase = clock.phase(now)) { targets.forEach(index => renderCanvas(index, now, force, phase)); }
+// Input/UI changes request a paint. Only RAF presents it, so Pencil, camera and
+// MIDI events cannot bypass the 30fps cap. Feed live input immediately so no
+// samples are discarded while a presentation frame is pending.
+function renderTargets(targets, now = performance.now()) {
+  for (const index of targets) {
+    const layer = layers[index]; layer.needsRender = true; layer.circle?.update(now);
+    painting.setLiveStroke(stroke, now, layer.circle?.displayPoint());
+  }
+}
 let animationFrame = -1;
 function animate(now) {
   // Keep the transport alive even if a drawing backend throws this frame.
@@ -698,8 +707,8 @@ function animate(now) {
     const revealed = lineSchedule.advance(clips, clock.phase(now), clock.duration, now, clock.playing);
     if (revealed.size) { clips = clips.map(c => revealed.has(c.id) ? finishFirstCycle(c) : c); rebuildCache(); queueSave(false, false); publisher.publish(true); }
     if (stroke) livePublisher.publish(now);
-    if (viewDirty) { renderTargets([0], now, true); viewDirty = false; void viewPublisher.publish(); }
-    for (let i = 0; i < canvases.length; i++) if (state.camera.mode!=='normal'||now<cameraSampler.movingUntil||(clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
+    if (viewDirty) { renderTargets([0], now); viewDirty = false; void viewPublisher.publish(); }
+    for (let i = 0; i < canvases.length; i++) if (layers[i].needsRender||state.camera.mode!=='normal'||now<cameraSampler.movingUntil||(clock.playing && scene.items.some(item => item.clip.enabled && item.clip.targets.includes(i))) || layers[i].circle?.moving || stroke?.targets.includes(i)) renderCanvas(i, now);
   }
   syncFrameRate(now);
 }
@@ -727,9 +736,9 @@ function endStroke(event) {
   if (current.canvas.hasPointerCapture(current.pointerId)) current.canvas.releasePointerCapture(current.pointerId);
   const now = performance.now(); cacheStroke(current, now);
   publisher.publish();
-  renderTargets([0], now, true);
+  renderTargets([0], now);
 }
-// Drawing at 60Hz must not rebuild the navigation SVGs when the camera is still.
+// Repainting must not rebuild the navigation SVGs when the camera is still.
 function syncViewPresentation(view) {
   const key=JSON.stringify(view);if(key===viewPresentationKey)return;
   viewPresentationKey=key;orientation.update(view);
@@ -756,7 +765,7 @@ function cancelTouchStroke() {
   const current = stroke; stroke = null; liveRevision++;
   current.targets.forEach(index => layers[index].circle = null);
   if (!current.wasPlaying) { clock.seek(current.start, performance.now()); clock.pause(performance.now()); playbackUI(); }
-  $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now(), true);
+  $('.canvas-empty').hidden = clips.length > 0; historyUI(); publisher.publish(true); renderTargets([0], performance.now());
 }
 $('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
 for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(effectiveView(), effectiveView().scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
@@ -856,13 +865,13 @@ $('#trace-duration').addEventListener('input', event => {
 $('#trace-duration').addEventListener('change', syncTraceUI);
 $('#intersection-markers').addEventListener('change', event => {
   if (!ready || trimDrag) return;
-  state.intersections = event.target.checked; syncTraceUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+  state.intersections = event.target.checked; syncTraceUI(); rebuildCache(); renderTargets([0], performance.now()); queueSave();
 });
 for (const [id, key] of [['intersection-in', 'intersectionFadeInMs'], ['intersection-hold', 'intersectionHoldMs'], ['intersection-out', 'intersectionFadeOutMs']]) $(`#${id}`).addEventListener('input', event => {
   if (!event.target.value || !Number.isFinite(Number(event.target.value))) return;
   state[key] = Math.round(Math.max(0, Math.min(10000, Number(event.target.value) * 1000)));
   scene.setIntersectionTiming(state);
-  renderTargets([0], performance.now(), true); queueSave();
+  renderTargets([0], performance.now()); queueSave();
 });
 function syncShapeUI() {
   $('#shape').value = state.mode === 'line' ? 'ring' : state.shape;
@@ -907,7 +916,7 @@ function editFloatingColor(color, opacity) {
       else if (color !== value.color) next = pickLayerColor(hasSampleColor(value) ? { ...next, colorEditMode: 'color' } : next, color);
       return next;
     }));
-    scene.setProject({ clips, duration: clock.duration, settings: state }); refreshSelectedLayer(); renderTargets([0], performance.now(), true);
+    scene.setProject({ clips, duration: clock.duration, settings: state }); refreshSelectedLayer(); renderTargets([0], performance.now());
   }
   syncFloatingColor(); queueSave();
 }
@@ -916,7 +925,7 @@ $('#loop-progress').addEventListener('pointerdown', event => {
   if (!ready || event.button !== 0) return;
   timelinePointer=event.pointerId;event.currentTarget.setPointerCapture(event.pointerId);
   endStroke(null);
-  const now = performance.now(); clock.play(now); playbackUI(); renderTargets([0], now, true); publisher.publish(true);
+  const now = performance.now(); clock.play(now); playbackUI(); renderTargets([0], now); publisher.publish(true);
 });
 for(const name of ['pointerup','pointercancel','lostpointercapture'])$('#loop-progress').addEventListener(name,event=>{
   if(event.pointerId!==timelinePointer)return;timelinePointer=null;timelineUI(performance.now());
@@ -926,9 +935,9 @@ $('#loop-progress').addEventListener('input', event => {
   if (!ready) return;
   endStroke(null);
   const now = performance.now(); clock.seek(Number(event.target.value), now); clock.play(now); lineSchedule.rebase(clips, clock.phase(now), clock.duration, now);
-  playbackUI(); renderTargets([0], now, true); publisher.publish(true);
+  playbackUI(); renderTargets([0], now); publisher.publish(true);
 });
-$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(finishFirstCycle); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); clock.play(performance.now()); playbackUI(); renderTargets([0], performance.now(), true); publisher.publish(true); });
+$('#restart').addEventListener('click', () => { cameraSampler.reset();endStroke(null); clips = clips.map(finishFirstCycle); rebuildCache(); queueSave(false, false); clock.restart(performance.now()); clock.play(performance.now()); playbackUI(); renderTargets([0], performance.now()); publisher.publish(true); });
 function syncEffectsUI() {
   $('#fade-seconds').value = $('#fade-range').value = state.fadeMs / 1000;
   $('#draw-blur').checked = state.effects.blur; $('#draw-blur-radius').value = $('#draw-blur-range').value = state.effects.blurRadius;
@@ -946,7 +955,7 @@ function setFade(raw) {
   if (raw === '' || !Number.isFinite(Number(raw))) return;
   state.fadeMs = Math.round(Math.max(0.1, Math.min(10, Number(raw))) * 10) * 100;
   clips = clips.map(clip => editLayer(clip, 'all', item => ['return', 'move', 'line'].includes(item.mode) ? fitGestureTrim({ ...item, fadeMs: state.fadeMs, ...(item.lineMarkers ? {lineMarkers:item.lineMarkers.map(m=>({...m,fadeMs:state.fadeMs}))} : {}) }, clock.duration) : item));
-  syncEffectsUI(); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); queueSave();
+  syncEffectsUI(); playbackUI(); rebuildCache(); renderTargets([0], performance.now()); queueSave();
 }
 $('#fade-range').addEventListener('input', event => setFade(event.target.value));
 $('#fade-seconds').addEventListener('input', event => setFade(event.target.value));
@@ -957,7 +966,7 @@ $('#clear').addEventListener('click', () => {
   const targets = state.sync ? [0] : [state.active];
   targets.forEach(index => { layers[index].circle = null; });
   clips = clips.map(clip => removeLayerSides(clip, targets)).filter(clip => clip.targets.length);
-  rebuildCache(); renderTargets(targets, performance.now(), true); queueSave();
+  rebuildCache(); renderTargets(targets, performance.now()); queueSave();
 });
 
 function syncLineUI() {
@@ -974,7 +983,7 @@ function cacheLineGesture(current, duration) {
     clips=clips.map(c=>c.id===draft.id?{...c,samples:[c.samples[0],point],points3D:[c.points3D?.[0]??pointInSpace(c.samples[0],c.plane),world],lineMarkers:[first,marker],lineIncomplete:false}:c);
   }else clips=[...clips,{id:`${current.id}-line`,mode:'line',shape:'circle',color:current.color,opacity:current.opacity,effects:{...current.effects},ringWidth:FIXED_LINE_WIDTH,targets:[0],samples:[point],points3D:[world],lineMarkers:[marker],duration:0,start:current.start,fadeMs:state.fadeMs,enabled:true,blendMode:'analog',linePending:true,lineIncomplete:true}];
 }
-$('#cancel-line').addEventListener('click', () => { clips = clips.filter(c => !(c.mode === 'line' && c.lineIncomplete)); rebuildCache(); renderTargets([0], performance.now(), true); queueSave(); });
+$('#cancel-line').addEventListener('click', () => { clips = clips.filter(c => !(c.mode === 'line' && c.lineIncomplete)); rebuildCache(); renderTargets([0], performance.now()); queueSave(); });
 
 function download(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -1033,7 +1042,7 @@ function applyProject(project, playback = { playing: true, phase: 0 }) {
     $('#pressure').checked = state.pressure; $('#touch').checked = state.touch;
     const now = performance.now(); clock.resize(project.duration, now); clock.seek(playback.phase, now);
     clock.play(now);
-    rebuildCache(); playbackUI(); renderTargets([0], now, true);
+    rebuildCache(); playbackUI(); renderTargets([0], now);
   } finally { ready = wasReady; }
 }
 async function restoreProject() {
@@ -1051,7 +1060,7 @@ async function restoreProject() {
     $('#cache-status').textContent = 'MEMORY ONLY'; cacheFailed = true;
     toast('Local cache could not be restored. You can still draw and save a project.'); console.error(error);
   } finally {
-    history.reset(currentProject()); ready = true; historyUI(); $('.sidebar-scroll').inert = false; $('.loop-controls').inert = false; clock.restart(performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now(), true); if (!pendingTransport) publisher.publish(true);
+    history.reset(currentProject()); ready = true; historyUI(); $('.sidebar-scroll').inert = false; $('.loop-controls').inert = false; clock.restart(performance.now()); playbackUI(); rebuildCache(); renderTargets([0], performance.now()); if (!pendingTransport) publisher.publish(true);
   }
 }
 restoreProject().then(() => {

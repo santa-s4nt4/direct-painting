@@ -15,7 +15,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function dom(){
  const window=new Window({url:'http://localhost/'}),old=new Map();
  for(const [key,value] of Object.entries({window,document:window.document,Option:function(text,value){const option=window.document.createElement('option');option.textContent=text;option.value=value;return option;},matchMedia:window.matchMedia.bind(window)})){old.set(key,Object.getOwnPropertyDescriptor(globalThis,key));Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});}
- window.Element.prototype.setPointerCapture=function(id){this._pointer=id;};window.Element.prototype.hasPointerCapture=function(id){return this._pointer===id;};window.Element.prototype.releasePointerCapture=function(){this._pointer=null;};
+ window.Element.prototype.setPointerCapture=function(id){(this._pointers??=new Set()).add(id);};window.Element.prototype.hasPointerCapture=function(id){return this._pointers?.has(id)??false;};window.Element.prototype.releasePointerCapture=function(id){this._pointers?.delete(id);};
  return {window,restore:async()=>{await window.happyDOM.abort();for(const [key,value] of old){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}}};
 }
 test('camera controls offer MIDI target axes, easing, transition time and zoom range',async()=>{
@@ -59,7 +59,7 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   globalThis.EventSource=Events;globalThis.requestAnimationFrame=fn=>{raf=fn;return 1;};globalThis.ResizeObserver=class{observe(){}disconnect(){}};
   globalThis.__cameraTestMocks={
    setupColorPanel:()=>({setColor(){},setVisible(){},open(){}}),loadProject:async()=>({version:1,duration:16000,clips:[{id:'moving',mode:'move',shape:'circle',color:'#ffffff',enabled:true,targets:[0],duration:15000,fadeMs:1000,samples:[{x:1920,y:1080,size:100,t:0},{x:2200,y:1200,size:100,t:15000}]}],settings:{camera:{...DEFAULT_CAMERA,mode:'rec',track:{id:'old',samples:[{t:0,view:DEFAULT_VIEW}]}}}}),saveProject:async value=>{saved=structuredClone(value);},
-   createPaintingRenderer:canvas=>(renderer={canvas,items:[],setProject(p){this.items=p.clips.map(clip=>({clip}));},setView(view){this.view=view;},setLiveStroke(stroke){this.live=stroke;},draw(_side,phase,options){if(failDraw)throw new Error('test drawing backend failure');this.lastPhase=phase;this.lastDraw=options;}}),
+   createPaintingRenderer:canvas=>(renderer={canvas,items:[],drawCalls:0,setProject(p){this.items=p.clips.map(clip=>({clip}));},setView(view){this.view=view;},setLiveStroke(stroke){this.live=stroke;},draw(_side,phase,options){this.drawCalls++;if(failDraw)throw new Error('test drawing backend failure');this.lastPhase=phase;this.lastDraw=options;}}),
   };
   let source=await readFile(resolve('src/main.js'),'utf8');source=source.replace(/^import '\.\/style\.css';\n/m,'').replace(/^import \{ ([^}]+) \} from '\.\/(?:render\/index|cache|color-panel)\.js';$/gm,(_line,names)=>`const { ${names} }=globalThis.__cameraTestMocks;`).replace(/from '(\.\/[^']+)'/g,(_all,path)=>`from '${pathToFileURL(resolve('src',path))}'`);
   const entry=join(folder,'editor.mjs');await writeFile(entry,'const setTimeout=window.setTimeout.bind(window),clearTimeout=window.clearTimeout.bind(window);\n'+source);await import(pathToFileURL(entry).href);
@@ -67,17 +67,19 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   const tick=now=>{const callback=raf;raf=null;assert.ok(callback,'The next frame is scheduled');callback(now);};
   const progress=d.querySelector('#loop-progress'),phase=()=>Number(progress.value);
   assert.equal(d.querySelector('[data-camera-mode="rec"]'),null);assert.equal(d.querySelector('[data-camera-mode="normal"]').getAttribute('aria-pressed'),'true');
-  const start=performance.now()+50,cubeFace=d.querySelector('.orientation-cube polygon'),boxEdge=d.querySelector('.painting-boundary line');
-  tick(start);let previous=phase();
+  // Integer origin keeps the synthetic 500ms FPS windows exact in float64.
+  const start=Math.ceil(performance.now()+50),cubeFace=d.querySelector('.orientation-cube polygon'),boxEdge=d.querySelector('.painting-boundary line');
+  const beforeFrames=renderer.drawCalls;tick(start);let previous=phase();
   for(let i=1;i<=60;i++){tick(start+i*1000/60);const current=phase();assert.ok(current>previous&&current-previous<=18,'Playback advances each 60Hz frame');previous=current;}
+  assert.ok(renderer.drawCalls-beforeFrames>=30&&renderer.drawCalls-beforeFrames<=31,'Canvas paints at 30fps while the timeline advances in real time');
   const fpsLabel=d.querySelector('.sidebar-footer .fps-label');
   assert.equal(fpsLabel.previousElementSibling.id,'cache-status');
   assert.match(fpsLabel.textContent,/^\d+\.\d fps · GPU$/);
-  assert.ok(parseFloat(fpsLabel.textContent)>50&&parseFloat(fpsLabel.textContent)<=60.1,'FPS is measured from successful painting frames');
+  assert.ok(parseFloat(fpsLabel.textContent)>25&&parseFloat(fpsLabel.textContent)<=30.1,'FPS measures successful painting frames within the 30fps cap');
   assert.equal(d.querySelector('.orientation-cube polygon'),cubeFace,'A still camera does not rebuild cube SVG each painting frame');assert.equal(d.querySelector('.painting-boundary line'),boxEdge);assert.ok(renderer.lastPhase>900);
   failDraw=true;assert.throws(()=>tick(start+1100),/drawing backend failure/);assert.ok(raf,'A renderer exception cannot cancel future timeline frames');const failedPhase=phase();failDraw=false;tick(start+1200);assert.ok(phase()>failedPhase);
   assert.equal(d.querySelector('#play'),null,'Pause button is removed');assert.ok(d.querySelector('.orientation-details .camera-mode-controls'));assert.ok(d.querySelector('.orientation-details > .orientation-front [aria-label="Front view"]'));
-  progress.value='4200';progress.dispatchEvent(new env.window.Event('input'));assert.equal(phase(),4200);tick(performance.now()+100);const resumed=phase();assert.ok(resumed>=4300&&resumed<4400);
+  progress.value='4200';const seekStartedAt=performance.now();progress.dispatchEvent(new env.window.Event('input'));assert.ok(phase()>=4200&&phase()<=4200+Math.ceil(performance.now()-seekStartedAt)+1,'Seeking keeps playback running from the requested real-time position');tick(performance.now()+100);const resumed=phase();assert.ok(resumed>=4300&&resumed<4400);
   progress.dispatchEvent(new env.window.PointerEvent('pointerdown',{pointerId:301,button:0}));progress.value='5000';progress.dispatchEvent(new env.window.Event('input'));tick(performance.now()+100);assert.equal(progress.value,'5000','Playback does not fight the seek handle while held');progress.dispatchEvent(new env.window.PointerEvent('pointerup',{pointerId:301}));tick(performance.now()+150);assert.ok(phase()>5100,'Playback keeps running after seeking');
   d.querySelector('[data-camera-mode="midi-auto"]').click();assert.equal(d.querySelector('.orientation-cube').getAttribute('aria-disabled'),'true');await until(async()=>(await camera()).config.mode==='midi-auto');
   const previousCamera=await camera(),note=d.querySelector('#camera-note');note.value='60';note.dispatchEvent(new env.window.Event('change'));for(const stream of streams)stream.emit('camera',previousCamera);
@@ -90,11 +92,13 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   const canvas=d.querySelector('#canvas-0');canvas.getBoundingClientRect=()=>({left:0,top:0,width:1920,height:1080});
   const shape=d.querySelector('#shape');shape.value='ring';shape.dispatchEvent(new env.window.Event('change'));assert.equal(d.querySelector('#ring-width').value,'20');
   const pointer=(target,type,id,pointerType,x=960,y=540,pressure=.5)=>target.dispatchEvent(new env.window.PointerEvent(type,{pointerId:id,pointerType,button:0,buttons:type==='pointerup'?0:1,clientX:x,clientY:y,pressure,bubbles:true,cancelable:true}));
+  const beforePointerBurst=renderer.drawCalls;
   pointer(canvas,'pointerdown',101,'pen');const live=renderer.live,plane=structuredClone(live.plane);assert.ok(canvas.hasPointerCapture(101));assert.equal(live.ringWidth,20);
   pointer(svg,'pointerdown',202,'touch',10,10);assert.equal(renderer.live,live,'Touching the cube does not finish the Pencil stroke');assert.ok(svg.hasPointerCapture(202));
   pointer(svg,'pointermove',202,'touch',30,15);pointer(canvas,'pointermove',101,'pen',985,550,.8);assert.equal(renderer.live.id,live.id);assert.ok(live.samples.length>=2);assert.deepEqual(live.plane,plane,'The active drawing plane remains stable while the camera turns');
   pointer(svg,'pointerup',202,'touch',30,15);assert.ok(canvas.hasPointerCapture(101),'Lifting the finger preserves Pencil capture');assert.equal(renderer.live,live);
   pointer(canvas,'pointermove',101,'pen',1000,560,.3);pointer(canvas,'pointerup',101,'pen',1000,560,.3);assert.equal(renderer.live,null);assert.equal(canvas.hasPointerCapture(101),false);
+  assert.equal(renderer.drawCalls,beforePointerBurst,'Pointer and camera changes queue painting instead of bypassing the frame cap');
   await until(()=>saved?.clips.length===2);assert.equal(saved.clips.at(-1).id,live.id);assert.ok(saved.clips.at(-1).samples.length>=3);assert.ok(saved.clips.at(-1).samples.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));assert.deepEqual(saved.clips.at(-1).plane,plane);assert.equal(saved.clips.at(-1).ringWidth,20);
   await until(async()=>(await state()).state.project.clips.length===2);
   pointer(svg,'pointerdown',203,'touch',10,10);pointer(canvas,'pointerdown',102,'pen');const secondLive=renderer.live;assert.ok(secondLive);

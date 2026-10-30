@@ -2,7 +2,7 @@ import { CameraSampler, mergeCamera } from './camera-motion.js';
 import { DEFAULT_VIEW } from './view.js';
 import { LOOP_MS } from './transport.js';
 import './output.css';
-import { frameNumber } from './timing.js';
+import { renderFrameNumber } from './timing.js';
 import { createPaintingRenderer } from './render/index.js';
 import { outputPhase } from './relay.js';
 
@@ -28,10 +28,11 @@ function resizeOutput() {
   outputCanvas.setAttribute('aria-label', `direct-painting ${scene.outputWidth} by ${scene.outputHeight} output`);
 }
 window.addEventListener('resize', resizeOutput, { passive: true });
-let snapshot = null, version = -1, liveVersion = -1, serverTime = 0, calibratedAt = performance.now(), renderedAt = -Infinity;
+let snapshot = null, version = -1, liveVersion = -1, serverTime = 0, calibratedAt = performance.now(), renderedAt = -Infinity, lastRenderFrame = -Infinity;
 let cameraSnapshot=null;const cameraSampler=new CameraSampler();
 let calibrated = false, connectedStream = false, polling = false, pollTimer;
 scene.setProject({ clips: [], duration: LOOP_MS }); scene.draw(0, 0);
+lastRenderFrame = renderFrameNumber(performance.now());
 function apply(update, now) {
   if (!calibrated && Number.isFinite(update.serverNow)) { serverTime = update.serverNow; calibratedAt = now; }
   if (update.state && update.version >= version) { snapshot = update.state; scene.setProject(snapshot.project); version = update.version; renderedAt = -Infinity; }
@@ -73,8 +74,10 @@ if (typeof EventSource === 'function') {
 }
 function animate(now) {
   requestAnimationFrame(animate);
-  if ((snapshot || renderedAt === -Infinity) && frameNumber(now) !== renderedAt) {
-    renderedAt = frameNumber(now);
+  // Incoming live/camera/state messages invalidate the image, not the rate
+  // limiter. A burst of MIDI or Pencil packets still presents at most 30fps.
+  if ((snapshot || renderedAt === -Infinity) && renderFrameNumber(now) !== lastRenderFrame) {
+    renderedAt = lastRenderFrame = renderFrameNumber(now);
     const time=serverTime+now-calibratedAt,phase=snapshot?outputPhase(snapshot,time):0,base=snapshot?.project.settings?.view??DEFAULT_VIEW;
     const frame=cameraSampler.frame(cameraSnapshot??{config:snapshot?.project.settings?.camera},base,phase,time,now);scene.setView(frame.view);
     scene.draw(side,phase,{now,cameraViews:frame.cameraViews,placementPreview:snapshot?!snapshot.playback.playing:false});

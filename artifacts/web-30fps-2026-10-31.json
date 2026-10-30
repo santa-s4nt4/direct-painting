@@ -1,0 +1,20 @@
+{
+  "localDate": "2026-10-31",
+  "timezone": "Asia/Tokyo",
+  "scope": "Actual Chrome WebGL2 /output renderer; read-only relay subscription, 30fps presentation cap.",
+  "browser": {
+    "backend": "webgl2",
+    "elapsedMs": 1101.6000000014901,
+    "paintingFrames": 33,
+    "measuredFPS": 29.95642701521002,
+    "minimumIntervalMs": 33.19999999999993,
+    "maximumIntervalMs": 33.40000000000009,
+    "capPassed": true,
+    "resolution": "1280x720"
+  },
+  "relatedTests": {
+    "passed": 31,
+    "failed": 0
+  },
+  "productionBuildPassed": true
+}
