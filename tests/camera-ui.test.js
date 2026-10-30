@@ -44,6 +44,20 @@ test('MIDI auto locks cube pointer, keyboard and Front controls; normal restores
   svg.dispatchEvent(new env.window.PointerEvent('pointerdown',{pointerId:2,button:0,clientX:0,clientY:0}));svg.dispatchEvent(new env.window.PointerEvent('pointermove',{pointerId:2,clientX:20,clientY:10}));assert.equal(starts,2);cube.setDisabled(true);assert.equal(finishes,2);assert.equal(svg.hasPointerCapture(2),false);
  }finally{await env.restore();}
 });
+test('cube keeps its finger through child capture notifications and finishes outside the SVG',async()=>{
+ const env=dom(),d=env.window.document;let view=DEFAULT_VIEW,finishes=0;
+ try{
+  const cube=setupOrientationCube(d.body,{getView:()=>view,onChange:value=>{view=value;},onStart(){},onFinish:()=>finishes++}),svg=d.querySelector('svg'),face=svg.querySelector('polygon');
+  const pointer=(target,type,id,pointerType='touch')=>target.dispatchEvent(new env.window.PointerEvent(type,{pointerId:id,pointerType,button:0,clientX:type==='pointermove'?40:10,clientY:10,bubbles:true,cancelable:true}));
+  pointer(face,'pointerdown',7);assert.ok(svg.hasPointerCapture(7));
+  pointer(face,'lostpointercapture',7);assert.equal(finishes,0,'The implicit child-to-SVG capture transfer does not stop the drag');
+  pointer(svg,'pointermove',7);assert.notEqual(view.yaw??0,0);
+  pointer(d.body,'pointerup',8,'pen');assert.equal(finishes,0,'Pencil release cannot finish the finger');
+  pointer(d.body,'pointerup',7);assert.equal(finishes,1);assert.equal(svg.hasPointerCapture(7),false);
+  pointer(svg,'pointerdown',7);pointer(svg,'lostpointercapture',7);assert.equal(finishes,1,'An old notification cannot stop a new captured contact with the reused id');
+  svg.releasePointerCapture(7);pointer(svg,'lostpointercapture',7);assert.equal(finishes,2,'A real capture loss releases the drag');
+ }finally{await env.restore();}
+});
 test('editor timeline stays responsive and Pencil drawing continues during independent cube touch gestures',async()=>{
  const env=dom(),d=env.window.document;d.body.innerHTML='<div id="app"></div>';const folder=await mkdtemp(join(tmpdir(),'direct-camera-ui-')),relay=await createLoopRelay(join(folder,'loop.json'));
  const server=createServer((req,res)=>relay(req,res,()=>{res.writeHead(404);res.end();}));await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`,nativeFetch=globalThis.fetch,streams=[];let raf=null,saved,renderer,failDraw=false;
@@ -106,6 +120,32 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   const yaw=renderer.view.yaw??0;pointer(svg,'pointermove',203,'touch',40,15);assert.notEqual(renderer.view.yaw??0,yaw,'Cube rotation continues after the Pencil lifts');pointer(svg,'pointerup',203,'touch',40,15);
   await until(()=>saved?.clips.length===3);assert.equal(saved.clips.at(-1).id,secondLive.id);
   await until(()=>saved?.settings.camera.mode==='normal');assert.equal('track' in saved.settings.camera,false);assert.equal(saved.clips.length,3);assert.equal(saved.duration,16000);assert.deepEqual((await state()).transport,transportBefore,'Moving the cube never resets transport');
+  // Keep the left finger down while the Pencil repeatedly reuses one id.
+  const face=svg.querySelector('polygon');pointer(face,'pointerdown',204,'touch',10,10);pointer(face,'lostpointercapture',204,'touch',10,10);
+  const ids=new Set();
+  for(let i=0;i<20;i++){
+   pointer(svg,'pointermove',204,'touch',12+i*2,12);
+   canvas.dispatchEvent(new env.window.PointerEvent('pointerdown',{pointerId:500,pointerType:'pen',isPrimary:false,button:0,buttons:1,clientX:960+i,clientY:540,pressure:.5,bubbles:true,cancelable:true}));
+   const contact=renderer.live;assert.ok(contact);assert.equal(ids.has(contact.id),false);ids.add(contact.id);const plane=structuredClone(contact.plane);
+   pointer(canvas,'lostpointercapture',500,'pen');assert.equal(renderer.live,contact,'Late capture loss cannot terminate the newly captured Pencil');
+   pointer(canvas,'pointermove',500,'pen',980+i,545,.7);assert.deepEqual(renderer.live.plane,plane);
+   pointer(canvas,'pointerup',500,'pen',980+i,545,.7);assert.equal(renderer.live,null);assert.ok(svg.hasPointerCapture(204),'The left finger stays active across rapid Pencil taps');
+   await sleep(20);
+   if(i===9)assert.ok((await state()).state.project.clips.length>3,'Completed contacts reach the output before continuous tapping stops');
+  }
+  await until(()=>saved?.clips.length===23);await until(async()=>(await state()).state.project.clips.length===23);
+  assert.equal(new Set(saved.clips.map(clip=>clip.id)).size,23,'Every rapid contact is cached exactly once');
+  pointer(canvas,'pointerdown',500,'pen');const interrupted=renderer.live;
+  for(const id of[601,602])pointer(canvas,'pointerdown',id,'touch',900+id-601,530);
+  for(const id of[601,602])pointer(canvas,'pointerup',id,'touch',900+id-601,530);
+  assert.equal(renderer.live,interrupted,'Palm contacts cannot finish the Pencil');
+  pointer(canvas,'pointerdown',500,'pen');const replacement=renderer.live;assert.ok(replacement);assert.notEqual(replacement.id,interrupted.id,'A new down recovers when the previous up was missed');
+  pointer(svg,'pointerup',204,'touch',50,12);assert.equal(renderer.live,replacement,'Releasing the left finger preserves the current Pencil contact');
+  pointer(d.body,'pointerup',500,'pen',980,545);assert.equal(renderer.live,null,'A release outside canvas still finishes a captured stroke');
+  pointer(canvas,'pointermove',501,'pen',970,550,.8);assert.ok(renderer.live,'Contact movement can recover a missing pen down');
+  canvas.dispatchEvent(new env.window.PointerEvent('pointermove',{pointerId:501,pointerType:'pen',button:-1,buttons:0,pressure:0,clientX:970,clientY:550,bubbles:true,cancelable:true}));assert.equal(renderer.live,null,'A hover recovers a missing pen up');
+  await until(()=>saved?.clips.length===26);await until(async()=>(await state()).state.project.clips.length===26);
+  assert.equal(saved.duration,16000);assert.deepEqual((await state()).transport,transportBefore);
  }finally{
   env.window.dispatchEvent(new env.window.Event('pagehide'));await sleep(250);globalThis.fetch=nativeFetch;globalThis.EventSource=old.EventSource;globalThis.requestAnimationFrame=old.requestAnimationFrame;globalThis.ResizeObserver=old.ResizeObserver;globalThis.__cameraTestMocks=old.mocks;
   await relay.dispose();await new Promise(r=>server.close(r));await env.restore();await rm(folder,{recursive:true});

@@ -11,6 +11,7 @@ import { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAX_BRUSH_SIZE, CANVAS_SPEC } from './
 import { FRAME_MS, frameNumber, RENDER_FPS, renderFrameNumber, FrameRateMeter } from './timing.js';
 import { setupEditorShell } from './editor-shell.js';
 import { brushSize, canvasPoint, timestamp } from './drawing.js';
+import { matchesPointer, penInContact, capturePointer, releasePointer, ignoreCaptureLoss } from './pointer-input.js';
 import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
 import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, MAX_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
@@ -730,10 +731,10 @@ function samplePoint(next) {
   stroke.samples.push({ ...next, t: Math.max(stroke.samples.at(-1).t + 0.01, performance.now() - stroke.started) });
 }
 function endStroke(event) {
-  if (!stroke || (event && event.pointerId !== stroke.pointerId)) return;
+  if (!stroke || (event && !matchesPointer(stroke, event))) return;
   if (event?.type === 'pointerup') samplePoint({ ...stroke.last, ...drawingPointOnPlane(canvasPoint(event,stroke.canvas.getBoundingClientRect()),effectiveView(),stroke.plane) });
   const current = stroke; stroke = null; liveRevision++;
-  if (current.canvas.hasPointerCapture(current.pointerId)) current.canvas.releasePointerCapture(current.pointerId);
+  releasePointer(current.canvas, current.pointerId);
   const now = performance.now(); cacheStroke(current, now);
   publisher.publish();
   renderTargets([0], now);
@@ -761,7 +762,7 @@ function changeView(view) {
 }
 function finishView() { clearTimeout(zoomSaveTimer); queueSave(false, false); publisher.publish(true); }
 function cancelTouchStroke() {
-  if (!stroke || stroke.pointerType !== 'touch') { endStroke(null); return; }
+  if (!stroke || stroke.pointerType !== 'touch') return;
   const current = stroke; stroke = null; liveRevision++;
   current.targets.forEach(index => layers[index].circle = null);
   if (!current.wasPlaying) { clock.seek(current.start, performance.now()); clock.pause(performance.now()); playbackUI(); }
@@ -769,34 +770,56 @@ function cancelTouchStroke() {
 }
 $('#reset-view').addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(DEFAULT_VIEW); finishView(); });
 for (const [id, factor] of [['zoom-in', 1.25], ['zoom-out', .8]]) $(`#${id}`).addEventListener('click', () => { if (!ready || trimDrag) return; endStroke(null); changeView(zoomAt(effectiveView(), effectiveView().scale * factor, { x: VIEWPORT_WIDTH / 2, y: VIEWPORT_HEIGHT / 2 })); finishView(); });
+function startStroke(event, canvas, index) {
+  if (!ready || trimDrag || event.button !== 0 && !penInContact(event)) return false;
+  if (stroke) {
+    if (event.pointerType !== 'pen') return false;
+    if (event.timeStamp > 0 && stroke.pointerStartedAt > 0 && event.timeStamp < stroke.pointerStartedAt) return false;
+    // A new Pencil contact recovers from a missing prior up/cancel. Pen wins
+    // over an accidental finger stroke, without taking the cube's pointer.
+    if (stroke.pointerType === 'touch') cancelTouchStroke(); else endStroke(null);
+  }
+  if (event.pointerType === 'pen') {
+    const fingers = [...pinch.points.keys()], navigating = pinch.blocked; pinch.reset();
+    for (const id of fingers) if (id !== event.pointerId) releasePointer(canvas, id);
+    if (navigating) finishView();
+  }
+  const inputView = effectiveView(), startPoint = point(event, canvas, inputView);
+  if (!insideBox(pointInSpace(startPoint, workingPlane(inputView)))) return false;
+  event.preventDefault(); selectCanvas(index); capturePointer(canvas, event.pointerId);
+  const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
+  stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, pointerStartedAt: event.timeStamp, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, traceEnabled: state.traceMotion && state.mode !== 'line', traceDurationMs: state.traceDurationMs, last: startPoint, started: now, start: clock.phase(now), samples: [] };
+  stroke.samples.push({ ...stroke.last, t: 0 }); history.endGroup(); historyUI();
+  const circle = new SmoothedCircle(stroke.last, stroke.color, now); stroke.targets.forEach(index => layers[index].circle = circle);
+  $('.canvas-empty').hidden = true; drawPoint(stroke.last); renderTargets(stroke.targets, now); if (!wasPlaying) publisher.publish(); livePublisher.publish();
+  return true;
+}
+// A document-level release also handles browsers that lose/decline capture.
+// Ownership checks keep the left finger and the Pencil independent.
+for (const name of ['pointerup', 'pointercancel']) document.addEventListener(name, endStroke, true);
 canvases.forEach((canvas, index) => {
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch') {
       if (!ready || trimDrag) return;
-      event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      if (stroke?.pointerType === 'pen') return;
+      capturePointer(canvas, event.pointerId);
       const started = pinch.down(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()), effectiveView());
       if (started) cancelTouchStroke();
       if (pinch.blocked || !state.touch) return;
     }
-    if (!ready || stroke || trimDrag || event.button !== 0) return;
-    const inputView=effectiveView(),startPoint = point(event, canvas,inputView);
-    if (!insideBox(pointInSpace(startPoint, workingPlane(inputView)))) return;
-    event.preventDefault(); selectCanvas(index); canvas.setPointerCapture(event.pointerId);
-    const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
-    stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, traceEnabled: state.traceMotion && state.mode !== 'line', traceDurationMs: state.traceDurationMs, last: startPoint, started: now, start: clock.phase(now), samples: [] };
-    stroke.samples.push({ ...stroke.last, t: 0 });
-    history.endGroup(); historyUI();
-    if (stroke.mode === 'move') {
-      const circle = new SmoothedCircle(stroke.last, stroke.color, performance.now());
-      stroke.targets.forEach(index => layers[index].circle = circle);
-    }
-    $('.canvas-empty').hidden = true; drawPoint(stroke.last); renderTargets(stroke.targets, now, true); if (!wasPlaying) publisher.publish(); livePublisher.publish();
+    startStroke(event, canvas, index);
   });
   canvas.addEventListener('pointermove', event => {
     if (event.pointerType === 'touch') {
+      if (stroke?.pointerType === 'pen') { event.preventDefault(); return; }
       const view = pinch.move(event.pointerId, canvasPoint(event, canvas.getBoundingClientRect()));
       if (view) changeView(view);
       if (pinch.blocked || !state.touch) { event.preventDefault(); return; }
+    }
+    if (event.pointerType === 'pen') {
+      if (penInContact(event) && !matchesPointer(stroke, event)) startStroke(event, canvas, index);
+      else if (matchesPointer(stroke, event) && !penInContact(event)) endStroke(event);
     }
     const cursorPoint = point(event, canvas), cursor = canvas.parentElement.querySelector('.brush-cursor');
     $('#pointer-position').textContent = `X ${Math.round(cursorPoint.x)}  Y ${Math.round(cursorPoint.y)}`;
@@ -807,13 +830,14 @@ canvases.forEach((canvas, index) => {
     cursor.style.height = `${Math.max(3, (cursorPoint.height ?? cursorPoint.size) * scale)}px`;
     cursor.style.borderRadius = state.mode !== 'line' && ['rect', 'rect-ring'].includes(state.shape) ? '0' : '50%';
     cursor.style.transform = `translate(-50%, -50%) rotate(${cursorPoint.angle ?? 0}deg)`;
-    if (!stroke || event.pointerId !== stroke.pointerId) return;
+    if (!matchesPointer(stroke, event)) return;
     event.preventDefault();
     const coalesced = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
-    for (const sample of coalesced.length ? coalesced : [event]) samplePoint(point(sample, canvas));
+    for (const sample of coalesced.length ? coalesced : [event]) if (matchesPointer(stroke, sample)) samplePoint(point(sample, canvas));
     renderTargets(stroke.targets);
   });
   const finishPointer = event => {
+    if (ignoreCaptureLoss(canvas, event)) return;
     if (event.pointerType === 'touch' && pinch.up(event.pointerId)) { if (!pinch.points.size) finishView(); return; }
     endStroke(event);
   };

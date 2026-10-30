@@ -1,4 +1,5 @@
 import { canvasView, viewRotation } from './view.js';
+import { matchesPointer, capturePointer, releasePointer, ignoreCaptureLoss } from './pointer-input.js';
 
 const faces = [
   { label: '前', normal: [0,0,1], points: [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]], pose: {} },
@@ -18,22 +19,25 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
   svg.addEventListener('pointerdown', event => {
     if (disabled || drag || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation(); onStart();
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: { ...getView() }, moved: false, face: event.target.closest('[data-face]')?.dataset.face };
-    svg.setPointerCapture(event.pointerId);
+    drag = { pointerId: event.pointerId, pointerType: event.pointerType, pointerStartedAt: event.timeStamp, x: event.clientX, y: event.clientY, view: { ...getView() }, moved: false, face: event.target.closest('[data-face]')?.dataset.face };
+    capturePointer(svg, event.pointerId);
   });
-  svg.addEventListener('pointermove', event => {
-    if (!drag || event.pointerId !== drag.id) return;
+  const move = event => {
+    if (!matchesPointer(drag, event)) return;
     event.preventDefault(); const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     if (Math.hypot(dx, dy) > 3) drag.moved = true;
     onChange(canvasView({ ...drag.view, yaw: (drag.view.yaw ?? 0) + dx * .65, pitch: (drag.view.pitch ?? 0) - dy * .65 }));
-  });
+  };
+  svg.addEventListener('pointermove', move);
+  document.addEventListener('pointermove', event => { if (!svg.contains(event.target)) move(event); }, true);
   const finish = event => {
-    if (!drag || event.pointerId !== drag.id) return;
-    const current = drag; drag = null;
-    if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+    if (!matchesPointer(drag, event) || ignoreCaptureLoss(svg, event)) return;
+    drag = null;
+    releasePointer(svg, event.pointerId);
     onFinish();
   };
   for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) svg.addEventListener(name, finish);
+  for (const name of ['pointerup', 'pointercancel']) document.addEventListener(name, finish, true);
   svg.addEventListener('keydown', event => {
     if(disabled)return;
     const view = getView(), updates = {};
@@ -57,6 +61,6 @@ export function setupOrientationCube(parent, { getView, onChange, onStart, onFin
   }
   update(getView()); return { update, setDisabled(value){
     disabled=value;root.classList.toggle('camera-locked',value);svg.setAttribute('aria-disabled',String(value));svg.tabIndex=value?-1:0;front.disabled=value;
-    if(value&&drag){const id=drag.id;drag=null;if(svg.hasPointerCapture(id))svg.releasePointerCapture(id);onFinish();}
+    if(value&&drag){const id=drag.pointerId;drag=null;releasePointer(svg,id);onFinish();}
   } };
 }

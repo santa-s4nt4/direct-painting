@@ -79,6 +79,7 @@ export const zoomAt = (view, scale, anchor, destination = anchor) => transformAt
 // After navigation, the remaining finger stays reserved until every finger lifts.
 export class PinchGesture {
   points = new Map(); blocked = false; initial = null;
+  reset() { this.points.clear(); this.blocked = false; this.initial = null; }
   down(id, point, view) {
     this.points.set(id, point);
     if (this.points.size === 2) {

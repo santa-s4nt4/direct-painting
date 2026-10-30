@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-31",
+  "method": "Chrome DevTools Protocol Input.dispatchTouchEvent and Input.dispatchMouseEvent(pointerType=pen), isolated Vite editor and relay",
+  "physicalDeviceTested": false,
+  "limitations": [
+    "No physical iPad, Safari or Apple Pencil hardware validation",
+    "Child-to-parent capture notifications and missing input notifications are covered separately in tests/camera-ui.test.js"
+  ],
+  "viewport": {
+    "width": 1133,
+    "height": 744
+  },
+  "backend": "webgl2",
+  "requestedTaps": 20,
+  "checks": [
+    {
+      "name": "Native touch cube drag and pen taps stay independent",
+      "passed": true
+    },
+    {
+      "name": "Palm contacts do not end the pen",
+      "passed": true
+    },
+    {
+      "name": "Output progresses before tapping stops",
+      "passed": true,
+      "midBurstLayers": 9
+    },
+    {
+      "name": "Finger release preserves held pen",
+      "passed": true
+    },
+    {
+      "name": "Every native pen contact commits once",
+      "passed": true,
+      "layers": 21
+    }
+  ],
+  "penPointerIds": [
+    3
+  ],
+  "childCaptureNotifications": [],
+  "passed": true
+}

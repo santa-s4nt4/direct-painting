@@ -10,8 +10,9 @@ export function outputPhase(state, serverNow) {
 }
 
 export function createPublisher(getSnapshot, onStatus) {
-  let timer, pending = false, running = false;
+  let timer = null, pending = false, running = false;
   async function send() {
+    clearTimeout(timer); timer = null;
     if (running) { pending = true; return; }
     running = true;
     try {
@@ -21,7 +22,9 @@ export function createPublisher(getSnapshot, onStatus) {
     } catch { onStatus(false); }
     finally { running = false; if (pending) { pending = false; send(); } }
   }
-  return { publish(immediate = false) { clearTimeout(timer); if (immediate) send(); else timer = setTimeout(send, 100); } };
+  // Coalesce updates within a bounded interval. Restarting a debounce timer on
+  // every completed tap starves the output while the Pencil keeps tapping.
+  return { publish(immediate = false) { if (immediate) send(); else if (timer === null) timer = setTimeout(send, 100); } };
 }
 
 // One request in flight, incremental samples and a fixed 60Hz grid keep pencil
