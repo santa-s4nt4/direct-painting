@@ -38,6 +38,55 @@ export function activeMotionDuration(clip) {
   return clip.trace && !clip.trace.pending ? clip.trace.drawMs : clip.duration;
 }
 
+export function traceIsFilled(clip) {
+  return ['circle', 'rect'].includes(clip.trace?.sourceShape ?? clip.shape ?? 'circle');
+}
+
+// The leading point follows the perimeter exactly, including rectangle corners.
+function contourPoint(visual, progress) {
+  if (visual.shape === 'trace-circle') {
+    const angle = -Math.PI / 2 + progress * Math.PI * 2;
+    return [Math.cos(angle) * visual.size / 2, Math.sin(angle) * visual.size / 2];
+  }
+  const w = visual.width, h = visual.height, distance = progress * 2 * (w + h);
+  if (distance <= w) return [-w / 2 + distance, -h / 2];
+  if (distance <= w + h) return [w / 2, -h / 2 + distance - w];
+  if (distance <= 2 * w + h) return [w / 2 - (distance - w - h), h / 2];
+  return [-w / 2, h / 2 - (distance - 2 * w - h)];
+}
+
+function visualPoint(visual, [x, y]) {
+  const angle = visual.angle * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
+  return { x: visual.x + x * c - y * s, y: visual.y + x * s + y * c };
+}
+
+// Convex pieces of the swept face, shared by CPU drawing and 3D intersections.
+// At most two circle sectors or four rectangle triangles, with no stroke width.
+export function traceFillPolygons(clip, time = Infinity) {
+  const visual = traceVisual(clip, time);
+  if (!visual?.traceFill || visual.traceProgress <= 0) return [];
+  const progress = visual.traceProgress, pieces = [];
+  if (visual.shape === 'trace-circle') {
+    if (progress >= 1) pieces.push(Array.from({ length: 96 }, (_, i) => contourPoint(visual, i / 96)));
+    else for (let start = 0; start < progress; start += .5) {
+      const end = Math.min(progress, start + .5), steps = Math.max(1, Math.ceil((end - start) * 96));
+      pieces.push([[0, 0], ...Array.from({ length: steps + 1 }, (_, i) => contourPoint(visual, start + (end - start) * i / steps))]);
+    }
+  } else {
+    const w = visual.width, h = visual.height, corners = [[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2]], lengths = [w,h,w,h];
+    if (progress >= 1) pieces.push(corners);
+    else {
+      let remaining = progress * 2 * (w + h);
+      for (let i = 0; i < 4 && remaining > 0; i++) {
+        const a = corners[i], b = corners[(i + 1) % 4], fraction = Math.min(1, remaining / lengths[i]);
+        pieces.push([[0, 0], a, [a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction]]);
+        remaining -= lengths[i];
+      }
+    }
+  }
+  return pieces.map(polygon => polygon.map(point => visualPoint(visual, point)));
+}
+
 function traceSamples(clip) {
   if (samplesByClip.has(clip)) return samplesByClip.get(clip);
   const trace = clip.trace, peak = trace?.peak;
@@ -108,16 +157,18 @@ export function tracePlaybackClip(clip) {
 export function traceHead(clip, time) {
   const drawMs = clip.trace?.drawMs;
   if (drawMs == null || time >= drawMs) return null;
-  return atTime(traceSamples(clip), Math.max(0, time));
+  const visual = traceVisual(clip, time);
+  return visual ? { ...visualPoint(visual, contourPoint(visual, visual.traceProgress)), t: Math.max(0, time) } : null;
 }
 
-// GPU outlines are analytic; CPU/intersections keep the sampled path above.
+// GPU coverage uses the same eased contour for the outline or swept fill.
+// CPU/intersections use sampled outlines or the convex filled pieces above.
 export function traceVisual(clip, time) {
   const trace = clip.trace, peak = trace?.peak;
   if (!peak || trace.pending) return null;
   const rect = ['rect', 'rect-ring'].includes(trace.sourceShape ?? clip.shape);
   return { ...peak, shape: rect ? 'trace-rect' : 'trace-circle', angle: peak.angle ?? clip.angle ?? 0,
     width: rect ? peak.width ?? peak.size : peak.size, height: rect ? peak.height ?? peak.size : peak.size,
-    strokeWidth: trace.strokeWidth ?? 20,
+    traceFill: traceIsFilled(clip), strokeWidth: traceIsFilled(clip) ? 0 : trace.strokeWidth ?? 20,
     traceProgress: easeInOut(Math.max(0, Math.min(1, time / trace.drawMs))) };
 }

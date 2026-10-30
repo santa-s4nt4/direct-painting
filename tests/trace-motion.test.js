@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeMotionDuration, largestShapePose, traceHead, tracePlaybackClip, traceSamplesAt } from '../src/trace-motion.js';
+import { activeMotionDuration, largestShapePose, traceHead, tracePlaybackClip, traceSamplesAt, traceVisual, traceFillPolygons } from '../src/trace-motion.js';
 import { LineSchedule, finishFirstCycle } from '../src/line-tool.js';
 import { validateProject } from '../src/loop.js';
 import { DEFAULT_SETTINGS, normalizeProject, parseProject, serializeProject } from '../src/project.js';
@@ -78,4 +78,40 @@ test('new Motion and intersection settings default off and round-trip in saved p
   assert.equal(validateSnapshot(packet, 10).project.settings.intersections, true);
   assert.throws(() => validateSnapshot({ ...packet, project: { ...source, settings: { ...source.settings, traceMotion: 'yes' } } }, 10));
   assert.throws(() => validateSnapshot({ ...packet, project: { ...source, settings: { ...source.settings, traceDurationMs: 10 } } }, 10));
+});
+
+const area = polygons => polygons.reduce((sum, polygon) => sum + Math.abs(polygon.reduce((a, p, i) => {
+  const q = polygon[(i + 1) % polygon.length]; return a + p.x * q.y - p.y * q.x;
+}, 0)) / 2, 0);
+
+test('filled circle Trace sweeps from its center and completes a filled disk without changing the first cycle', () => {
+  const source = base({ trace: { pending: true, drawMs: 500, strokeWidth: 70, peak: { x: 1920, y: 1080, size: 200, t: 100 } } });
+  assert.equal(tracePlaybackClip(source), source); assert.equal(traceVisual(source, 250), null);
+  const clip = tracePlaybackClip(finishFirstCycle(source));
+  assert.equal(traceVisual(clip, 250).traceFill, true); assert.equal(traceVisual(clip, 250).strokeWidth, 0);
+  assert.deepEqual(traceFillPolygons(clip, 0), []);
+  const half = traceFillPolygons(clip, 250);
+  assert.equal(half.length, 1); assert.ok(half.flat().every(p => p.x >= 1920 - 1e-6));
+  assert.ok(Math.abs(area(half) / (Math.PI * 100 ** 2 / 2) - 1) < .001);
+  const full = traceFillPolygons(clip, 500);
+  assert.equal(full.length, 1); assert.ok(Math.abs(area(full) / (Math.PI * 100 ** 2) - 1) < .001);
+  assert.equal(traceHead(clip, 500), null);
+  const restored = parseProject(serializeProject({ version: 1, duration: 16000, clips: [finishFirstCycle(source)] }, { playing: true, phase: 0 })).project.clips[0];
+  assert.equal(traceVisual(restored, 250).traceFill, true);
+});
+
+test('filled rectangle Trace follows perimeter distance, preserves its rotation and leaves Ring Trace outlined', () => {
+  const source = base({ shape: 'rect', trace: { pending: false, drawMs: 500, strokeWidth: 20, peak: { x: 1920, y: 1080, size: 400, width: 400, height: 200, angle: 0, t: 100 } } });
+  const head = traceHead(source, 125);
+  assert.deepEqual(head, { x: 1907.5, y: 980, t: 125 });
+  assert.equal(area(traceFillPolygons(source, 125)), 9375);
+  assert.equal(area(traceFillPolygons(source, 500)), 80000);
+  const rotated = { ...source, trace: { ...source.trace, peak: { ...source.trace.peak, angle: 90 } } };
+  assert.ok(Math.abs(area(traceFillPolygons(rotated, 375)) - area(traceFillPolygons(source, 375))) < 1e-6);
+  const rotatedHead = traceHead(rotated, 125); assert.ok(Math.abs(rotatedHead.x - 2020) < 1e-6); assert.ok(Math.abs(rotatedHead.y - 1067.5) < 1e-6);
+  for (const shape of ['ring', 'rect-ring']) {
+    const ring = tracePlaybackClip({ ...source, shape });
+    assert.equal(traceVisual(ring, 250).traceFill, false); assert.equal(traceVisual(ring, 250).strokeWidth, 20);
+    assert.deepEqual(traceFillPolygons(ring, 250), []);
+  }
 });

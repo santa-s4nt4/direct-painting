@@ -101,7 +101,7 @@ export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
       await next();
     }
     const expectedCanvas = document.createElement('canvas'); expectedCanvas.width = 1920; expectedCanvas.height = 1080; const ctx = expectedCanvas.getContext('2d', { willReadFrequently: true });
-    for (const [shape, filled] of [['circle', false], ['rect', false]]) {
+    for (const [shape, filled] of [['circle', false], ['rect', false], ['circle', true], ['rect', true]]) {
       const source = clip(0, { shape: filled ? shape : shape === 'circle' ? 'ring' : 'rect-ring', color: '#ffffff', samples: [{ x: 1920, y: 1080, size: 400, t: 0 }], trace: { pending: false, drawMs: 500, strokeWidth: 10, peak: { x: 1920, y: 1080, size: 400, width: 400, height: 260, angle: 25, t: 0 } } });
       gpu.setProject(project([source])); gpu.setView(DEFAULT_VIEW); const before = gpu.stats.masksCreated; let mismatch = 0, fractional = 0;
       for (const time of [0, 125, 250, 375, 500]) {

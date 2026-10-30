@@ -138,7 +138,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
    if((circle||ring||completeTrace)&&shader.uniforms.clipInsideBox.value===1&&exposure.every(s=>s.time===time&&s.visual===visual)){
     const conics=projection.inverse.map(m=>cameraCircleConic(m,visual.x,visual.y));
     if(conics.every(Boolean)){
-     const radius=visual.size/2,stroke=completeTrace?visual.strokeWidth:(item.clip.ringWidth??DEFAULT_RING_WIDTH),outer=radius+(completeTrace?stroke/2:0),inner=circle?0:Math.max(0,radius-(completeTrace?stroke/2:stroke));
+     const radius=visual.size/2,stroke=completeTrace?visual.strokeWidth:(item.clip.ringWidth??DEFAULT_RING_WIDTH),outer=radius+(completeTrace?stroke/2:0),inner=circle||visual.traceFill?0:Math.max(0,radius-(completeTrace?stroke/2:stroke));
      conics.forEach((m,i)=>shader.uniforms.cameraInverse.value[i].set(...m));shader.uniforms.cameraCircleRadii.value.set(outer*outer,inner*inner);shader.uniforms.cameraConicCount.value=exposure.length;this.stats.cameraFastLayers++;
     }
    }

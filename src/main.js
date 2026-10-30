@@ -22,7 +22,7 @@ import { colorHSL, editLayerLightness, pickLayerColor, hasColorGradient, hasFire
 import { dimensionRange, resizeDimension } from './geometry.js';
 import { editLayer, removeLayerSides, moveLayer } from './layers.js';
 import { EditHistory } from './history.js';
-import { largestShapePose } from './trace-motion.js';
+import { largestShapePose, traceIsFilled } from './trace-motion.js';
 
 const icons = {
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -519,7 +519,7 @@ function rebuildCache() {
       if (!traceToggle.checked) { const { trace, ...rest } = item; return rest; }
       return { ...item, trace: { pending: false, drawMs: state.traceDurationMs, strokeWidth: item.ringWidth ?? DEFAULT_RING_WIDTH, sourceShape: item.shape, peak: largestShapePose(item) } };
     }, true));
-    sync.push(() => { traceToggle.checked = Boolean(current().trace); traceDrawTime.disabled = traceStroke.disabled = !current().trace; });
+    sync.push(() => { traceToggle.checked = Boolean(current().trace); traceDrawTime.disabled = !current().trace; traceStroke.disabled = !current().trace || traceIsFilled(current()); });
     traceControls.hidden = clip.mode !== 'move' || Boolean(clip.procedural);
     const envelope = section('TIMING');
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');

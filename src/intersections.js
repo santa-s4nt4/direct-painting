@@ -1,6 +1,6 @@
 import { BOX_SPEC, pointInSpace, projectSpace, insideBox, clipPolygonToBox } from './space.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from './canvas.js';
-import { traceSamplesAt } from './trace-motion.js';
+import { traceSamplesAt, traceIsFilled, traceFillPolygons } from './trace-motion.js';
 
 const GEOMETRY_EPSILON = 1e-5;
 const PLANE_EPSILON = 0.05;
@@ -138,6 +138,20 @@ function makeFace(entry) {
     return { kind: 'line', owner: entry.owner ?? clip.id, alpha: entry.alpha, start: clip.points3D[0], end: clip.points3D[1] };
   }
   if (clip.trace && !clip.trace.pending) {
+    if (traceIsFilled(clip)) {
+      const peak = clip.trace.peak, polygons = traceFillPolygons(clip, time ?? clip.trace.drawMs);
+      if (!polygons.length) return null;
+      const center = pointInSpace(peak, plane, origin), u = [plane[0], plane[3], plane[6]], v = [plane[1], plane[4], plane[7]], normal = cross3(u, v);
+      const patches = polygons.map(polygon => polygon.map(p => [p.x - peak.x, p.y - peak.y]));
+      const toLocal = world => { const delta = sub3(world, center); return [dot3(delta, u), dot3(delta, v)]; };
+      const margin = local => Math.max(...patches.map(polygon => Math.min(...polygon.map((a, i) => {
+        const b = polygon[(i + 1) % polygon.length], edge = [b[0] - a[0], b[1] - a[1]];
+        return cross2(edge, [local[0] - a[0], local[1] - a[1]]) / Math.max(GEOMETRY_EPSILON, Math.hypot(...edge));
+      }))));
+      return { owner: entry.owner ?? clip.id, alpha: entry.alpha, center, u, v, normal, patches, holes: [], toLocal,
+        toWorld: local => add3(center, add3(mul3(u, local[0]), mul3(v, local[1]))),
+        contains: world => margin(toLocal(world)) >= -PLANE_EPSILON, clearance: world => margin(toLocal(world)) };
+    }
     const samples = traceSamplesAt(clip, time);
     if (!samples.length) return null;
     const u = [plane[0], plane[3], plane[6]], v = [plane[1], plane[4], plane[7]], center = pointInSpace(samples[0], plane, origin);

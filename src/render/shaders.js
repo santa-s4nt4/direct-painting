@@ -46,7 +46,24 @@ float capsuleCoverage(vec2 p,vec2 size) {
   vec2 q=vec2(max(abs(p.x)-size.x*.5,0.),p.y);
   return edgeCoverage(dot(q,q)-size.y*size.y*.25);
 }
+float sweepCoverage(vec2 p,vec2 start,vec2 end) {
+  float a=start.x*p.y-start.y*p.x,b=p.x*end.y-p.y*end.x;
+  return edgeCoverage(traceProgress<=.5?max(-a,-b):min(-a,-b));
+}
 float traceCoverage(vec2 p,vec2 size,bool rect,float stroke) {
+  if(stroke<=0.){
+    if(traceProgress<=0.)return 0.;
+    float coverage=shapeCoverage(p,size,rect,0.);
+    if(traceProgress>=1.)return coverage;
+    if(!rect)return coverage*sweepCoverage(p,vec2(0.,-1.),traceEnd);
+    vec2 halfSize=size*.5,end;
+    float drawn=traceProgress*2.*(size.x+size.y);
+    if(drawn<=size.x)end=vec2(-halfSize.x+drawn,-halfSize.y);
+    else if(drawn<=size.x+size.y)end=vec2(halfSize.x,-halfSize.y+drawn-size.x);
+    else if(drawn<=2.*size.x+size.y)end=vec2(halfSize.x-(drawn-size.x-size.y),halfSize.y);
+    else end=vec2(-halfSize.x,halfSize.y-(drawn-2.*size.x-size.y));
+    return coverage*sweepCoverage(p,-halfSize,end);
+  }
   float halfStroke=stroke*.5,d;
   if(!rect){
     float radius=size.x*.5,q=dot(p,p);

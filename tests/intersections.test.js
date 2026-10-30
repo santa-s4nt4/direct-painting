@@ -43,7 +43,7 @@ test('coplanar face intersections exclude the empty hole of an outline shape', (
   assert.ok(Math.hypot(...markers[0].world.slice(0, 2)) >= 180 - 0.05);
 });
 
-const traceEntry = (id, x, shape = 'rect') => ({ clip: clip(id, shape, { trace: { pending: false, sourceShape: shape, drawMs: 500, strokeWidth: 20, peak: { x, y: 1080, size: 300, width: 300, height: 200, t: 0 } } }), visual: null, time: 500, alpha: 1 });
+const traceEntry = (id, x, shape = 'rect-ring') => ({ clip: clip(id, shape, { trace: { pending: false, sourceShape: shape, drawMs: 500, strokeWidth: 20, peak: { x, y: 1080, size: 300, width: 300, height: 200, t: 0 } } }), visual: null, time: 500, alpha: 1 });
 
 test('Trace face queries cull distant capsules and reuse world intersections when only the camera changes', () => {
   const entries = [traceEntry('a', 1920), traceEntry('b', 2020)], detector = new IntersectionDetector();
@@ -92,4 +92,19 @@ test('Trace intersections only consider the portion drawn by the current source 
   const traceEntry = time => ({ clip: trace, visual: null, time, alpha: 1 });
   assert.deepEqual(findIntersections([traceEntry(100), crossing], DEFAULT_VIEW), []);
   assert.ok(findIntersections([traceEntry(500), crossing], DEFAULT_VIEW).length > 0);
+});
+
+test('filled Trace intersections include the swept interior, exclude unpainted sectors and ignore stroke width', () => {
+  for (const shape of ['circle', 'rect']) {
+    const filled = traceEntry('filled', 1920, shape), detector = new IntersectionDetector();
+    const disk = entry('inside', { x: 1970, y: 1040, size: 20, shape: 'circle' });
+    filled.time = 0; assert.deepEqual(detector.find([filled, disk], DEFAULT_VIEW), []);
+    filled.time = 250; assert.equal(detector.find([filled, disk], DEFAULT_VIEW).length, 1);
+    disk.visual.x = 1870; disk.visual.y = 1120; assert.deepEqual(detector.find([filled, disk], DEFAULT_VIEW), []);
+    filled.time = 500; assert.equal(detector.find([filled, disk], DEFAULT_VIEW).length, 1);
+    filled.clip.trace.strokeWidth = 1000; disk.visual.x = 2400;
+    assert.deepEqual(detector.find([filled, disk], DEFAULT_VIEW), [], 'A wide stroke cannot grow the filled face');
+    disk.visual.x = 1970; disk.clip.origin = [0, 0, 50];
+    assert.deepEqual(detector.find([filled, disk], DEFAULT_VIEW), [], 'Projection-only overlap is still excluded');
+  }
 });

@@ -10,7 +10,7 @@ import { colorAtTime } from '../color.js';
 import { LiveStroke } from './stroke.js';
 import { CPULayerEffects } from './cpu-effects.js';
 import { compositePixel, PigmentMixer } from '../blend.js';
-import { tracePlaybackClip, traceHead } from '../trace-motion.js';
+import { tracePlaybackClip, traceHead, traceVisual, traceIsFilled, traceFillPolygons } from '../trace-motion.js';
 import { IntersectionDetector, IntersectionPulseTracker } from '../intersections.js';
 function polygons(p,style){
  const shape=p.shape,w=p.width??p.size,h=p.height??p.size,r=p.size/2,edge=style.ringWidth??DEFAULT_RING_WIDTH,angle=(p.angle??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
@@ -40,6 +40,7 @@ export class CPUVolumeRenderer {
    if(c.mode==='line'&&c.linePending){if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration),visual=m.gesture.render(t),alpha=gestureOpacity(m.clip,t)*(m.clip.opacity??1);add(m.clip,t,gestureOpacity(m.clip,t),visual,null,s=>m.gesture.render(s));intersectionEntries.push({clip:m.clip,owner:c.id,visual,time:t,alpha});}}else for(const p of c.samples){const preview={...c,ringWidth:Math.min(c.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))},visual={...p,shape:'ring'};add(preview,0,1,visual);intersectionEntries.push({clip:preview,visual,time:0,alpha:1});}continue;}
    const t=gestureTime(c,phase,this.duration),opacity=gestureOpacity(c,t);
    if(c.mode==='line'&&c.points3D){const g=lineGeometry(c,this.view),lineClip={...c,plane:g.plane,origin:g.origin};add(lineClip,t,opacity,g.visual);intersectionEntries.push({clip:lineClip,visual:g.visual,time:t,alpha:opacity*(c.opacity??1)});}
+   else if(c.trace&&!c.trace.pending&&traceIsFilled(c)){add(c,t,opacity,traceVisual(c,t));}
    else{const visual=item.gesture.render(t);if(c.mode==='move'||c.mode==='place'){add(c,t,opacity*(visual.opacity??1),visual,null,s=>item.gesture.render(s));intersectionEntries.push({clip:c,visual,time:t,alpha:opacity*(visual.opacity??1)*(c.opacity??1)});}else add(c,t,opacity,null,visual);}
    if(c.trace&&!c.trace.pending){const alpha=opacity*(c.opacity??1),head=traceHead(c,t),space=head&&pointInSpace(head,c.plane,c.origin);if(space&&insideBox(space)){const point=projectSpace(space,this.view);if(Number.isFinite(point.x)&&Number.isFinite(point.y))markers.push({x:point.x,y:point.y,alpha});}intersectionEntries.push({clip:c,visual:null,time:t,alpha});}
   }
@@ -53,7 +54,8 @@ export class CPUVolumeRenderer {
     for(const sample of samples){
      if(!sample.visual||sample.opacity<=0)continue;
      this.layerCtx.globalAlpha=sample.opacity/samples.length;this.layerCtx.fillStyle=colorAtTime(clip,sample.time,sample.visual);this.layerCtx.beginPath();
-     for(const polygon of polygons(sample.visual,clip)){const points=clipPolygonToBox(polygon.map(p=>pointInSpace(p,clip.plane,clip.origin))).map(p=>projectSpace(p,sample.view??this.view));if(!points.length)continue;this.layerCtx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))this.layerCtx.lineTo(p.x,p.y);this.layerCtx.closePath();}this.layerCtx.fill('evenodd');
+     const faces=sample.visual.traceFill?traceFillPolygons(clip,sample.time):polygons(sample.visual,clip);
+     for(const polygon of faces){const points=clipPolygonToBox(polygon.map(p=>pointInSpace(p,clip.plane,clip.origin))).map(p=>projectSpace(p,sample.view??this.view));if(!points.length)continue;this.layerCtx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))this.layerCtx.lineTo(p.x,p.y);this.layerCtx.closePath();}this.layerCtx.fill('evenodd');
     }
     this.layerCtx.globalAlpha=1;this.layerCtx.globalCompositeOperation='source-over';
    }
