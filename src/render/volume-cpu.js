@@ -2,7 +2,7 @@ import { cameraExposure } from './camera-exposure.js';
 import { motionExposure } from './motion-blur.js';
 import { canvasView, invertHomography, viewRotation } from '../view.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H, MARKER_DIAMETER } from '../canvas.js';
-import { pointInSpace, projectVisibleSpace, projectPlanePolygon, lineGeometry, multiply, planeHomography } from '../space.js';
+import { pointInSpace, projectPlanePolygon, lineGeometry, multiply, planeHomography } from '../space.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
 import { paintingStyle, DEFAULT_RING_WIDTH } from '../effects.js';
 import { layerVariants } from '../layers.js';
@@ -10,7 +10,7 @@ import { colorAtTime } from '../color.js';
 import { LiveStroke } from './stroke.js';
 import { CPULayerEffects } from './cpu-effects.js';
 import { compositePixel, PigmentMixer } from '../blend.js';
-import { tracePlaybackClip, traceHead, traceVisual, traceSamplesAt, traceFillPolygons } from '../trace-motion.js';
+import { tracePlaybackClip, traceHeadMarkers, traceHeadFrameWindow, traceVisual, traceSamplesAt, traceFillPolygons } from '../trace-motion.js';
 import { IntersectionDetector, IntersectionPulseTracker } from '../intersections.js';
 function polygons(p,style){
  const shape=p.shape,w=p.width??p.size,h=p.height??p.size,r=p.size/2,edge=style.ringWidth??DEFAULT_RING_WIDTH,angle=(p.angle??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
@@ -45,6 +45,7 @@ export class CPUVolumeRenderer {
  setLiveStroke(stroke,now,move){this.live.setLocal(stroke,now,move);}
  receiveLive(packet,now){this.live.update(packet,now);}
  draw(side,phase,{now=performance.now(),cameraViews=null}={}){
+  const headWindow=traceHeadFrameWindow(this.headFrame,phase,now);this.headFrame={phase,now};
   const jobs=[],intersectionEntries=[],markers=[],add=(clip,time,opacity,visual,bitmap,sample,live=false)=>{ if(visual?.active!==false)jobs.push({clip,time,opacity,visual,bitmap,exposure:cameraViews&&visual?cameraExposure(clip,time,visual,sample,cameraViews,{live}):sample?motionExposure(clip,time,visual,sample,{live}):null}); };
   for(const item of this.items){const c=item.clip;if(!c.enabled||!c.targets.includes(side)||!gestureVisible(c,phase,this.duration))continue;
    if(c.mode==='line'&&c.linePending){if(item.markers.length){for(const m of item.markers)if(gestureVisible(m.clip,phase,this.duration)){const t=gestureTime(m.clip,phase,this.duration),visual=m.gesture.render(t),alpha=gestureOpacity(m.clip,t)*(m.clip.opacity??1);add(m.clip,t,gestureOpacity(m.clip,t),visual,null,s=>m.gesture.render(s));intersectionEntries.push({clip:m.clip,owner:c.id,visual,time:t,alpha});}}else for(const p of c.samples){const preview={...c,ringWidth:Math.min(c.ringWidth??DEFAULT_RING_WIDTH,12,Math.floor(p.size/4))},visual={...p,shape:'ring'};add(preview,0,1,visual);intersectionEntries.push({clip:preview,visual,time:0,alpha:1});}continue;}
@@ -52,7 +53,7 @@ export class CPUVolumeRenderer {
    if(c.mode==='line'&&c.points3D){const g=lineGeometry(c,this.view),lineClip={...c,plane:g.plane,origin:g.origin};add(lineClip,t,opacity,g.visual);intersectionEntries.push({clip:lineClip,visual:g.visual,time:t,alpha:opacity*(c.opacity??1)});}
    else if(c.trace&&!c.trace.pending){add(c,t,opacity,traceVisual(c,t));}
    else{const visual=item.gesture.render(t);if(c.mode==='move'||c.mode==='place'){add(c,t,opacity*(visual.opacity??1),visual,null,s=>item.gesture.render(s));intersectionEntries.push({clip:c,visual,time:t,alpha:opacity*(visual.opacity??1)*(c.opacity??1)});}else add(c,t,opacity,null,visual);}
-   if(c.trace&&!c.trace.pending){const alpha=opacity*(c.opacity??1),head=traceHead(c,t),space=head&&pointInSpace(head,c.plane,c.origin),point=space&&projectVisibleSpace(space,this.view);if(point)markers.push({...point,alpha});intersectionEntries.push({clip:c,visual:null,time:t,alpha});}
+   if(c.trace&&!c.trace.pending){const alpha=opacity*(c.opacity??1);for(const marker of traceHeadMarkers(c,t,this.view,headWindow)){marker.alpha*=alpha;markers.push(marker);}intersectionEntries.push({clip:c,visual:null,time:t,alpha});}
   }
   const live=this.live;if(live.id&&live.targets.includes(side)){const visual=live.move??live.head;add(live,live.elapsed,1,visual,null,t=>live.motionAt(t),true);intersectionEntries.push({clip:live,visual,time:live.elapsed,alpha:live.opacity??1});}
   const r=viewRotation(this.view);for(const job of jobs)job.depth=multiply(r,pointInSpace(job.visual??{x:W/2,y:H/2},job.clip.plane,job.clip.origin))[2];jobs.sort((a,b)=>a.depth-b.depth);
@@ -77,8 +78,9 @@ export class CPUVolumeRenderer {
   // Keep screen-space markers out of cameraExposure samples and layer effects.
   if(this.intersections)markers.push(...this.intersectionPulses.update(side,this.intersectionDetector.find(intersectionEntries,this.view),phase,this.intersectionTiming,this.view,intersectionEntries));
   else this.intersectionPulses.reset();
-  this.ctx.save();for(const marker of markers){this.ctx.globalAlpha=Math.max(0,Math.min(1,marker.alpha??1));this.ctx.fillStyle='#fff';this.ctx.beginPath();this.ctx.arc(marker.x,marker.y,MARKER_DIAMETER/2,0,Math.PI*2);this.ctx.fill();}this.ctx.restore();
+  this.drawSharpOverlayMarkers(markers);
   this.outputCtx.imageSmoothingEnabled=true;this.outputCtx.drawImage(this.surface,0,0,VW,VH,0,0,this.outputWidth,this.outputHeight);
  }
+ drawSharpOverlayMarkers(markers){this.ctx.save();for(const marker of markers){this.ctx.globalAlpha=Math.max(0,Math.min(1,marker.alpha??1));this.ctx.fillStyle='#fff';this.ctx.beginPath();this.ctx.arc(marker.x,marker.y,MARKER_DIAMETER/2,0,Math.PI*2);this.ctx.fill();}this.ctx.restore();}
  dispose(){this.items=[];this.live.clear();}
 }

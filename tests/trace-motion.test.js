@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeMotionDuration, largestShapePose, traceHead, tracePlaybackClip, traceSamplesAt, traceVisual, traceFillPolygons } from '../src/trace-motion.js';
+import { activeMotionDuration, largestShapePose, traceHead, traceHeadMarkers, traceHeadFrameWindow, MAX_TRACE_HEAD_MARKERS, tracePlaybackClip, traceSamplesAt, traceVisual, traceFillPolygons } from '../src/trace-motion.js';
+import { DEFAULT_VIEW, canvasView } from '../src/view.js';
+import { projectSpace, pointInSpace } from '../src/space.js';
+import { RENDER_FRAME_MS } from '../src/timing.js';
 import { LineSchedule, finishFirstCycle } from '../src/line-tool.js';
 import { validateProject } from '../src/loop.js';
 import { DEFAULT_SETTINGS, normalizeProject, parseProject, serializeProject } from '../src/project.js';
@@ -114,4 +117,41 @@ test('filled rectangle Trace follows perimeter distance, preserves its rotation 
     assert.equal(traceVisual(ring, 250).traceFill, false); assert.equal(traceVisual(ring, 250).strokeWidth, 20);
     assert.deepEqual(traceFillPolygons(ring, 250), []);
   }
+});
+
+test('Trace heads cover the travel between 30fps positions with a bounded fading sweep on the contour',()=>{
+ const clip=base({shape:'ring',trace:{pending:false,drawMs:500,strokeWidth:20,peak:{x:1920,y:1080,size:800,t:100}}});
+ const markers=traceHeadMarkers(clip,250,DEFAULT_VIEW),head=projectSpace(pointInSpace(traceHead(clip,250)),DEFAULT_VIEW);
+ assert.ok(markers.length>10&&markers.length<=MAX_TRACE_HEAD_MARKERS);assert.deepEqual(markers[0],{...head,alpha:1,traceHead:true});
+ assert.ok(markers.slice(1).every(p=>p.alpha>0&&p.alpha<=.550001));
+ for(const p of markers)assert.ok(Math.abs(Math.hypot(p.x-960,p.y-540)-400)<.5,'Interpolated circles stay on the curve');
+ for(let i=1;i<=30;i++){
+  const t=250-RENDER_FRAME_MS*(1-i/30),point=projectSpace(pointInSpace(traceHead(clip,t)),DEFAULT_VIEW);
+  assert.ok(Math.min(...markers.map(p=>Math.hypot(p.x-point.x,p.y-point.y)))<7.5,'No detached white dots between frames');
+ }
+});
+
+test('Trace head sweeps turn at rectangle corners without cutting diagonally across the fill',()=>{
+ const clip=base({shape:'rect-ring',trace:{pending:false,drawMs:500,strokeWidth:20,peak:{x:1920,y:1080,size:400,width:400,height:200,t:100}}});
+ const markers=traceHeadMarkers(clip,225,DEFAULT_VIEW);
+ assert.ok(markers.length>2);assert.ok(markers.some(p=>Math.abs(p.x-1160)<1e-6&&Math.abs(p.y-440)<1e-6));
+ assert.ok(markers.every(p=>Math.abs(p.x-1160)<1e-6||Math.abs(p.y-440)<1e-6));
+ assert.deepEqual(traceHeadMarkers(clip,225,DEFAULT_VIEW),markers,'Seeking has no prior-frame image history');
+ for(const time of[-1,500,750])assert.deepEqual(traceHeadMarkers(clip,time,DEFAULT_VIEW),[]);
+ assert.deepEqual(traceHeadMarkers({...clip,trace:{...clip.trace,pending:true}},225,DEFAULT_VIEW),[]);
+});
+
+test('Trace head interpolation stays bounded through zoom and excludes hidden camera depths',()=>{
+ const clip=base({shape:'ring',trace:{pending:false,drawMs:500,strokeWidth:20,peak:{x:1920,y:-420,size:3000,t:100}}});
+ const markers=traceHeadMarkers(clip,250,canvasView({scale:5}),100);
+ assert.ok(markers.length>0&&markers.length<=MAX_TRACE_HEAD_MARKERS);
+ assert.ok(markers.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.x<=1920&&p.y>=0&&p.y<=1080));
+ assert.deepEqual(traceHeadMarkers({...clip,origin:[0,0,6000]},250,DEFAULT_VIEW),[]);
+});
+
+test('head interpolation spans a missed frame but resets its short window on seeks and loop restarts',()=>{
+ const before={phase:250,now:1000};
+ assert.equal(traceHeadFrameWindow(undefined,250,1000),RENDER_FRAME_MS);
+ assert.ok(Math.abs(traceHeadFrameWindow(before,250+2000/30,1000+2000/30)-2000/30)<1e-9);
+ for(const [phase,now]of[[250,2000],[0,1033],[9000,1033],[260,900]])assert.equal(traceHeadFrameWindow(before,phase,now),RENDER_FRAME_MS);
 });

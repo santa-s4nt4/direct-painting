@@ -5,13 +5,21 @@ import { analogFragment } from '../src/render/shaders.js';
 import { layerEffects, DEFAULT_EFFECTS } from '../src/effects.js';
 import { DEFAULT_VIEW, canvasView, CAMERA_DISTANCE } from '../src/view.js';
 import { workingPlane, pointInSpace, projectSpace } from '../src/space.js';
-import { traceHead } from '../src/trace-motion.js';
+import { traceHead, traceHeadMarkers, MAX_TRACE_HEAD_MARKERS } from '../src/trace-motion.js';
 import { cameraProjection } from '../src/render/camera-exposure.js';
 import { CameraSampler, DEFAULT_CAMERA } from '../src/camera-motion.js';
 
 // Retain the full-frame composition algorithm as an independent reference for
 // dirty-region synchronization. Both paths use the current contour shaders.
-class FullFrameReference extends VolumePaintingRenderer {
+// Compare painting coverage independently of the white overlay. Head continuity
+// and the unchanged intersection-dot footprint have their own pixel checks below.
+class CheckedRenderer extends VolumePaintingRenderer {
+  drawSharpOverlayMarkers(markers){super.drawSharpOverlayMarkers(this.hideTraceHeads?markers.filter(m=>!m.traceHead):markers);}
+}
+class CheckedCPU extends CPUVolumeRenderer {
+  drawSharpOverlayMarkers(markers){super.drawSharpOverlayMarkers(this.hideTraceHeads?markers.filter(m=>!m.traceHead):markers);}
+}
+class FullFrameReference extends CheckedRenderer {
   draw(...args) { this.referenceComposed = false; super.draw(...args); }
   pass(shader, rt) { super.pass(shader, rt); }
   prepareLayer(shader, item, ...args) {
@@ -74,7 +82,7 @@ export async function measureGPU(renderer, source, { frames = 24, phase = 400, c
 }
 
 export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
-  const report = { date: new Date().toISOString(), checks: [] }, gpu = new VolumePaintingRenderer(canvas), reference = new FullFrameReference(document.createElement('canvas'));
+  const report = { date: new Date().toISOString(), checks: [] }, gpu = new CheckedRenderer(canvas), reference = new FullFrameReference(document.createElement('canvas'));
   const check = (name, passed, details = {}) => { report.checks.push({ name, passed, ...details }); if (!passed) throw new Error(name); };
   try {
     check('Unused Blur targets are not allocated', !gpu.effectSource && !gpu.blurA && !gpu.blurB);
@@ -102,6 +110,7 @@ export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
       await next();
     }
     const expectedCanvas = document.createElement('canvas'); expectedCanvas.width = 1920; expectedCanvas.height = 1080; const ctx = expectedCanvas.getContext('2d', { willReadFrequently: true });
+    gpu.hideTraceHeads=reference.hideTraceHeads=true;
     for (const [shape, filled] of [['circle', false], ['rect', false], ['circle', true], ['rect', true]]) {
       const source = clip(0, { shape: filled ? shape : shape === 'circle' ? 'ring' : 'rect-ring', color: '#ffffff', samples: [{ x: 1920, y: 1080, size: 400, t: 0 }], trace: { pending: false, drawMs: 500, strokeWidth: 10, peak: { x: 1920, y: 1080, size: 400, width: 400, height: 260, angle: 25, t: 0 } } });
       gpu.setProject(project([source])); gpu.setView(DEFAULT_VIEW); const before = gpu.stats.masksCreated; let mismatch = 0, fractional = 0;
@@ -152,7 +161,7 @@ export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
     }
     const outsideView=canvasView({...DEFAULT_VIEW,scale:.5,distance:12000}),outsideCenter={x:5500,y:3000},scale=outsideView.scale*CAMERA_DISTANCE/outsideView.distance;
     const center=projectSpace(pointInSpace(outsideCenter,workingPlane(DEFAULT_VIEW)),outsideView);
-    const cpuOutside=new CPUVolumeRenderer(document.createElement('canvas'));
+    const cpuOutside=new CheckedCPU(document.createElement('canvas'));cpuOutside.hideTraceHeads=true;
     try{for(const shape of ['circle','ring','rect','rect-ring'])for(const tracing of [false,true]){
       const source=clip(0,{shape,angle:25,color:'#ffffff',ringWidth:20,samples:[{...outsideCenter,size:400,width:400,height:260,angle:25,t:0}],...(tracing?{trace:{pending:false,drawMs:500,strokeWidth:20,peak:{...outsideCenter,size:400,width:400,height:260,angle:25,t:0}}}:{})});
       gpu.setView(outsideView);gpu.setProject(project([source]));cpuOutside.setView(outsideView);cpuOutside.setProject(project([source]));const before=gpu.stats.masksCreated;let mismatch=0,cpuMismatch=0;
@@ -186,6 +195,16 @@ export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
     check('Camera near-plane crossings stay finite and match independently clipped sharp views',nearRms<.15&&gpu.normalMaterial.uniforms.cameraDepthClipped.value===1&&gpu.normalMaterial.uniforms.cameraConicCount.value===0,{rmsError:nearRms,maxChannelError:nearMax});
     gpu.setView(DEFAULT_VIEW);gpu.setProject(project([{...nearSource,origin:[0,0,6000]}]));gpu.draw(0,0,{cameraViews:nearViews});
     check('Geometry behind the camera is culled without mirrored fragments',gpu.readPixels().every((v,i)=>i%4===3||v===0));
+    gpu.hideTraceHeads=reference.hideTraceHeads=false;
+    const movingHead=clip(0,{shape:'ring',color:'#0055ff',trace:{pending:false,drawMs:500,strokeWidth:10,peak:{x:1920,y:1080,size:800,t:0}}});
+    gpu.setView(DEFAULT_VIEW);gpu.setProject(project([movingHead]));const capacity=gpu.markerCapacity,textures=gpu.renderer.info.memory.textures;
+    gpu.draw(0,250-1000/30,{now:0});gpu.draw(0,250,{now:1000/30});const sweepPixels=gpu.readPixels();let gaps=0;
+    for(let i=5;i<=30;i++){const p=projectSpace(pointInSpace(traceHead(movingHead,250-(1000/30)*(1-i/30)),movingHead.plane),DEFAULT_VIEW),x=Math.round(p.x),y=Math.round(p.y);if(sweepPixels[((1079-y)*1920+x)*4]<2)gaps++;}
+    check('A moving white head stays connected over a 30fps step in the existing single overlay pass',gaps===0&&gpu.markerGeometry.drawRange.count>10&&gpu.markerGeometry.drawRange.count<=MAX_TRACE_HEAD_MARKERS&&gpu.stats.drawCalls===3&&gpu.markerCapacity===capacity&&gpu.renderer.info.memory.textures===textures,{gaps,markers:gpu.markerGeometry.drawRange.count,drawCalls:gpu.stats.drawCalls,markerBufferBytes:gpu.markerData.byteLength});
+    const sweepCPU=new CPUVolumeRenderer(document.createElement('canvas'));
+    try{sweepCPU.setProject(project([movingHead]));sweepCPU.setView(DEFAULT_VIEW);sweepCPU.draw(0,250,{now:1000/30});const data=sweepCPU.canvas.getContext('2d').getImageData(0,0,1920,1080).data;let cpuGaps=0;for(let i=5;i<=30;i++){const p=projectSpace(pointInSpace(traceHead(movingHead,250-(1000/30)*(1-i/30)),movingHead.plane),DEFAULT_VIEW);if(data[(Math.round(p.y)*1920+Math.round(p.x))*4]<2)cpuGaps++;}check('CPU fallback connects the same white-head sweep',cpuGaps===0,{gaps:cpuGaps});}finally{sweepCPU.dispose();}
+    gpu.setProject(project([]));gpu.draw(0,0);gpu.drawSharpOverlayMarkers([{x:960,y:540,alpha:1}]);const intersectionPixel=gpu.readPixels();
+    check('Intersection dots retain a white 15px circular footprint with no sweep',intersectionPixel[((1079-540)*1920+960)*4]===255&&intersectionPixel[((1079-540)*1920+970)*4]===0);
     const headClip = clip(0, { color: '#fffFFF', trace: { pending: false, drawMs: 500, strokeWidth: 10, peak: { x: 1920, y: 1080, size: 400, t: 0 } } });
     gpu.setView(DEFAULT_VIEW); gpu.setProject(project([headClip])); gpu.draw(0, 499); const beforeEnd = gpu.readPixels()[((1079 - 334) * 1920 + 960) * 4]; gpu.draw(0, 500); const afterEnd = gpu.readPixels()[((1079 - 334) * 1920 + 960) * 4];
     check('Trace head disappears at draw completion while its stroke remains', beforeEnd > 200 && afterEnd <= 2, { beforeEnd, afterEnd });

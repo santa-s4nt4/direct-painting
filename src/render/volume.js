@@ -7,12 +7,12 @@ import { Matrix3, Matrix4, Vector2, Vector3, Vector4 } from 'three';
 import { WebGLPaintingRenderer, target, material } from './webgl.js';
 import { screenVertex, blurFragment, analogFragment, analogComposite } from './shaders.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
-import { IDENTITY_PLANE, lineGeometry, pointInSpace, projectVisibleSpace, multiply } from '../space.js';
+import { IDENTITY_PLANE, lineGeometry, pointInSpace, multiply } from '../space.js';
 import { viewRotation } from '../view.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
 import { sameGeometry } from './stroke.js';
 import { layerEffects, DEFAULT_RING_WIDTH } from '../effects.js';
-import { tracePlaybackClip, traceHead, traceVisual } from '../trace-motion.js';
+import { tracePlaybackClip, traceHeadMarkers, traceHeadFrameWindow, MAX_TRACE_HEAD_MARKERS, traceVisual } from '../trace-motion.js';
 import { IntersectionDetector, IntersectionPulseTracker } from '../intersections.js';
 export const volumeVertex = `
 precision highp float;
@@ -87,6 +87,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   this.intersections=project.settings?.intersections===true;
   this.setIntersectionTiming(project.settings??{});this.intersectionPulses.reset();
   super.setProject({...project,clips:project.clips.map(tracePlaybackClip)});
+  this.reserveOverlayMarkers(64+Math.min(64,this.items.filter(item=>item.clip.trace).length)*MAX_TRACE_HEAD_MARKERS);
   // Reserve the composition pair during project updates, before an orbit can
   // reveal the first overlap. A one-layer project keeps the single buffer.
   if(this.items.length>1&&!this.alternate){this.alternate=target(VW,VH,true);this.clearTarget(this.alternate);}
@@ -196,6 +197,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
  }
  draw(side,phase,{now=performance.now(),placementPreview=false,cameraViews=null}={}){
   if(this.contextLost)return;
+  const headWindow=traceHeadFrameWindow(this.headFrame,phase,now);this.headFrame={phase,now};
   this.frame++;this.renderer.info.reset();this.current=this.accumulator;this.clearTarget(this.current);this.pendingBounds=null;this.composedBounds=[];this.pairReady=false;
   const jobs=[],intersectionEntries=[],markers=[],add=(item,time,opacity,visual)=>{
    const exposure=item.exposure??(cameraViews?cameraExposure(item.clip,time,visual,item.gesture?t=>item.gesture.render(t):null,cameraViews):(item.gesture?motionExposure(item.clip,time,visual,t=>item.gesture.render(t)):null));
@@ -214,8 +216,8 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
    else if(item.moving){const visual=item.gesture.render(t);if(visual.active!==false){const alpha=opacity*(visual.opacity??1)*(clip.opacity??1);add(item,t,opacity*(visual.opacity??1),visual);intersectionEntries.push({clip,visual,time:t,alpha});}}
    else{this.paintMask(item,clip.mode==='line'?1:Math.min(t,clip.duration),null,t);add(item,t,opacity,null);}
    if(clip.trace&&!clip.trace.pending){
-    const alpha=opacity*(clip.opacity??1),head=traceHead(clip,t),space=head&&pointInSpace(head,clip.plane,clip.origin);
-    const point=space&&projectVisibleSpace(space,this.view);if(point)markers.push({...point,alpha});
+    const alpha=opacity*(clip.opacity??1);
+    for(const marker of traceHeadMarkers(clip,t,this.view,headWindow)){marker.alpha*=alpha;markers.push(marker);}
     intersectionEntries.push({clip,visual:null,time:t,alpha});
    }
   }

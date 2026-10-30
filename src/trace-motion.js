@@ -1,5 +1,8 @@
-import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from './canvas.js';
+import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, MARKER_DIAMETER } from './canvas.js';
 import { SmoothedCircle } from './motion.js';
+import { planeHomography } from './space.js';
+import { CAMERA_DISTANCE, CAMERA_NEAR, CAMERA_FAR } from './view.js';
+import { RENDER_FRAME_MS } from './timing.js';
 
 const samplesByClip = new WeakMap();
 
@@ -159,6 +162,71 @@ export function traceHead(clip, time) {
   if (drawMs == null || time >= drawMs) return null;
   const visual = traceVisual(clip, time);
   return visual ? { ...visualPoint(visual, contourPoint(visual, visual.traceProgress)), t: Math.max(0, time) } : null;
+}
+
+export const MAX_TRACE_HEAD_MARKERS = 256;
+export function traceHeadFrameWindow(previous, phase, now) {
+  if (!previous) return RENDER_FRAME_MS;
+  const delta = phase - previous.phase, elapsed = now - previous.now;
+  return delta > 0 && delta <= 100 && Math.abs(delta - elapsed) < RENDER_FRAME_MS / 2 ? Math.max(RENDER_FRAME_MS, delta) : RENDER_FRAME_MS;
+}
+// A short, fading sweep joins successive 30fps head positions. Reproject every
+// point through the current camera; no framebuffer history or camera blur.
+export function traceHeadMarkers(clip, time, view, windowMs = RENDER_FRAME_MS) {
+  if (!clip.trace || time < 0 || time >= clip.trace.drawMs || clip.trace.pending) return [];
+  const visual = traceVisual(clip, time);
+  if (!visual) return [];
+  const end = visual.traceProgress, start = easeInOut(Math.max(0, time - Math.min(100, Math.max(0, windowMs))) / clip.trace.drawMs);
+  const matrix = planeHomography(clip.plane, clip.origin, view), distance = view.distance ?? CAMERA_DISTANCE;
+  const near = CAMERA_NEAR / distance, far = CAMERA_FAR / distance, angle = visual.angle * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
+  const centerW=matrix[6]*visual.x+matrix[7]*visual.y+matrix[8],u=matrix[6]*c+matrix[7]*s,v=-matrix[6]*s+matrix[7]*c;
+  const extentW=visual.shape==='trace-rect'?(Math.abs(u)*visual.width+Math.abs(v)*visual.height)/2:Math.hypot(u,v)*visual.size/2;
+  if(centerW+extentW<near||centerW-extentW>far)return [];
+  const sample = progress => {
+    const [x,y] = contourPoint(visual,progress), px = visual.x + x*c-y*s, py = visual.y + x*s+y*c;
+    return {x:matrix[0]*px+matrix[1]*py+matrix[2], y:matrix[3]*px+matrix[4]*py+matrix[5], w:matrix[6]*px+matrix[7]*py+matrix[8], progress};
+  };
+  const project = p => ({x:p.x/p.w,y:p.y/p.w});
+  const head = sample(end), markers = [];
+  const visible = p => p.w >= near && p.w <= far && Number.isFinite(p.x) && Number.isFinite(p.y);
+  const onScreen = p => p.x >= 0 && p.x <= VW && p.y >= 0 && p.y <= VH;
+  if (visible(head)) { const p = project(head); if(onScreen(p))markers.push({...p,alpha:1,traceHead:true}); }
+  if (start === end) return markers;
+  const mix = (a,b,t) => ({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,w:a.w+(b.w-a.w)*t,progress:a.progress+(b.progress-a.progress)*t});
+  const addSegment = (a,b) => {
+    for(const [bound,sign] of [[near,1],[far,-1]]){
+      const da=sign*(a.w-bound),db=sign*(b.w-bound);
+      if(da<0&&db<0)return;
+      if(da<0)a=mix(a,b,da/(da-db));else if(db<0)b=mix(a,b,da/(da-db));
+    }
+    let p=project(a),q=project(b),low=0,high=1;const dx=q.x-p.x,dy=q.y-p.y;
+    // Clip offscreen parts before creating stamps, keeping large/zoomed traces cheap.
+    for(const [origin,delta,min,max] of [[p.x,dx,0,VW],[p.y,dy,0,VH]]){
+      if(Math.abs(delta)<1e-8){if(origin<min||origin>max)return;continue;}
+      const t0=(min-origin)/delta,t1=(max-origin)/delta;low=Math.max(low,Math.min(t0,t1));high=Math.min(high,Math.max(t0,t1));if(low>high)return;
+    }
+    const length=Math.hypot(dx,dy)*(high-low),steps=Math.max(1,Math.ceil(length/(MARKER_DIAMETER/4)));
+    for(let i=0;i<=steps&&markers.length<MAX_TRACE_HEAD_MARKERS;i++){
+      const t=low+(high-low)*i/steps,progress=a.progress+(b.progress-a.progress)*t,alpha=.275*((progress-start)/(end-start))**2,x=p.x+dx*t,y=p.y+dy*t,last=markers.at(-1);
+      if(alpha>0&&(!last||Math.hypot(x-last.x,y-last.y)>.25))markers.push({x,y,alpha,traceHead:true});
+    }
+  };
+  const walk = (a,b,depth=0) => {
+    if(markers.length>=MAX_TRACE_HEAD_MARKERS)return;
+    if(visual.shape==='trace-circle'&&depth<7){
+      const m=sample((a.progress+b.progress)/2);
+      if(!visible(a)||!visible(b)||!visible(m)){walk(a,m,depth+1);walk(m,b,depth+1);return;}
+      const p=project(a),q=project(b),r=project(m),dx=q.x-p.x,dy=q.y-p.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((r.x-p.x)*dx+(r.y-p.y)*dy)/l)):0;
+      if(Math.hypot(r.x-p.x-dx*t,r.y-p.y-dy*t)>.4){walk(a,m,depth+1);walk(m,b,depth+1);return;}
+    }
+    addSegment(a,b);
+  };
+  const knots=[end,start];
+  const w=visual.width,h=visual.height,corners=visual.shape==='trace-rect'?[w,w+h,2*w+h].map(d=>d/(2*(w+h))):[.25,.5,.75];
+  for(const corner of corners)if(corner>start&&corner<end)knots.push(corner);
+  knots.sort((a,b)=>b-a); // Spend the bounded stamp budget nearest the live head first.
+  for(let i=1;i<knots.length&&markers.length<MAX_TRACE_HEAD_MARKERS;i++)walk(sample(knots[i-1]),sample(knots[i]));
+  return markers;
 }
 
 // GPU coverage uses the same eased contour for the outline or swept fill.

@@ -93,15 +93,21 @@ export class WebGLPaintingRenderer {
   notify(backend) { this.canvas.dataset.renderer = backend; this.onBackendChange(backend); }
   // Screen-space overlays are rendered directly after camera exposure is
   // composited. They intentionally never enter the camera-motion-blur jobs.
-  drawSharpOverlayMarkers(markers = []) {
-    if (!markers.length) { this.markerGeometry.setDrawRange(0, 0); return; }
-    if (markers.length > this.markerCapacity) {
-      this.markerCapacity = 2 ** Math.ceil(Math.log2(markers.length));
+  reserveOverlayMarkers(count) {
+    if (count > this.markerCapacity) {
+      this.markerCapacity = 2 ** Math.ceil(Math.log2(count));
       this.markerData = new Float32Array(this.markerCapacity * 3);
+      this.markerGeometry.dispose();
       this.markerAttribute = new BufferAttribute(this.markerData, 3).setUsage(DynamicDrawUsage);
       this.markerGeometry.setAttribute('position', this.markerAttribute);
     }
-    for (let i = 0; i < markers.length; i++) this.markerData.set([markers[i].x, markers[i].y, Math.max(0, Math.min(1, markers[i].alpha ?? 1))], i * 3);
+  }
+  drawSharpOverlayMarkers(markers = []) {
+    if (!markers.length) { this.markerGeometry.setDrawRange(0, 0); return; }
+    this.reserveOverlayMarkers(markers.length);
+    for (let i = 0; i < markers.length; i++) {
+      const marker=markers[i],offset=i*3;this.markerData[offset]=marker.x;this.markerData[offset+1]=marker.y;this.markerData[offset+2]=Math.max(0,Math.min(1,marker.alpha??1));
+    }
     this.markerGeometry.setDrawRange(0, markers.length); this.markerAttribute.clearUpdateRanges(); this.markerAttribute.addUpdateRange(0, markers.length * 3); this.markerAttribute.needsUpdate = true;
     this.markerMaterial.uniforms.pixelScale.value = this.outputWidth / (this.volume ? VW : W);
     this.renderer.render(this.markerScene, this.camera);

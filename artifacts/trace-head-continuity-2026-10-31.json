@@ -1,0 +1,504 @@
+{
+  "date": "2026-10-31",
+  "baseline": "1471b89",
+  "approach": "Current-camera one-presentation-frame fading Trace-head sweep, using the existing single GL_POINTS overlay draw and position/alpha buffer",
+  "limits": {
+    "maximumPointsPerTrace": 256,
+    "maximumMatchingFrameGapMs": 100,
+    "targetPointSpacingFhdPixels": 3.75,
+    "targetCircleApproximationFhdPixels": 0.4
+  },
+  "nodeTests": {
+    "passed": 211,
+    "failed": 0,
+    "command": "node --test --test-concurrency=1 tests/*.test.js"
+  },
+  "build": "passed; existing >500kB bundle warning",
+  "quality": {
+    "date": "2026-10-30T22:23:06.903Z",
+    "checks": [
+      {
+        "name": "Unused Blur targets are not allocated",
+        "passed": true
+      },
+      {
+        "name": "First overlap caused by a camera orbit compiles no new programs and allocates no textures",
+        "passed": true,
+        "newPrograms": 0,
+        "newTextures": 0
+      },
+      {
+        "name": "translucent pigment overlap and mixed source-over layers: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "Blur halos across saved planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "camera exposure on rotated planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 1
+      },
+      {
+        "name": "offscreen layer culling: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "circle outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 7461,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 6,
+        "rmsError": 0.013375944641845989,
+        "channelsOver2": 9
+      },
+      {
+        "name": "Completed outline Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0039436863512501905,
+        "samples": 16
+      },
+      {
+        "name": "rect outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 8676,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.01261520980873955,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5429,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010825317547305483,
+        "channelsOver2": 0
+      },
+      {
+        "name": "Completed filled Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0035579690159581938,
+        "samples": 16
+      },
+      {
+        "name": "rect filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5979,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010063456073742665,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0017010345435994293,
+        "fastSamples": 16
+      },
+      {
+        "name": "ring: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0025983731852596815,
+        "fastSamples": 16
+      },
+      {
+        "name": "outside-guide circle: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 0,
+        "rmsError": 0,
+        "fastSamples": 16
+      },
+      {
+        "name": "Outside guide circle: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide circle Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide ring: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide ring Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect-ring: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect-ring Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Camera near-plane crossings stay finite and match independently clipped sharp views",
+        "passed": true,
+        "rmsError": 0.11858541225631422,
+        "maxChannelError": 6
+      },
+      {
+        "name": "Geometry behind the camera is culled without mirrored fragments",
+        "passed": true
+      },
+      {
+        "name": "A moving white head stays connected over a 30fps step in the existing single overlay pass",
+        "passed": true,
+        "gaps": 0,
+        "markers": 72,
+        "drawCalls": 3,
+        "markerBufferBytes": 6144
+      },
+      {
+        "name": "CPU fallback connects the same white-head sweep",
+        "passed": true,
+        "gaps": 0
+      },
+      {
+        "name": "Intersection dots retain a white 15px circular footprint with no sweep",
+        "passed": true
+      },
+      {
+        "name": "Trace head disappears at draw completion while its stroke remains",
+        "passed": true,
+        "beforeEnd": 255,
+        "afterEnd": 0
+      },
+      {
+        "name": "A Trace wider than its radius has no false central hole",
+        "passed": true
+      },
+      {
+        "name": "Ten disjoint shapes need no compositing copies and one drawing pass each",
+        "passed": true,
+        "copyPixels": 0,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 10,
+        "culledLayers": 0,
+        "cameraFastLayers": 0
+      },
+      {
+        "name": "No WebGL errors",
+        "passed": true
+      }
+    ],
+    "performance": {
+      "cpuSubmission": {
+        "samples": 24,
+        "medianMs": 0.7999999970197678,
+        "p95Ms": 1.2999999970197678
+      },
+      "gpu": {
+        "samples": 24,
+        "medianMs": 2.325833,
+        "p95Ms": 3.516208
+      },
+      "residentMaskBytes": 0,
+      "scratchBytes": 9331200,
+      "perFrame": {
+        "copyPixels": 980100,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 1,
+        "culledLayers": 0,
+        "cameraFastLayers": 0,
+        "drawCalls": 20
+      }
+    },
+    "cameraBurst": {
+      "durationMs": 200,
+      "cameraSamples": 16,
+      "performance": {
+        "cpuSubmission": {
+          "samples": 24,
+          "medianMs": 0.7999999970197678,
+          "p95Ms": 0.8999999985098839
+        },
+        "gpu": {
+          "samples": 24,
+          "medianMs": 6.384749,
+          "p95Ms": 11.480249
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 5067360,
+          "blurPixels": 0,
+          "masksCreated": 0,
+          "maskBytes": 0,
+          "directLayers": 1,
+          "culledLayers": 0,
+          "cameraFastLayers": 4,
+          "drawCalls": 8
+        }
+      }
+    },
+    "passed": true
+  },
+  "performance": {
+    "date": "2026-10-30T22:23:33.235Z",
+    "baseline": "1471b89",
+    "hardware": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "method": "Alternating before/after in the same WebGL2 context; asynchronous GPU timer queries; no saved editor writes",
+    "cases": [
+      {
+        "name": "Ten active circular Trace heads",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.6000000014901161,
+            "p95Ms": 1.1000000014901161
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 4.103375,
+            "p95Ms": 5.03625
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 10,
+          "markerBufferBytes": 768,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 6200100,
+            "blurPixels": 0,
+            "compositePixels": 6889000,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.8999999985098839,
+            "p95Ms": 1.3999999985098839
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 4.1175,
+            "p95Ms": 5.360166
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 720,
+          "markerBufferBytes": 49152,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 6200100,
+            "blurPixels": 0,
+            "compositePixels": 6889000,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "note": "The same white-overlay draw is reused; interpolation only increases points in its existing vertex buffer"
+      },
+      {
+        "name": "Ten active rectangular Trace heads",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.6000000014901161,
+            "p95Ms": 1.2999999970197678
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 4.647333,
+            "p95Ms": 6.754333
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 10,
+          "markerBufferBytes": 768,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 11372400,
+            "blurPixels": 0,
+            "compositePixels": 12636000,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.7000000029802322,
+            "p95Ms": 1.5
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 5.005041,
+            "p95Ms": 6.95925
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 850,
+          "markerBufferBytes": 49152,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 11372400,
+            "blurPixels": 0,
+            "compositePixels": 12636000,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "note": "The same white-overlay draw is reused; interpolation only increases points in its existing vertex buffer"
+      },
+      {
+        "name": "Ten active Trace heads with 16 camera views",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 1.8999999985098839,
+            "p95Ms": 2.3000000044703484
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 20.387999,
+            "p95Ms": 23.294124
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 10,
+          "markerBufferBytes": 768,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 6349716,
+            "blurPixels": 0,
+            "compositePixels": 7065216,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 1.8999999985098839,
+            "p95Ms": 2.5999999940395355
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 20.185,
+            "p95Ms": 22.14225
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "markerCount": 500,
+          "markerBufferBytes": 49152,
+          "drawCalls": 21,
+          "perFrame": {
+            "copyPixels": 6349716,
+            "blurPixels": 0,
+            "compositePixels": 7065216,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "note": "The same white-overlay draw is reused; interpolation only increases points in its existing vertex buffer"
+      }
+    ],
+    "passed": true
+  },
+  "limitations": [
+    "Presentation remains 30fps; this adds a short fading sweep rather than increasing temporal frame rate",
+    "Additional points and CPU projection have a small cost; timings are shared Apple M4 measurements, not thermal or power guarantees",
+    "Physical iPad/Safari validation was not available"
+  ]
+}
