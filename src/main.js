@@ -16,7 +16,7 @@ import { matchesPointer, penInContact, capturePointer, releasePointer, ignoreCap
 import { SmoothedCircle } from './motion.js';
 import { createPaintingRenderer } from './render/index.js';
 import { DEFAULT_EFFECTS, DEFAULT_RING_WIDTH, MAX_RING_WIDTH, EFFECT_LIMITS, layerEffects } from './effects.js';
-import { FixedLoopClock, DEFAULT_LOOP_MS, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
+import { FixedLoopClock, DEFAULT_LOOP_MS, DEFAULT_FADE_MS, gestureLength, trimRange, playbackLength, trimGesture, resetGestureTrim, fitGestureTrim, MIN_TRIM_MS, layerSizeRange, resizeGesture } from './loop.js';
 import { createPublisher, createLivePublisher, createViewPublisher, createCameraPublisher, playbackSnapshot } from './relay.js';
 import { loadProject, saveProject } from './cache.js';
 import { DEFAULT_SETTINGS, MAX_PROJECT_BYTES, normalizeProject, singleCanvasProject, serializeProject, parseProject } from './project.js';
@@ -52,8 +52,8 @@ document.querySelector('#app').innerHTML = `
         <button class="clear-button" id="clear" aria-label="Clear canvas">${icon('trash')}<span>CLEAR</span></button>
         <div class="control-section effect-controls">
           <span class="section-label">RELEASE FADE</span>
-          <div class="effect-value"><label for="fade-seconds">TIME</label><input id="fade-seconds" type="number" min="0.1" max="10" step="0.1" value="2" inputmode="decimal" aria-label="Release fade time in seconds"><span>s</span></div>
-          <input id="fade-range" type="range" min="0.1" max="10" step="0.1" value="2" aria-label="Release fade duration slider">
+          <div class="effect-value"><label for="fade-seconds">TIME</label><input id="fade-seconds" type="number" min="0.1" max="10" step="0.1" value="${DEFAULT_FADE_MS / 1000}" inputmode="decimal" aria-label="Release fade time in seconds"><span>s</span></div>
+          <input id="fade-range" type="range" min="0.1" max="10" step="0.1" value="${DEFAULT_FADE_MS / 1000}" aria-label="Release fade duration slider">
         </div>
         <div class="control-section">
           <span class="section-label">SHAPE</span>
@@ -528,7 +528,7 @@ function rebuildCache() {
     number(envelope, 'START', 'start time in seconds', item => Number(((item.start ?? 0) / 1000).toFixed(3)), 0, clock.duration / 1000 - 0.001, 0.001, (item, value) => ({ ...item, start: Math.round(value * 1000) }), 's');
     if (current().mode === 'place') {
       for (const [key, text, min, max, fallback] of [['fadeInMs', 'FADE IN', 0, 10, 300], ['holdMs', 'HOLD', 0.1, 600, 1000], ['fadeOutMs', 'FADE OUT', 0, 10, 1000]]) number(envelope, text, `${text.toLowerCase()} in seconds`, item => (item[key] ?? fallback) / 1000, min, max, 0.1, (item, value) => ({ ...item, [key]: Math.round(value * 1000) }), 's');
-    } else if (current().mode !== 'trail') number(envelope, 'RELEASE', 'release fade in seconds', item => (item.fadeMs ?? 2000) / 1000, 0.1, 10, 0.1, (item, value) => ({ ...item, fadeMs: Math.round(value * 1000) }), 's');
+    } else if (current().mode !== 'trail') number(envelope, 'RELEASE', 'release fade in seconds', item => (item.fadeMs ?? DEFAULT_FADE_MS) / 1000, 0.1, 10, 0.1, (item, value) => ({ ...item, fadeMs: Math.round(value * 1000) }), 's');
     const paints = document.createElement('div'); paints.className = 'layer-paints'; paints.append(colorSettings);
     const blending = document.createElement('div'); blending.className = 'layer-blending';
     const blendLabel = document.createElement('span'); blendLabel.className = 'layer-size-heading'; blendLabel.textContent = 'ANALOG MIX';

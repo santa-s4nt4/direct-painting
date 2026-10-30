@@ -28,7 +28,7 @@ export class FixedLoopClock extends LoopClock {
   resize(_duration, now) { super.resize(DEFAULT_LOOP_MS, now); }
 }
 
-export const DEFAULT_FADE_MS = 2000;
+export const DEFAULT_FADE_MS = 500;
 export function layerSizeRange(clip) {
   return clip.samples.reduce((range, sample) => ({ min: Math.min(range.min, sample.size), max: Math.max(range.max, sample.size) }), { min: MAX_BRUSH_SIZE, max: 1 });
 }
