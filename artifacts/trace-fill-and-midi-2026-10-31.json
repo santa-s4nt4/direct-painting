@@ -1,0 +1,549 @@
+{
+  "date": "2026-10-31",
+  "nodeTests": {
+    "command": "node --test --test-concurrency=1 tests/*.test.js",
+    "passed": 204,
+    "failed": 0
+  },
+  "build": "passed; existing >500kB bundle warning",
+  "glslES": {
+    "normal": "passed",
+    "analog": "passed"
+  },
+  "gpu": {
+    "date": "2026-10-30T20:20:59.960Z",
+    "checks": [
+      {
+        "name": "Unused Blur targets are not allocated",
+        "passed": true
+      },
+      {
+        "name": "First overlap caused by a camera orbit compiles no new programs and allocates no textures",
+        "passed": true,
+        "newPrograms": 0,
+        "newTextures": 0
+      },
+      {
+        "name": "translucent pigment overlap and mixed source-over layers: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "Blur halos across saved planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "camera exposure on rotated planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 1
+      },
+      {
+        "name": "offscreen layer culling: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "circle outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 7461,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 6,
+        "rmsError": 0.013375944641845989,
+        "channelsOver2": 9
+      },
+      {
+        "name": "Completed outline Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0039436863512501905,
+        "samples": 16
+      },
+      {
+        "name": "rect outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 8676,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.01261520980873955,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5429,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010825317547305483,
+        "channelsOver2": 0
+      },
+      {
+        "name": "Completed filled Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0035579690159581938,
+        "samples": 16
+      },
+      {
+        "name": "rect filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5979,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010063456073742665,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle: rapid orbital exposure preserves opacity and perspective; clipped shapes use the full path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0017010345435994293,
+        "fastSamples": 16
+      },
+      {
+        "name": "ring: rapid orbital exposure preserves opacity and perspective; clipped shapes use the full path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0025983731852596815,
+        "fastSamples": 16
+      },
+      {
+        "name": "box-clipped circle: rapid orbital exposure preserves opacity and perspective; clipped shapes use the full path",
+        "passed": true,
+        "maxChannelError": 0,
+        "rmsError": 0,
+        "fastSamples": 0
+      },
+      {
+        "name": "Trace head disappears at draw completion while its stroke remains",
+        "passed": true,
+        "beforeEnd": 255,
+        "afterEnd": 0
+      },
+      {
+        "name": "A Trace wider than its radius has no false central hole",
+        "passed": true
+      },
+      {
+        "name": "Ten disjoint shapes need no compositing copies and one drawing pass each",
+        "passed": true,
+        "copyPixels": 0,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 10,
+        "culledLayers": 0,
+        "cameraFastLayers": 0
+      },
+      {
+        "name": "No WebGL errors",
+        "passed": true
+      }
+    ],
+    "performance": {
+      "cpuSubmission": {
+        "samples": 24,
+        "medianMs": 1,
+        "p95Ms": 1.6000000014901161
+      },
+      "gpu": {
+        "samples": 24,
+        "medianMs": 2.783,
+        "p95Ms": 8.471375
+      },
+      "residentMaskBytes": 0,
+      "scratchBytes": 9331200,
+      "perFrame": {
+        "copyPixels": 980100,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 1,
+        "culledLayers": 0,
+        "cameraFastLayers": 0,
+        "drawCalls": 20
+      }
+    },
+    "cameraBurst": {
+      "durationMs": 200,
+      "cameraSamples": 16,
+      "performance": {
+        "cpuSubmission": {
+          "samples": 24,
+          "medianMs": 0.8000000044703484,
+          "p95Ms": 1.1000000014901161
+        },
+        "gpu": {
+          "samples": 24,
+          "medianMs": 13.66675,
+          "p95Ms": 21.090875
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 5067360,
+          "blurPixels": 0,
+          "masksCreated": 0,
+          "maskBytes": 0,
+          "directLayers": 1,
+          "culledLayers": 0,
+          "cameraFastLayers": 4,
+          "drawCalls": 8
+        }
+      }
+    },
+    "passed": true
+  },
+  "ui": {
+    "method": "Chrome WebGL2, native EventSource from isolated relay; MIDI messages injected into server callback",
+    "physicalDeviceTested": false,
+    "flashMs": 80,
+    "checks": [
+      {
+        "name": "Real-time SSE flash, snap-off, stable repeat row and ten-note cap",
+        "passed": true
+      }
+    ],
+    "layouts": [
+      {
+        "width": 1133,
+        "height": 744,
+        "frame": {
+          "left": 318,
+          "top": 62.71875,
+          "right": 1087,
+          "bottom": 495.28125,
+          "width": 769,
+          "height": 432.5625
+        },
+        "rows": [
+          {
+            "left": 286,
+            "top": 62.71875,
+            "right": 310,
+            "bottom": 84.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 88.71875,
+            "right": 310,
+            "bottom": 110.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 114.71875,
+            "right": 310,
+            "bottom": 136.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 140.71875,
+            "right": 310,
+            "bottom": 162.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 166.71875,
+            "right": 310,
+            "bottom": 188.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 192.71875,
+            "right": 310,
+            "bottom": 214.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 218.71875,
+            "right": 310,
+            "bottom": 240.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 244.71875,
+            "right": 310,
+            "bottom": 266.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 270.71875,
+            "right": 310,
+            "bottom": 292.71875,
+            "width": 24,
+            "height": 22
+          },
+          {
+            "left": 286,
+            "top": 296.71875,
+            "right": 310,
+            "bottom": 318.71875,
+            "width": 24,
+            "height": 22
+          }
+        ],
+        "overflow": false,
+        "passed": true
+      },
+      {
+        "width": 744,
+        "height": 1133,
+        "frame": {
+          "left": 278,
+          "top": 354.25,
+          "right": 702,
+          "bottom": 592.75,
+          "width": 424,
+          "height": 238.5
+        },
+        "rows": [
+          {
+            "left": 246,
+            "top": 354.25,
+            "right": 270,
+            "bottom": 374.5,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 378.5,
+            "right": 270,
+            "bottom": 398.75,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 402.75,
+            "right": 270,
+            "bottom": 423,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 427,
+            "right": 270,
+            "bottom": 447.25,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 451.25,
+            "right": 270,
+            "bottom": 471.5,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 475.5,
+            "right": 270,
+            "bottom": 495.75,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 499.75,
+            "right": 270,
+            "bottom": 520,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 524,
+            "right": 270,
+            "bottom": 544.25,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 548.25,
+            "right": 270,
+            "bottom": 568.5,
+            "width": 24,
+            "height": 20.25
+          },
+          {
+            "left": 246,
+            "top": 572.5,
+            "right": 270,
+            "bottom": 592.75,
+            "width": 24,
+            "height": 20.25
+          }
+        ],
+        "overflow": false,
+        "passed": true
+      },
+      {
+        "width": 375,
+        "height": 667,
+        "frame": {
+          "left": 40,
+          "top": 157.53125,
+          "right": 335,
+          "bottom": 323.46875,
+          "width": 295,
+          "height": 165.9375
+        },
+        "rows": [
+          {
+            "left": 8,
+            "top": 157.53125,
+            "right": 32,
+            "bottom": 170.515625,
+            "width": 24,
+            "height": 12.984375
+          },
+          {
+            "left": 8,
+            "top": 174.515625,
+            "right": 32,
+            "bottom": 187.5,
+            "width": 24,
+            "height": 12.984375
+          },
+          {
+            "left": 8,
+            "top": 191.5,
+            "right": 32,
+            "bottom": 204.484375,
+            "width": 24,
+            "height": 12.984375
+          },
+          {
+            "left": 8,
+            "top": 208.484375,
+            "right": 32,
+            "bottom": 221.46875,
+            "width": 24,
+            "height": 12.984375
+          },
+          {
+            "left": 8,
+            "top": 225.46875,
+            "right": 32,
+            "bottom": 238.46875,
+            "width": 24,
+            "height": 13
+          },
+          {
+            "left": 8,
+            "top": 242.46875,
+            "right": 32,
+            "bottom": 255.46875,
+            "width": 24,
+            "height": 13
+          },
+          {
+            "left": 8,
+            "top": 259.46875,
+            "right": 32,
+            "bottom": 272.46875,
+            "width": 24,
+            "height": 13
+          },
+          {
+            "left": 8,
+            "top": 276.46875,
+            "right": 32,
+            "bottom": 289.46875,
+            "width": 24,
+            "height": 13
+          },
+          {
+            "left": 8,
+            "top": 293.46875,
+            "right": 32,
+            "bottom": 306.46875,
+            "width": 24,
+            "height": 13
+          },
+          {
+            "left": 8,
+            "top": 310.46875,
+            "right": 32,
+            "bottom": 323.46875,
+            "width": 24,
+            "height": 13
+          }
+        ],
+        "overflow": false,
+        "passed": true
+      }
+    ],
+    "cpuFallback": [
+      {
+        "shape": "circle",
+        "time": 250,
+        "interiorMismatches": 0,
+        "passed": true
+      },
+      {
+        "shape": "circle",
+        "time": 500,
+        "interiorMismatches": 0,
+        "passed": true
+      },
+      {
+        "shape": "rect",
+        "time": 250,
+        "interiorMismatches": 0,
+        "passed": true
+      },
+      {
+        "shape": "rect",
+        "time": 500,
+        "interiorMismatches": 0,
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "limitations": [
+    "No physical iPad / Safari or Apple Pencil validation",
+    "MIDI injected into the isolated server callback; no physical MIDI device was used in this run"
+  ]
+}

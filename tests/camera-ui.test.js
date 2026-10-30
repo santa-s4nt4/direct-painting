@@ -101,6 +101,8 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   relay.receiveCameraNote({type:'on',note:60,channel:1,at:Date.now()});for(const stream of streams)stream.emit('camera',await camera());
   const autoStart=performance.now()+200;tick(autoStart);previous=phase();for(let i=1;i<=20;i++){tick(autoStart+i*1000/60);assert.ok(phase()>previous);previous=phase();}
   relay.restartFromMidi(Date.now());const restarted=await state();for(const stream of streams)stream.emit('transport',restarted);tick(performance.now()+50);assert.ok(phase()<200,'MIDI 24 restarts playback at zero');assert.ok(raf,'MIDI starts continuous playback without a pause toggle');
+  for(const stream of streams)stream.emit('midi',{type:'on',note:60,channel:1,velocity:100,epoch:'ui-test',revision:1});
+  assert.ok(d.querySelector('.canvas-pair > .midi-indicators [data-note="60"].is-active'),'Streamed MIDI lights the indicator beside the canvas');
   const enabled=d.querySelector('#camera-midi-enabled');enabled.checked=false;enabled.dispatchEvent(new env.window.Event('change'));await until(async()=>(await camera()).config.mode==='normal');assert.equal(d.querySelector('.orientation-cube').getAttribute('aria-disabled'),'false');
   const transportBefore=(await state()).transport,svg=d.querySelector('.orientation-cube');svg.dispatchEvent(new env.window.PointerEvent('pointerdown',{pointerId:1,button:0,clientX:10,clientY:10}));svg.dispatchEvent(new env.window.PointerEvent('pointermove',{pointerId:1,clientX:60,clientY:20}));tick(performance.now()+100);svg.dispatchEvent(new env.window.PointerEvent('pointerup',{pointerId:1}));
   const canvas=d.querySelector('#canvas-0');canvas.getBoundingClientRect=()=>({left:0,top:0,width:1920,height:1080});

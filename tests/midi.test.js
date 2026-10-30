@@ -57,3 +57,19 @@ test('MIDI restart plays from zero, releases completed lines, rejects stale tran
   const again=Date.now()+10;handler.restartFromMidi(again);const triggered=await get();assert.equal(triggered.state.playback.anchor,again);assert.equal(triggered.transport.revision,2);
  } finally {await handler.dispose();await new Promise(r=>server.close(r));await rm(folder,{recursive:true});}
 });
+
+test('MIDI receipts stream before a project exists and do not depend on camera MIDI mode', async () => {
+ const folder=await mkdtemp(join(tmpdir(),'direct-midi-events-')),handler=await createLoopRelay(join(folder,'loop.json'));
+ const server=createServer((req,res)=>handler(req,res,()=>res.end()));await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ let reader;
+ try {
+  const response=await fetch(`http://127.0.0.1:${server.address().port}/api/stream`,{signal:AbortSignal.timeout(3000)});reader=response.body.getReader();
+  const on={type:'on',note:60,channel:2,velocity:100,at:Date.now()},off={...on,type:'off',velocity:0};
+  handler.receiveMidiNote(on);handler.receiveMidiNote(off);
+  let text='';const decoder=new TextDecoder();
+  while((text.match(/event: midi/g)??[]).length<2){const {value,done}=await reader.read();assert.equal(done,false);text+=decoder.decode(value);}
+  const messages=text.split('\n\n').filter(event=>event.startsWith('event: midi\n')).map(event=>JSON.parse(event.split('\ndata: ')[1]));
+  assert.equal(messages.length,2);assert.deepEqual(messages.map(({epoch,revision,...note})=>note),[on,off]);
+  assert.ok(messages[0].epoch);assert.equal(messages[1].epoch,messages[0].epoch);assert.equal(messages[1].revision,messages[0].revision+1);
+ }finally{await reader?.cancel();await handler.dispose();await new Promise(r=>server.close(r));await rm(folder,{recursive:true});}
+});

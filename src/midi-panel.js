@@ -44,6 +44,7 @@ export function setupMidiPanel(parent, onTransport, options = {}) {
   };
   device.addEventListener('change',configure);
   const stream = new EventSource('/api/stream');
+  stream.addEventListener('midi',event=>options.onNote?.(JSON.parse(event.data)));
   stream.addEventListener('camera',event=>options.onCamera?.(JSON.parse(event.data)));
   stream.addEventListener('transport',event => transport(JSON.parse(event.data)));
   stream.addEventListener('state',event => transport(JSON.parse(event.data)));

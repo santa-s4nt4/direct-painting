@@ -1,6 +1,7 @@
 import { cameraConfig, cameraPose, centered, mergeCamera, CameraSampler } from './camera-motion.js';
 import { setupCameraControls } from './camera-controls.js';
 import { setupMidiPanel } from './midi-panel.js';
+import { setupMidiIndicators } from './midi-indicators.js';
 import { BOX_SPEC, workingPlane, drawingPoint, drawingPointOnPlane, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
 import { LineSchedule, FIXED_LINE_WIDTH, finishFirstCycle } from './line-tool.js';
@@ -135,6 +136,7 @@ const shell = setupEditorShell({ icon, onTool: tool => {
   if (!ready || trimDrag || state.mode === 'line') return;
   endStroke(null); state.traceMotion = trace; syncTraceUI(); queueSave();
 }, onTab: tab => { colorContext = { id: tab === 'layer' ? selectedLayerId : null, field: 'fill' }; syncFloatingColor(); } });
+const midiIndicators = setupMidiIndicators($('.canvas-pair'));
 const frameRateMeter = new FrameRateMeter(performance.now()), fpsLabel = $('.fps-label');
 let paintingBackend = 'webgl2', measuredFrameRate = null;
 function syncFrameRate(now) {
@@ -231,7 +233,7 @@ function receiveTransport(token, playback, serverNow, latency = 0) {
   lineSchedule.rebase(clips,clock.phase(now),clock.duration,now);
   rebuildCache(); playbackUI(); renderTargets([0], now); queueSave(false,false);
 }
-setupMidiPanel($('#midi-panel'), receiveTransport,{onCamera:receiveCamera,onClock:(time,latency)=>{cameraServerTime=time+latency;cameraCalibratedAt=performance.now();},onNotes:notes=>cameraUI.setReceived(notes)});
+setupMidiPanel($('#midi-panel'), receiveTransport,{onCamera:receiveCamera,onClock:(time,latency)=>{cameraServerTime=time+latency;cameraCalibratedAt=performance.now();},onNotes:notes=>cameraUI.setReceived(notes),onNote:midiIndicators.receive});
 
 const trimTrackObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
   for (const { target } of entries) {

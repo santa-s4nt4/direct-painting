@@ -121,7 +121,13 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
     camera.event=newCameraEvent(from,base,config,message.at,`${message.channel}:${message.note}`);
     camera.revision++;emitCamera();
   };
-  if (midi) midiInput = await createMidiInput({ configFile: `${cacheFile}.midi.json`, onRestart: restartFromMidi, onNote:receiveCameraNote });
+  const midiEpoch = randomUUID(); let midiRevision = 0;
+  const receiveMidiNote = message => {
+    // Flash on the received event, independent of camera mode and 1s polling.
+    emit('midi', { ...message, epoch: midiEpoch, revision: ++midiRevision });
+    receiveCameraNote(message);
+  };
+  if (midi) midiInput = await createMidiInput({ configFile: `${cacheFile}.midi.json`, onRestart: restartFromMidi, onNote:receiveMidiNote });
   const readJSON = async request => {
     let bytes = 0; const chunks = [];
     for await (const chunk of request) { bytes += chunk.length; if (bytes > 16 * 1024 * 1024) throw new Error('Project exceeds 16MB'); chunks.push(chunk); }
@@ -229,6 +235,7 @@ export async function createLoopRelay(cacheFile, { midi = false } = {}) {
   };
   handler.restartFromMidi = restartFromMidi;
   handler.receiveCameraNote=receiveCameraNote;
+  handler.receiveMidiNote=receiveMidiNote;
   handler.dispose = () => { midiInput?.dispose(); clearInterval(heartbeat); clearInterval(expiry); clearInterval(lineTicker); for (const response of clients) response.end(); clients.clear(); return writes; };
   return handler;
 }
