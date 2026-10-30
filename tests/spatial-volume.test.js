@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOX_SPEC, workingPlane, pointInSpace, drawingPoint, projectSpace, insideBox, validatePlane, lineGeometry, planeHomography } from '../src/space.js';
-import { DEFAULT_VIEW, canvasView } from '../src/view.js';
+import { BOX_SPEC, workingPlane, pointInSpace, drawingPoint, projectSpace, projectVisibleSpace, projectPlanePolygon, insideBox, validatePlane, lineGeometry, planeHomography } from '../src/space.js';
+import { DEFAULT_VIEW, canvasView, CAMERA_NEAR, CAMERA_FAR } from '../src/view.js';
+import { cameraProjection, projectedBounds } from '../src/render/camera-exposure.js';
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, CANVAS_SPEC } from '../src/canvas.js';
 import { DEFAULT_SETTINGS, normalizeProject, serializeProject, parseProject } from '../src/project.js';
 import { validateProject, minimumLoop } from '../src/loop.js';
@@ -35,9 +36,39 @@ test('line Ring gestures retain pressure, diameter, fade and spatial frames in f
  const packet={session:'a',revision:1,id:'a',mode:'move',color:'#ffffff',targets:[0],ringWidth:7,plane:m.plane,from:0,samples:[m.samples[0]],head:m.samples[0],elapsed:0};
  assert.deepEqual(validateLive(packet).plane,m.plane);const live=new LiveStroke();live.update(packet,0);assert.deepEqual(live.plane,m.plane);
  assert.throws(()=>validateLive({...packet,plane:Array(9).fill(0)}));
- assert.throws(()=>validateProject({...p,clips:[{...line,points3D:[[0,0,1800]]}]}));
+ assert.throws(()=>validateProject({...p,clips:[{...line,points3D:[[0,0,Infinity]]}]}));
  assert.throws(()=>validateProject({...p,clips:[{...line,lineMarkers:[{...m,shape:'rect'}]}]}));
  assert.equal(minimumLoop([{...line,lineMarkers:[marker({duration:8000,fadeMs:2000,samples:[{...m.samples[0],t:0},{...m.samples[1],t:8000}]})]}]),10000);
+});
+
+test('samples, spatial lines and plane origins beyond the guide survive files and live relay',()=>{
+ const samples=[{x:-200,y:-1000,size:100,t:0},{x:5800,y:3300,size:200,t:100}],plane=workingPlane(DEFAULT_VIEW);
+ const move=marker({shape:'circle',plane,samples}),origin=[5000,-4000,3000],line={id:'outside-line',mode:'line',color:'#ffffff',targets:[0],enabled:true,start:0,duration:0,fadeMs:500,plane,origin,points3D:[[3000,2200,2500],[5000,-4000,-3000]],samples:samples.map(p=>({...p,t:0})),linePending:false,lineIncomplete:false};
+ const p=normalizeProject({version:1,duration:16000,clips:[move,line]});
+ assert.equal(insideBox(pointInSpace(samples[1],plane)),false);
+ assert.deepEqual(parseProject(serializeProject(p,{playing:true,phase:0})).project,p);
+ assert.deepEqual(validateSnapshot({project:p,playback:{playing:true,phase:0}},0).project.clips[1].points3D,line.points3D);
+ const live=validateLive({session:'outside',revision:1,id:'pen',mode:'move',color:'#ffffff',targets:[0],plane,from:0,samples,head:samples[1],elapsed:100});
+ assert.deepEqual(live.samples,samples);
+ assert.throws(()=>validateProject({...p,clips:[{...move,origin:[NaN,0,0]}]}));
+ assert.throws(()=>validateProject({...p,clips:[{...move,samples:[{...samples[0],x:Infinity}]}]}));
+});
+
+test('projected bounds keep geometry outside the guide and clip only camera depth',()=>{
+ const view=canvasView({...DEFAULT_VIEW,scale:.5,distance:12000}),plane=workingPlane(DEFAULT_VIEW),clip={plane};
+ const bounds={x:5500,y:2800,width:400,height:300},corners=[{x:5500,y:2800},{x:5900,y:2800},{x:5900,y:3100},{x:5500,y:3100}];
+ const projected=projectPlanePolygon(corners,plane,undefined,view);
+ assert.equal(projected.depthClipped,false);
+ for(let i=0;i<4;i++){const expected=projectSpace(pointInSpace(corners[i],plane),view);near(projected.points[i].x,expected.x);near(projected.points[i].y,expected.y);}
+ const box=projectedBounds(clip,bounds,view);assert.ok(box.width>0&&box.height>0&&box.x<1920&&box.y<1080);
+ assert.deepEqual(projectedBounds({...clip,origin:[0,0,6000]},bounds,DEFAULT_VIEW),{x:0,y:0,width:0,height:0});
+ assert.equal(projectVisibleSpace([0,0,6000],DEFAULT_VIEW),null);
+ assert.equal(projectVisibleSpace([0,0,-CAMERA_FAR],DEFAULT_VIEW),null);
+ const tilted=workingPlane(canvasView({...DEFAULT_VIEW,yaw:60})),origin=[0,0,4990],source={x:1720,y:880,width:400,height:400};
+ const exposure=[{view:DEFAULT_VIEW}],projection=cameraProjection({plane:tilted,origin},exposure,source);
+ assert.equal(projection.depthClipped,true);assert.ok(Object.values(projection.bounds).every(Number.isFinite));
+ const p={x:1870,y:1080},world=pointInSpace(p,tilted,origin),screen=projectSpace(world,DEFAULT_VIEW),m=projection.inverse[0],depth=5000-world[2];
+ assert.ok(depth>CAMERA_NEAR);near(m[6]*screen.x+m[7]*screen.y+m[8],1/depth);
 });
 test('new rectangles default to 1600px squares; untouched old defaults migrate and custom dimensions remain',()=>{
  assert.equal(DEFAULT_SETTINGS.widthMax,1600);assert.equal(DEFAULT_SETTINGS.heightMax,1600);

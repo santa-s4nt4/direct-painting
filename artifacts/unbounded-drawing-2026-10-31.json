@@ -1,0 +1,682 @@
+{
+  "date": "2026-10-31",
+  "baseline": "bc073e6",
+  "nodeTests": {
+    "command": "node --test --test-concurrency=1 tests/*.test.js",
+    "passed": 207,
+    "failed": 0
+  },
+  "build": "passed; existing >500kB bundle warning",
+  "quality": {
+    "date": "2026-10-30T21:56:07.430Z",
+    "checks": [
+      {
+        "name": "Unused Blur targets are not allocated",
+        "passed": true
+      },
+      {
+        "name": "First overlap caused by a camera orbit compiles no new programs and allocates no textures",
+        "passed": true,
+        "newPrograms": 0,
+        "newTextures": 0
+      },
+      {
+        "name": "translucent pigment overlap and mixed source-over layers: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "Blur halos across saved planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "camera exposure on rotated planes: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 1
+      },
+      {
+        "name": "offscreen layer culling: cropped rendering matches full-frame reference, including rewind",
+        "passed": true,
+        "maxChannelError": 0
+      },
+      {
+        "name": "circle outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 7461,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 6,
+        "rmsError": 0.013375944641845989,
+        "channelsOver2": 9
+      },
+      {
+        "name": "Completed outline Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0039436863512501905,
+        "samples": 16
+      },
+      {
+        "name": "rect outline Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 8676,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect outline Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.01261520980873955,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5429,
+        "masksCreated": 0
+      },
+      {
+        "name": "circle filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010825317547305483,
+        "channelsOver2": 0
+      },
+      {
+        "name": "Completed filled Circle Trace uses all 16 camera samples through the fast path and matches inverse projection",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0035579690159581938,
+        "samples": 16
+      },
+      {
+        "name": "rect filled Trace matches independent Canvas paths, has fractional edge coverage and allocates no GPU mask",
+        "passed": true,
+        "interiorMismatches": 0,
+        "fractionalEdgePixels": 5979,
+        "masksCreated": 0
+      },
+      {
+        "name": "rect filled Trace camera exposure matches independent sharp projections",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.010063456073742665,
+        "channelsOver2": 0
+      },
+      {
+        "name": "circle: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0017010345435994293,
+        "fastSamples": 16
+      },
+      {
+        "name": "ring: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 1,
+        "rmsError": 0.0025983731852596815,
+        "fastSamples": 16
+      },
+      {
+        "name": "outside-guide circle: rapid orbital exposure preserves opacity and perspective through the fast path",
+        "passed": true,
+        "maxChannelError": 0,
+        "rmsError": 0,
+        "fastSamples": 16
+      },
+      {
+        "name": "Outside guide circle: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide circle Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide ring: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide ring Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect-ring: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Outside guide rect-ring Trace: GPU and CPU match Canvas without new masks or larger buffers",
+        "passed": true,
+        "interiorMismatches": 0,
+        "cpuInteriorMismatches": 0,
+        "masksCreated": 0
+      },
+      {
+        "name": "Camera near-plane crossings stay finite and match independently clipped sharp views",
+        "passed": true,
+        "rmsError": 0.11858541225631422,
+        "maxChannelError": 6
+      },
+      {
+        "name": "Geometry behind the camera is culled without mirrored fragments",
+        "passed": true
+      },
+      {
+        "name": "Trace head disappears at draw completion while its stroke remains",
+        "passed": true,
+        "beforeEnd": 255,
+        "afterEnd": 0
+      },
+      {
+        "name": "A Trace wider than its radius has no false central hole",
+        "passed": true
+      },
+      {
+        "name": "Ten disjoint shapes need no compositing copies and one drawing pass each",
+        "passed": true,
+        "copyPixels": 0,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 10,
+        "culledLayers": 0,
+        "cameraFastLayers": 0
+      },
+      {
+        "name": "No WebGL errors",
+        "passed": true
+      }
+    ],
+    "performance": {
+      "cpuSubmission": {
+        "samples": 24,
+        "medianMs": 1.1000000014901161,
+        "p95Ms": 1.6000000014901161
+      },
+      "gpu": {
+        "samples": 24,
+        "medianMs": 2.564458,
+        "p95Ms": 2.698208
+      },
+      "residentMaskBytes": 0,
+      "scratchBytes": 9331200,
+      "perFrame": {
+        "copyPixels": 980100,
+        "blurPixels": 0,
+        "masksCreated": 0,
+        "maskBytes": 0,
+        "directLayers": 1,
+        "culledLayers": 0,
+        "cameraFastLayers": 0,
+        "drawCalls": 20
+      }
+    },
+    "cameraBurst": {
+      "durationMs": 200,
+      "cameraSamples": 16,
+      "performance": {
+        "cpuSubmission": {
+          "samples": 24,
+          "medianMs": 1.2999999970197678,
+          "p95Ms": 1.5
+        },
+        "gpu": {
+          "samples": 24,
+          "medianMs": 12.328999,
+          "p95Ms": 12.464583
+        },
+        "residentMaskBytes": 0,
+        "scratchBytes": 9331200,
+        "perFrame": {
+          "copyPixels": 5067360,
+          "blurPixels": 0,
+          "masksCreated": 0,
+          "maskBytes": 0,
+          "directLayers": 1,
+          "culledLayers": 0,
+          "cameraFastLayers": 4,
+          "drawCalls": 8
+        }
+      }
+    },
+    "passed": true
+  },
+  "performance": {
+    "date": "2026-10-30T21:53:59.930Z",
+    "baseline": "bc073e6",
+    "hardware": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "method": "Alternating before/after in the same WebGL2 context; asynchronous GPU timer queries; no saved editor writes",
+    "cases": [
+      {
+        "name": "Ten overlapping Rings",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.8999999985098839,
+            "p95Ms": 1.2999999970197678
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 4.554958,
+            "p95Ms": 5.945375
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 5760578,
+            "blurPixels": 0,
+            "compositePixels": 6305878,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.8999999985098839,
+            "p95Ms": 1.2000000029802322
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 4.435916,
+            "p95Ms": 6.093249
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 5760578,
+            "blurPixels": 0,
+            "compositePixels": 6305878,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        }
+      },
+      {
+        "name": "Four completed circle Traces with camera blur",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 1.3999999985098839,
+            "p95Ms": 1.8999999985098839
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 14.788666,
+            "p95Ms": 17.592458
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 4779000,
+            "blurPixels": 0,
+            "compositePixels": 6273720,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 4
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 1,
+            "p95Ms": 1.5
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 14.449,
+            "p95Ms": 17.2
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 4779000,
+            "blurPixels": 0,
+            "compositePixels": 6273720,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 4
+          }
+        }
+      },
+      {
+        "name": "Eight newly visible circles beyond the guide",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.3999999985098839,
+            "p95Ms": 0.6000000014901161
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 0.928666,
+            "p95Ms": 1.729
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 0,
+            "blurPixels": 0,
+            "compositePixels": 0,
+            "directLayers": 0,
+            "culledLayers": 8,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.6999999955296516,
+            "p95Ms": 1
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 2.585374,
+            "p95Ms": 2.75775
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 209157,
+            "blurPixels": 0,
+            "compositePixels": 239086,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "note": "Old version clips these pixels away; additional visible painting naturally has drawing cost"
+      },
+      {
+        "name": "Saved project phase 6350ms",
+        "before": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 1,
+            "p95Ms": 1.3000000044703484
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 1.354583,
+            "p95Ms": 2.326541
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 828198,
+            "blurPixels": 0,
+            "compositePixels": 1179318,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        },
+        "after": {
+          "cpuSubmission": {
+            "samples": 32,
+            "medianMs": 0.9000000059604645,
+            "p95Ms": 1.2999999970197678
+          },
+          "gpu": {
+            "samples": 32,
+            "medianMs": 1.320833,
+            "p95Ms": 2.591249
+          },
+          "renderSize": [
+            1920,
+            1080
+          ],
+          "residentMaskBytes": 0,
+          "textureCount": 5,
+          "perFrame": {
+            "copyPixels": 828198,
+            "blurPixels": 0,
+            "compositePixels": 1179318,
+            "directLayers": 1,
+            "culledLayers": 0,
+            "cameraFastLayers": 0
+          }
+        }
+      }
+    ],
+    "passed": true
+  },
+  "native": {
+    "backend": "macOS offscreen OpenGL (actual production GLSL; not browser WebGL2)",
+    "checks": [
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "moving ellipse",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.009470959511795734
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "moving Ring",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.010206207261596576
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "rotating rectangle",
+        "paintedPixels": 26961,
+        "passed": true,
+        "rmsError": 0.010462860537027335
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "rotating rectangle Ring",
+        "paintedPixels": 26961,
+        "passed": true,
+        "rmsError": 0.011825962754115557
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "pressure change",
+        "paintedPixels": 15042,
+        "passed": true,
+        "rmsError": 0.0071497431534631945
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "3D front-facing Ring",
+        "paintedPixels": 20008,
+        "passed": true,
+        "rmsError": 0.010206207261596576
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 0,
+        "name": "stationary Ring",
+        "paintedPixels": 3184,
+        "passed": true,
+        "rmsError": 0
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "box clipping",
+        "paintedPixels": 2520,
+        "passed": true,
+        "rmsError": 0.003928371006591931
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "opacity and color",
+        "paintedPixels": 19960,
+        "passed": true,
+        "rmsError": 0.0175304243907838
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera orbit",
+        "paintedPixels": 9838,
+        "passed": true,
+        "rmsError": 0.008701363948709491
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera roll",
+        "paintedPixels": 20255,
+        "passed": true,
+        "rmsError": 0.011599509089229212
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera radius",
+        "paintedPixels": 20238,
+        "passed": true,
+        "rmsError": 0.007382045703287951
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera joint object",
+        "paintedPixels": 35031,
+        "passed": true,
+        "rmsError": 0.009547032697824667
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera box edge",
+        "paintedPixels": 6643,
+        "passed": true,
+        "rmsError": 0.005150137838260877
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera edge-on",
+        "paintedPixels": 25560,
+        "passed": true,
+        "rmsError": 0.008448281292080861
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera opacity",
+        "paintedPixels": 9819,
+        "passed": true,
+        "rmsError": 0.012936066673748026
+      },
+      {
+        "channelsOver2": 0,
+        "maxChannelError": 1,
+        "name": "camera stored plane",
+        "paintedPixels": 11960,
+        "passed": true,
+        "rmsError": 0.011886974144877563
+      }
+    ],
+    "date": "2026-10-30T21:51:03Z",
+    "glError": 0,
+    "passed": true,
+    "renderer": "Apple M4"
+  },
+  "gles": {
+    "date": "2026-10-30T21:47:08.007Z",
+    "backend": "ANGLE OpenGL ES 3.0 offscreen (not browser UI)",
+    "regression": "Precisions of uniform 'cameraCount' differ between VERTEX and FRAGMENT shaders.",
+    "checks": [
+      {
+        "name": "normal layer",
+        "version": "OpenGL ES 3.0 (ANGLE 2.1 git hash: unknown hash)",
+        "paintedPixels": 556,
+        "glError": 0,
+        "passed": true
+      },
+      {
+        "name": "Analog layer",
+        "version": "OpenGL ES 3.0 (ANGLE 2.1 git hash: unknown hash)",
+        "paintedPixels": 556,
+        "glError": 0,
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "limitations": [
+    "Shared Apple M4 GPU measurements, not physical iPad/Safari validation or MacBook Air thermal/power measurements",
+    "Newly visible artwork adds pixel drawing work compared with the old clipped-away geometry",
+    "Legacy Trail/Return raster compatibility retains its original bitmap extent; current tools and Trace use vector/analytic rendering"
+  ]
+}

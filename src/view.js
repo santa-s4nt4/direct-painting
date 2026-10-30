@@ -3,6 +3,7 @@ import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, VIEWPORT_WIDTH as VW, VIEWPORT_H
 export const DEFAULT_VIEW = Object.freeze({ scale: 1, x: (VW - W) / 2, y: (VH - H) / 2 });
 export const MIN_ZOOM = .5, MAX_ZOOM = 5;
 export const CAMERA_DISTANCE = 5000, MAX_TILT = 180;
+export const CAMERA_NEAR = 1, CAMERA_FAR = 20000;
 export const MIN_CAMERA_DISTANCE = 3500, MAX_CAMERA_DISTANCE = 12000;
 const radians = angle => angle * Math.PI / 180;
 export const wrapAngle = angle => ((angle + 180) % 360 + 360) % 360 - 180;

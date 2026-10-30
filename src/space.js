@@ -1,6 +1,6 @@
 import { DEFAULT_RING_WIDTH } from './effects.js';
 import { CANVAS_WIDTH as W, CANVAS_HEIGHT as H, BOX_SPEC } from './canvas.js';
-import { CAMERA_DISTANCE, viewRotation, invertHomography } from './view.js';
+import { CAMERA_DISTANCE, CAMERA_NEAR, CAMERA_FAR, viewRotation, invertHomography } from './view.js';
 export { BOX_SPEC } from './canvas.js';
 export const IDENTITY_PLANE = Object.freeze([1,0,0,0,1,0,0,0,1]);
 export const transpose = r => [r[0],r[3],r[6],r[1],r[4],r[7],r[2],r[5],r[8]].map(v=>v||0);
@@ -11,6 +11,12 @@ export function insideBox(p) { return p.every((v,i)=>Number.isFinite(v)&&Math.ab
 export function drawingPoint(screen,view) { return {x:(screen.x-view.x-W*view.scale/2)*(view.distance??CAMERA_DISTANCE)/view.scale/CAMERA_DISTANCE+W/2,y:(screen.y-view.y-H*view.scale/2)*(view.distance??CAMERA_DISTANCE)/view.scale/CAMERA_DISTANCE+H/2}; }
 export function projectSpace(point,view) {
   const [x,y,z]=multiply(viewRotation(view),point), k=view.scale*CAMERA_DISTANCE/((view.distance??CAMERA_DISTANCE)-z);
+  return {x:view.x+W*view.scale/2+x*k,y:view.y+H*view.scale/2+y*k};
+}
+export function projectVisibleSpace(point,view) {
+  const [x,y,z]=multiply(viewRotation(view),point),depth=(view.distance??CAMERA_DISTANCE)-z;
+  if(![x,y,depth].every(Number.isFinite)||depth<CAMERA_NEAR||depth>CAMERA_FAR)return null;
+  const k=view.scale*CAMERA_DISTANCE/depth;
   return {x:view.x+W*view.scale/2+x*k,y:view.y+H*view.scale/2+y*k};
 }
 export function validatePlane(plane) {
@@ -39,6 +45,23 @@ export function planeHomography(plane=IDENTITY_PLANE,origin=[0,0,0],view){
  const distance=view.distance??CAMERA_DISTANCE,f=view.scale*CAMERA_DISTANCE/distance;
  const a=f*m[0]-cx*m[6]/distance,b=f*m[1]-cx*m[7]/distance,d=f*m[3]-cy*m[6]/distance,e=f*m[4]-cy*m[7]/distance,g=-m[6]/distance,h=-m[7]/distance;
  return[a,b,cx*(1-o[2]/distance)+f*o[0]-a*W/2-b*H/2,d,e,cy*(1-o[2]/distance)+f*o[1]-d*W/2-e*H/2,g,h,1-o[2]/distance-g*W/2-h*H/2];
+}
+// Clip only at camera depth planes before dividing. Most quads need no clipping;
+// reusing the homography avoids world transforms and rotations at every corner.
+export function projectPlanePolygon(points,plane,origin,view,matrix=planeHomography(plane,origin,view)) {
+ const distance=view.distance??CAMERA_DISTANCE,near=CAMERA_NEAR/distance,far=CAMERA_FAR/distance;
+ let polygon=points.map(({x,y})=>[matrix[0]*x+matrix[1]*y+matrix[2],matrix[3]*x+matrix[4]*y+matrix[5],matrix[6]*x+matrix[7]*y+matrix[8]]);
+ const depthClipped=polygon.some(p=>p[2]<near||p[2]>far);
+ if(depthClipped)for(const [bound,sign] of [[near,1],[far,-1]]){
+  const next=[];
+  for(let i=0;i<polygon.length;i++){
+   const a=polygon[i],b=polygon[(i+1)%polygon.length],da=sign*(a[2]-bound),db=sign*(b[2]-bound);
+   if(da>=0)next.push(a);
+   if((da>=0)!==(db>=0)){const t=da/(da-db);next.push(a.map((v,k)=>v+(b[k]-v)*t));}
+  }
+  polygon=next;
+ }
+ return {points:polygon.map(([x,y,w])=>({x:x/w,y:y/w})).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)),depthClipped};
 }
 export function clipPolygonToBox(points){
  let polygon=points;

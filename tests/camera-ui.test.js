@@ -5,6 +5,7 @@ import { setupCameraControls } from '../src/camera-controls.js';
 import { setupOrientationCube } from '../src/orientation-cube.js';
 import { cameraConfig,DEFAULT_CAMERA } from '../src/camera-motion.js';
 import { DEFAULT_VIEW } from '../src/view.js';
+import { pointInSpace, insideBox } from '../src/space.js';
 import { createLoopRelay } from '../server/loop-relay.js';
 import { createServer } from 'node:http';
 import { readFile,writeFile,mkdtemp,rm } from 'node:fs/promises';
@@ -148,6 +149,15 @@ test('editor timeline stays responsive and Pencil drawing continues during indep
   canvas.dispatchEvent(new env.window.PointerEvent('pointermove',{pointerId:501,pointerType:'pen',button:-1,buttons:0,pressure:0,clientX:970,clientY:550,bubbles:true,cancelable:true}));assert.equal(renderer.live,null,'A hover recovers a missing pen up');
   await until(()=>saved?.clips.length===26);await until(async()=>(await state()).state.project.clips.length===26);
   assert.equal(saved.duration,16000);assert.deepEqual((await state()).transport,transportBefore);
+  d.querySelector('#reset-view').click();for(let i=0;i<4;i++)d.querySelector('#zoom-out').click();
+  pointer(svg,'pointerdown',701,'touch',10,10);pointer(svg,'pointermove',701,'touch',10+90/.65,10);pointer(svg,'pointerup',701,'touch',10+90/.65,10);
+  pointer(canvas,'pointerdown',702,'pen',1700,540);assert.ok(renderer.live);
+  pointer(canvas,'pointermove',702,'pen',1900,540);const outside=renderer.live.last;
+  assert.equal(insideBox(pointInSpace(outside,renderer.live.plane)),false,'A moving Pencil can cross the guide');
+  pointer(canvas,'pointerup',702,'pen',1900,540);
+  pointer(canvas,'pointerdown',703,'pen',1900,540);assert.ok(renderer.live,'A new contact can start beyond the guide');pointer(canvas,'pointerup',703,'pen',1905,540);
+  await until(()=>saved?.clips.length===28);await until(async()=>(await state()).state.project.clips.length===28);
+  assert.ok(saved.clips.at(-1).samples.some(p=>!insideBox(pointInSpace(p,saved.clips.at(-1).plane))),'Outside samples survive local save and output publishing');
  }finally{
   env.window.dispatchEvent(new env.window.Event('pagehide'));await sleep(250);globalThis.fetch=nativeFetch;globalThis.EventSource=old.EventSource;globalThis.requestAnimationFrame=old.requestAnimationFrame;globalThis.ResizeObserver=old.ResizeObserver;globalThis.__cameraTestMocks=old.mocks;
   await relay.dispose();await new Promise(r=>server.close(r));await env.restore();await rm(folder,{recursive:true});

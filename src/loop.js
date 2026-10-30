@@ -1,4 +1,4 @@
-import { validatePlane, insideBox, pointInSpace, BOX_SPEC } from './space.js';
+import { validatePlane, pointInSpace, BOX_SPEC } from './space.js';
 import { MAX_BRUSH_SIZE } from './canvas.js';
 import { validateEffects, validateRingWidth, DEFAULT_RING_WIDTH, MAX_RING_WIDTH } from './effects.js';
 import { strokePoints, angleDelta } from './drawing.js';
@@ -224,8 +224,8 @@ export function validateProject(project) {
       if (['rect', 'rect-ring'].includes(trace.sourceShape ?? clip.shape) && ['width', 'height'].some(key => !Number.isFinite(peak[key]) || peak[key] < 1 || peak[key] > MAX_BRUSH_SIZE)) throw new Error('Invalid trace rectangle');
       if (peak.angle !== undefined && (!Number.isFinite(peak.angle) || Math.abs(peak.angle) > 720)) throw new Error('Invalid trace angle');
     }
-    if(clip.origin!==undefined&&(!Array.isArray(clip.origin)||clip.origin.length!==3||!insideBox(clip.origin)))throw new Error('Invalid drawing plane origin');
-    if(clip.points3D!==undefined&&(clip.mode!=='line'||!Array.isArray(clip.points3D)||clip.points3D.length!==clip.samples.length||clip.points3D.some(p=>!Array.isArray(p)||p.length!==3||!insideBox(p))))throw new Error('Invalid spatial line points');
+    if(clip.origin!==undefined&&(!Array.isArray(clip.origin)||clip.origin.length!==3||!clip.origin.every(Number.isFinite)))throw new Error('Invalid drawing plane origin');
+    if(clip.points3D!==undefined&&(clip.mode!=='line'||!Array.isArray(clip.points3D)||clip.points3D.length!==clip.samples.length||clip.points3D.some(p=>!Array.isArray(p)||p.length!==3||!p.every(Number.isFinite))))throw new Error('Invalid spatial line points');
     if(clip.lineMarkers!==undefined){
       if(clip.mode!=='line'||!Array.isArray(clip.lineMarkers)||clip.lineMarkers.length!==clip.samples.length||clip.lineMarkers.some(m=>m.mode!=='move'||m.shape!=='ring'||m.lineMarkers!==undefined))throw new Error('Invalid line ring markers');
       for(const marker of clip.lineMarkers)validateProject({version:1,duration:project.duration,clips:[marker]});
@@ -263,7 +263,7 @@ export function validateProject(project) {
     let previous = -1;
     for (const sample of clip.samples) {
       if (!sample || !['x', 'y', 'size', 't'].every(key => Number.isFinite(sample[key])) || sample.size < 1 || sample.size > MAX_BRUSH_SIZE || sample.t < previous || sample.t < 0 || sample.t > clip.duration) throw new Error('Invalid gesture samples');
-      if(clip.plane&&!insideBox(pointInSpace(sample,clip.plane,clip.origin)))throw new Error('Sample exceeds 3D canvas');
+      if(clip.plane&&!pointInSpace(sample,clip.plane,clip.origin).every(Number.isFinite))throw new Error('Invalid spatial sample');
       for (const key of ['active', 'step']) if (sample[key] !== undefined && (typeof sample[key] !== 'boolean' || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       for (const key of ['opacity', 'colorProgress']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1 || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error(`Invalid sample ${key}`);
       if (sample.color !== undefined && (typeof sample.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(sample.color) || clip.mode !== 'move' || clip.procedural?.kind !== 'p5')) throw new Error('Invalid sample color');

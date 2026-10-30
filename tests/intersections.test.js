@@ -108,3 +108,13 @@ test('filled Trace intersections include the swept interior, exclude unpainted s
     assert.deepEqual(detector.find([filled, disk], DEFAULT_VIEW), [], 'Projection-only overlap is still excluded');
   }
 });
+
+test('3D face and line intersections remain visible outside the guide while hidden depths stay invisible',()=>{
+ const view={...DEFAULT_VIEW,scale:.5,x:0,y:0,distance:12000},visual={x:1920,y:1080,size:400,width:400,height:400,shape:'rect'},origin=[3000,2000,0];
+ const a=entry('a',visual,'rect',{clip:{origin}}),b=entry('b',visual,'rect',{clip:{origin,plane:[0,0,1,0,1,0,-1,0,0]}});
+ const marks=findIntersections([a,b],view);assert.equal(marks.length,1);assert.ok(marks[0].world[0]>1920&&marks[0].world[1]>1740);
+ b.clip.plane=a.clip.plane;assert.equal(findIntersections([a,b],view).length,1,'Coplanar overlap is also outside the guide');
+ const line={clip:{id:'line',mode:'line',points3D:[[3000,2000,-300],[3000,2000,300]]},alpha:1};
+ assert.equal(findIntersections([a,line],view).length,1);
+ a.clip.origin=[0,0,6000];b.clip.origin=[0,0,6000];assert.deepEqual(findIntersections([a,b],DEFAULT_VIEW),[]);
+});

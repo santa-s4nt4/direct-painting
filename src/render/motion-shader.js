@@ -1,9 +1,9 @@
 import { MOTION_SAMPLES } from './motion-blur.js';
+import { CAMERA_NEAR, CAMERA_FAR } from '../view.js';
 export const motionUniforms = `
 uniform highp int cameraCount;
 uniform mat3 cameraInverse[16];
-uniform mat4 planeMatrix;
-uniform int clipInsideBox;
+uniform int cameraDepthClipped;
 uniform int cameraConicCount;
 uniform vec2 cameraCircleRadii;
 uniform int motionCount;
@@ -38,8 +38,7 @@ export const motionCoverage = `
     vec3 projected=cameraInverse[i]*vec3(gl_FragCoord.x,resolution.y-gl_FragCoord.y,1.);
     if(abs(projected.z)<.000001)continue;
     sourcePixel=projected.xy/projected.z;
-    if(clipInsideBox==0){vec3 world=(planeMatrix*vec4(sourcePixel-vec2(1920.,1080.),0.,1.)).xyz;
-    if(any(greaterThan(abs(world),vec3(1920.,1740.,1740.))))continue;}
+    if(cameraDepthClipped==1&&(projected.z<1./${CAMERA_FAR}.||projected.z>1./${CAMERA_NEAR}.))continue;
    }
    vec2 p=sourcePixel-center;float c=cos(info.x),s=sin(info.x);
    if(rect||shape==5||shape==6)p=vec2(c*p.x+s*p.y,-s*p.x+c*p.y);

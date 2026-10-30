@@ -1,8 +1,9 @@
 import { VolumePaintingRenderer } from '../src/render/volume.js';
+import { CPUVolumeRenderer } from '../src/render/volume-cpu.js';
 import { target } from '../src/render/webgl.js';
 import { analogFragment } from '../src/render/shaders.js';
 import { layerEffects, DEFAULT_EFFECTS } from '../src/effects.js';
-import { DEFAULT_VIEW, canvasView } from '../src/view.js';
+import { DEFAULT_VIEW, canvasView, CAMERA_DISTANCE } from '../src/view.js';
 import { workingPlane, pointInSpace, projectSpace } from '../src/space.js';
 import { traceHead } from '../src/trace-motion.js';
 import { cameraProjection } from '../src/render/camera-exposure.js';
@@ -139,16 +140,52 @@ export async function runGPUChecks(canvas = document.querySelector('#gpu')) {
         check(`Completed ${filled ? 'filled' : 'outline'} Circle Trace uses all 16 camera samples through the fast path and matches inverse projection`, gpu.normalMaterial.uniforms.cameraConicCount.value === views.length && rmsError < .15, { maxChannelError: error, rmsError, samples: gpu.normalMaterial.uniforms.cameraConicCount.value });
       }
     }
-    for (const kind of ['circle', 'ring', 'box-clipped circle']) {
+    for (const kind of ['circle', 'ring', 'outside-guide circle']) {
       const source = clip(0, { shape: kind === 'ring' ? 'ring' : 'circle', opacity: .4, plane: workingPlane(canvasView({ ...DEFAULT_VIEW, yaw: 25, pitch: -15 })),
-        samples: [{ x: kind === 'box-clipped circle' ? 3800 : 2070, y: 1170, size: 800, t: 0 }] });
+        samples: [{ x: kind === 'outside-guide circle' ? 3800 : 2070, y: 1170, size: 800, t: 0 }] });
       const poses = Array.from({ length: 16 }, (_, i) => canvasView({ ...DEFAULT_VIEW, scale: 1.2, yaw: 58 + i * .5, pitch: 25 + i * .2, rotation: 30, distance: 5500 + i * 20 }));
       gpu.setProject(project([source])); reference.setProject(project([source])); gpu.setView(poses.at(-1)); reference.setView(gpu.view);
       gpu.draw(0, 400, { cameraViews: poses }); const actual = gpu.readPixels(); reference.draw(0, 400, { cameraViews: poses }); const expected = reference.readPixels();
       let maxError = 0, squared = 0; for (let p = 0; p < actual.length; p++) { const delta = Math.abs(actual[p] - expected[p]); maxError = Math.max(maxError, delta); squared += delta * delta; }
       const rmsError = Math.sqrt(squared / actual.length), samples = gpu.normalMaterial.uniforms.cameraConicCount.value;
-      check(`${kind}: rapid orbital exposure preserves opacity and perspective; clipped shapes use the full path`, rmsError < .15 && (kind === 'box-clipped circle' ? samples === 0 : samples === 16), { maxChannelError: maxError, rmsError, fastSamples: samples });
+      check(`${kind}: rapid orbital exposure preserves opacity and perspective through the fast path`, rmsError < .15 && samples === 16, { maxChannelError: maxError, rmsError, fastSamples: samples });
     }
+    const outsideView=canvasView({...DEFAULT_VIEW,scale:.5,distance:12000}),outsideCenter={x:5500,y:3000},scale=outsideView.scale*CAMERA_DISTANCE/outsideView.distance;
+    const center=projectSpace(pointInSpace(outsideCenter,workingPlane(DEFAULT_VIEW)),outsideView);
+    const cpuOutside=new CPUVolumeRenderer(document.createElement('canvas'));
+    try{for(const shape of ['circle','ring','rect','rect-ring'])for(const tracing of [false,true]){
+      const source=clip(0,{shape,angle:25,color:'#ffffff',ringWidth:20,samples:[{...outsideCenter,size:400,width:400,height:260,angle:25,t:0}],...(tracing?{trace:{pending:false,drawMs:500,strokeWidth:20,peak:{...outsideCenter,size:400,width:400,height:260,angle:25,t:0}}}:{})});
+      gpu.setView(outsideView);gpu.setProject(project([source]));cpuOutside.setView(outsideView);cpuOutside.setProject(project([source]));const before=gpu.stats.masksCreated;let mismatch=0,cpuMismatch=0;
+      for(const time of tracing?[250,500]:[0]){
+        gpu.draw(0,time);cpuOutside.draw(0,time);const actual=gpu.readPixels(),cpuPixels=cpuOutside.canvas.getContext('2d').getImageData(0,0,1920,1080).data,head=tracing&&traceHead(source,time),screenHead=head&&projectSpace(pointInSpace(head,source.plane),outsideView);
+        ctx.clearRect(0,0,1920,1080);ctx.save();ctx.translate(center.x,center.y);ctx.scale(scale,scale);ctx.rotate(25*Math.PI/180);ctx.fillStyle=ctx.strokeStyle='#fff';ctx.lineWidth=20;ctx.lineJoin=ctx.lineCap='round';ctx.beginPath();
+        const rect=shape==='rect'||shape==='rect-ring',filled=shape==='circle'||shape==='rect',progress=tracing?Math.min(1,time/500):1;
+        if(tracing){
+          if(filled)ctx.moveTo(0,0);
+          if(!rect){if(filled)ctx.lineTo(0,-200);ctx.arc(0,0,200,-Math.PI/2,-Math.PI/2+Math.PI*2*progress);}
+          else{const corners=[[-200,-130],[200,-130],[200,130],[-200,130],[-200,-130]];if(filled)ctx.lineTo(...corners[0]);else ctx.moveTo(...corners[0]);let remaining=progress*1320;for(let i=0;i<4&&remaining>0;i++){const a=corners[i],b=corners[i+1],length=Math.hypot(b[0]-a[0],b[1]-a[1]),t=Math.min(1,remaining/length);ctx.lineTo(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t);remaining-=length;}}
+        }else if(rect){const edge=filled?0:20;ctx.rect(-200+edge/2,-130+edge/2,400-edge,260-edge);}
+        else ctx.arc(0,0,filled?200:190,0,Math.PI*2);
+        if(filled){ctx.closePath();ctx.fill();}else ctx.stroke();ctx.restore();const expected=ctx.getImageData(0,0,1920,1080).data;
+        for(let y=Math.floor(center.y)-75;y<Math.ceil(center.y)+75;y++)for(let x=Math.floor(center.x)-75;x<Math.ceil(center.x)+75;x++){
+          if(screenHead&&Math.hypot(x+.5-screenHead.x,y+.5-screenHead.y)<12)continue;
+          const e=expected[(y*1920+x)*4+3];if(e!==0&&e!==255)continue;
+          let interior=true;for(const dy of[-2,0,2])for(const dx of[-2,0,2])if(expected[((y+dy)*1920+x+dx)*4+3]!==e)interior=false;
+          if(interior&&Math.abs(actual[((1079-y)*1920+x)*4]-e)>2)mismatch++;
+          if(interior&&Math.abs(cpuPixels[(y*1920+x)*4]-e)>2)cpuMismatch++;
+        }
+      }
+      check(`Outside guide ${shape}${tracing?' Trace':''}: GPU and CPU match Canvas without new masks or larger buffers`,mismatch===0&&cpuMismatch===0&&gpu.stats.masksCreated===before&&gpu.accumulator.width===1920&&gpu.accumulator.height===1080,{interiorMismatches:mismatch,cpuInteriorMismatches:cpuMismatch,masksCreated:gpu.stats.masksCreated-before});
+    }}finally{cpuOutside.dispose();}
+    const nearViews=Array.from({length:16},(_,i)=>canvasView({...DEFAULT_VIEW,yaw:-.1+i*.2/15}));
+    const nearSource=clip(0,{shape:'circle',color:'#ffffff',opacity:.4,origin:[0,0,4990],plane:workingPlane(canvasView({...DEFAULT_VIEW,yaw:60})),samples:[{x:1920,y:1080,size:400,t:0}]});
+    gpu.setView(nearViews.at(-1));gpu.setProject(project([nearSource]));gpu.draw(0,0,{cameraViews:nearViews});const nearActual=gpu.readPixels(),nearMean=new Float32Array(nearActual.length);
+    reference.setProject(project([nearSource]));for(const view of nearViews){reference.setView(view);reference.draw(0,0);const pixels=reference.readPixels();for(let p=0;p<pixels.length;p++)nearMean[p]+=pixels[p]/nearViews.length;}
+    let nearSquared=0,nearMax=0;for(let p=0;p<nearActual.length;p++){const error=Math.abs(nearActual[p]-Math.round(nearMean[p]));nearSquared+=error*error;nearMax=Math.max(nearMax,error);}
+    const nearRms=Math.sqrt(nearSquared/nearActual.length);
+    check('Camera near-plane crossings stay finite and match independently clipped sharp views',nearRms<.15&&gpu.normalMaterial.uniforms.cameraDepthClipped.value===1&&gpu.normalMaterial.uniforms.cameraConicCount.value===0,{rmsError:nearRms,maxChannelError:nearMax});
+    gpu.setView(DEFAULT_VIEW);gpu.setProject(project([{...nearSource,origin:[0,0,6000]}]));gpu.draw(0,0,{cameraViews:nearViews});
+    check('Geometry behind the camera is culled without mirrored fragments',gpu.readPixels().every((v,i)=>i%4===3||v===0));
     const headClip = clip(0, { color: '#fffFFF', trace: { pending: false, drawMs: 500, strokeWidth: 10, peak: { x: 1920, y: 1080, size: 400, t: 0 } } });
     gpu.setView(DEFAULT_VIEW); gpu.setProject(project([headClip])); gpu.draw(0, 499); const beforeEnd = gpu.readPixels()[((1079 - 334) * 1920 + 960) * 4]; gpu.draw(0, 500); const afterEnd = gpu.readPixels()[((1079 - 334) * 1920 + 960) * 4];
     check('Trace head disappears at draw completion while its stroke remains', beforeEnd > 200 && afterEnd <= 2, { beforeEnd, afterEnd });

@@ -1,4 +1,4 @@
-import { canvasView, viewRotation, CAMERA_DISTANCE } from '../view.js';
+import { canvasView, viewRotation, CAMERA_DISTANCE, CAMERA_NEAR, CAMERA_FAR } from '../view.js';
 import {
   WebGLRenderer, WebGLRenderTarget, Scene, PerspectiveCamera, Mesh, PlaneGeometry,
   RawShaderMaterial, InstancedBufferGeometry, InstancedBufferAttribute, DynamicDrawUsage,
@@ -48,7 +48,7 @@ export class WebGLPaintingRenderer {
     this.renderer.info.autoReset = false;
     this.renderer.debug.onShaderError = (gl, program, vertex, fragment) => { throw new Error([gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].join('\n')); };
     this.quad = new PlaneGeometry(1, 1);
-    this.camera = new PerspectiveCamera(2 * Math.atan(VH / (2 * CAMERA_DISTANCE)) * 180 / Math.PI, VW / VH, 1, 20000); this.camera.position.z = CAMERA_DISTANCE;
+    this.camera = new PerspectiveCamera(2 * Math.atan(VH / (2 * CAMERA_DISTANCE)) * 180 / Math.PI, VW / VH, CAMERA_NEAR, CAMERA_FAR); this.camera.position.z = CAMERA_DISTANCE;
     this.passScene = new Scene(); this.passMesh = new Mesh(this.quad); this.passMesh.frustumCulled = false; this.passScene.add(this.passMesh);
     this.accumulator = target(this.targetWidth, this.targetHeight, volume);
     this.liveTarget = target(volume ? 1 : W, volume ? 1 : H); // Allocate once at startup, never at Pencil down.

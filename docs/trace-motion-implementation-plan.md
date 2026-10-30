@@ -427,3 +427,49 @@ Chrome WebGL2で1133×744のタッチ対応viewportを使い、CDPからブラ�
 ## 15. Draw timeとRelease fadeのデフォルト（2026-10-31）
 
 Draw timeとRelease fadeの初期値を両方0.5秒に揃える。Draw timeの`traceDurationMs=500`は維持し、Release fadeは`src/loop.js`の`DEFAULT_FADE_MS=500`を`src/project.js`の初期設定、Drawの数値・スライダー、Layerの未設定値の表示で共有する。保存済みプロジェクトやレイヤーに明示された時間は引き続きその値を使う。
+
+## 16. キューブを越える描画と負荷の維持（2026-10-31）
+
+### 原因と変更
+
+キューブの外側で、`startStroke` / `samplePoint`が入力を捨て、保存時の検証でも3D座標を拒否していた。GPUの通常描画とCamera Motion Blur、CPUポリゴン、先端円、交点にも別々のボックス制限があった。
+
+- 3840×3480×3480のボックスは位置のガイドとして残す。新規の描き始め・移動、図形の外周、塗り／輪郭Trace、Line、交点をガイドの外側でも扱う。入力とファイルは有限の座標を検証し、NaN / Infinityは引き続き拒否する。
+- GPUからボックス境界での切り取りと、そのためのワールド座標変換・境界判定を削除する。Circleの高速Camera Motion Blur経路はガイド外でも使える。
+- 画面上の範囲は平面のhomographyを再利用して四隅から求め、画面外の図形とコピー／Blurの不要領域を引き続き除外する。通常時はボックス6面のクリッピングや、頂点ごとのワールド座標への再変換を行わない。
+- カメラのnear / far面を跨ぐときだけ、透視除算前の座標をクリップする。Camera Motion Blurではその場合だけ逆行列の同次座標を`1 / cameraDepth`に正規化し、追加のワールド座標計算なしで隠れたサンプルを除外する。カメラの背後の図形や白い円を反転表示しない。
+- CPUの輪郭Traceも固定サイズのビットマップからベクトル描画へ変更する。同一直線上の区間をまとめ、Capsuleをnonzero windingで一度に塗り、重なりが穴にならないようにする。投影行列は図形のサンプル内で共有する。旧Trail / Returnのビットマップ互換データは従来のラスタ範囲を維持する。
+- FHDの作業バッファ、FHD / 720p出力、30fps上限、最大ブラシサイズ、ループ時間は維持する。新しいGPUターゲット、Traceマスク、全画面パスは追加しない。ガイド自体や、ズーム・パン操作の範囲は変更しない。
+
+### 読むファイル
+
+| ファイル | 変更箇所 |
+| --- | --- |
+| `src/main.js` | `startStroke` / `samplePoint`の有限値チェック、ガイド表示、実際のViewサイズ表示 |
+| `src/loop.js` | ボックス外のサンプル・平面原点・Lineの3D終点の保存検証 |
+| `src/space.js` / `src/view.js` | `projectPlanePolygon`、`projectVisibleSpace`、共通のcamera near / far |
+| `src/render/camera-exposure.js` | 行列共有による投影範囲、必要時だけの同次座標正規化 |
+| `src/render/volume.js` / `src/render/motion-shader.js` | ボックス境界判定の削除、ガイド外の二次曲線経路、深度を跨ぐ場合の除外 |
+| `src/render/volume-cpu.js` | ガイド外のベクトル／Trace、ポリゴン間の投影行列共有 |
+| `src/intersections.js` | 実際の図形面を使い、ボックスで交差線分を切らない。カメラの可視範囲だけへ再投影 |
+| `tests/spatial-volume.test.js` / `tests/camera-ui.test.js` / `tests/intersections.test.js` | ガイド越えの入力・開始・JSON／live／出力、交点、near / farと背後の除外 |
+| `benchmarks/gpu-load.js` | ガイド外の8組のGPU／CPU対Canvas比較、near面を跨ぐカメラ露光、背後の描画除外 |
+
+### 性能と検証
+
+基準コミット`bc073e6`と変更後を、Apple M4 / Chrome WebGL2（ANGLE Metal）の同じコンテキストで交互に32回ずつ計測した。GPU時間は非同期timer query、CPUは描画投入時間。各ケースは16フレーム準備後に測定し、既存の保存プロジェクトは読み取りだけに使った。
+
+| 条件 | GPU中央値 前→後 | CPU中央値 前→後 |
+| --- | --- | --- |
+| 重なるRing 10個 | 4.55→4.44ms | 0.90→0.90ms |
+| 完成した円Trace 4本・Camera Motion Blur | 14.79→14.45ms | 1.40→1.00ms |
+| 保存済みプロジェクト・6350ms | 1.35→1.32ms | 1.00→0.90ms |
+| ガイド外の円8個を表示 | 0.93→2.59ms | 0.40→0.70ms |
+
+最後のケースは、旧版では切り捨てていた絵を新たに表示するため、描画する画素が増えた分の処理がある。全ケースで作業バッファは1920×1080、Traceマスクの常駐量は前後とも0。共有GPUの測定値には変動があり、常に負荷が増えないことやM4 MacBook Airの消費電力を保証するものではない。
+
+- 最終のNodeテスト207件、production build、GLSL ESのNormal / Analog両経路、ネイティブGLSLの17ケースが成功。
+- Chrome WebGL2の描画チェック33項目が成功。ガイド外のCircle / Ring / Rectangle / Rectangle Ringについて、通常／Traceの8組すべてでGPUとCPUの描画内部がCanvas参照と一致した。追加Traceマスクは0。
+- near面を跨ぐCamera Motion Blurと、各視点を独立して描画した平均のRMS差は0.119/255、最大差6/255。カメラの背後は描画0。
+- エディターの回帰テストでは50%・yaw 90°で、入力途中にガイドを越える操作と、外側から描き始める操作を追加し、保存と出力リレーへの反映を確認した。
+- 実機iPad / Safariの確認、MacBook Airの温度・消費電力の計測は未実施。[検証と性能JSON](../artifacts/unbounded-drawing-2026-10-31.json)。

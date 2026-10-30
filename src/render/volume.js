@@ -7,7 +7,7 @@ import { Matrix3, Matrix4, Vector2, Vector3, Vector4 } from 'three';
 import { WebGLPaintingRenderer, target, material } from './webgl.js';
 import { screenVertex, blurFragment, analogFragment, analogComposite } from './shaders.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH, CANVAS_WIDTH as W, CANVAS_HEIGHT as H } from '../canvas.js';
-import { BOX_SPEC, IDENTITY_PLANE, lineGeometry, pointInSpace, projectSpace, insideBox, multiply } from '../space.js';
+import { IDENTITY_PLANE, lineGeometry, pointInSpace, projectVisibleSpace, multiply } from '../space.js';
 import { viewRotation } from '../view.js';
 import { CachedGesture, gestureVisible, gestureTime, gestureOpacity } from '../loop.js';
 import { sameGeometry } from './stroke.js';
@@ -23,11 +23,10 @@ uniform vec4 cameraBounds;
 uniform vec2 resolution;
 uniform mat4 planeMatrix,projectionMatrix,modelViewMatrix;
 out vec2 pixel;
-out vec3 volumePoint;
 void main(){
- if(cameraCount>0){pixel=vec2(0.);volumePoint=vec3(0.);vec2 p=cameraBounds.xy+(position.xy+.5)*cameraBounds.zw;gl_Position=vec4(p.x/resolution.x*2.-1.,1.-p.y/resolution.y*2.,0.,1.);return;}
+ if(cameraCount>0){pixel=vec2(0.);vec2 p=cameraBounds.xy+(position.xy+.5)*cameraBounds.zw;gl_Position=vec4(p.x/resolution.x*2.-1.,1.-p.y/resolution.y*2.,0.,1.);return;}
  pixel=bounds.xy+(position.xy+.5)*bounds.zw;
- volumePoint=(planeMatrix*vec4(pixel-vec2(${W/2}.,${H/2}.),0.,1.)).xyz;
+ vec3 volumePoint=(planeMatrix*vec4(pixel-vec2(${W/2}.,${H/2}.),0.,1.)).xyz;
  gl_Position=projectionMatrix*modelViewMatrix*vec4(volumePoint.x,-volumePoint.y,volumePoint.z,1.);
 }`;
 const screenComposite = analogComposite.replace('vec2 uv=vec2(pixel.x/resolution.x,1.-pixel.y/resolution.y);','vec2 uv=gl_FragCoord.xy/resolution;');
@@ -39,8 +38,8 @@ out vec4 result;
 vec4 layerColor(){vec4 p=texture(image,texCoord);return p.a>0.?vec4(p.rgb/p.a,p.a):vec4(0.);}
 `+screenComposite;
 export function spatialFragment(fragment){
- return fragment.replace('in vec2 pixel;', 'in vec2 pixel;\nin vec3 volumePoint;'+motionUniforms)
- .replace('vec4 layerColor() {', `vec4 layerColor() {\n if(clipInsideBox==0&&cameraCount==0&&any(greaterThan(abs(volumePoint),vec3(${BOX_SPEC.width/2}.,${BOX_SPEC.height/2}.,${BOX_SPEC.depth/2}.))))return vec4(0.);\n ${motionCoverage}\n if(directShape>=5){vec2 p=pixel-directBrush.xy;float c=cos(directAngle),s=sin(directAngle);p=vec2(c*p.x+s*p.y,-s*p.x+c*p.y);float coverage=directShape==5?capsuleCoverage(p,directBrush.zw):traceCoverage(p,directBrush.zw,directShape==7,edgeSize);return vec4(fillColor,layerOpacity*coverage);}`)
+ return fragment.replace('in vec2 pixel;', 'in vec2 pixel;'+motionUniforms)
+ .replace('vec4 layerColor() {', `vec4 layerColor() {\n ${motionCoverage}\n if(directShape>=5){vec2 p=pixel-directBrush.xy;float c=cos(directAngle),s=sin(directAngle);p=vec2(c*p.x+s*p.y,-s*p.x+c*p.y);float coverage=directShape==5?capsuleCoverage(p,directBrush.zw):traceCoverage(p,directBrush.zw,directShape==7,edgeSize);return vec4(fillColor,layerOpacity*coverage);}`)
  .replace('vec2 uv=vec2(pixel.x/resolution.x,1.-pixel.y/resolution.y);','vec2 uv=gl_FragCoord.xy/resolution;');
 }
 const SCREEN={x:0,y:0,width:VW,height:VH};
@@ -72,7 +71,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   shader.uniforms.smoothEdges.value=1;
   shader.vertexShader=volumeVertex;shader.fragmentShader=spatialFragment(fragment);
   shader.uniforms.planeMatrix={value:new Matrix4()};
-  shader.uniforms.clipInsideBox={value:0};
+  shader.uniforms.cameraDepthClipped={value:0};
   shader.uniforms.cameraConicCount={value:0};shader.uniforms.cameraCircleRadii={value:new Vector2()};
   shader.uniforms.cameraCount={value:0};shader.uniforms.cameraBounds={value:new Vector4()};shader.uniforms.cameraInverse={value:Array.from({length:16},()=>new Matrix3())};
   shader.uniforms.motionCount={value:0};
@@ -128,14 +127,13 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
   if(capsule)shader.uniforms.directShape.value=5;
   if(trace){shader.uniforms.directShape.value=rectTrace?7:6;shader.uniforms.edgeSize.value=visual.strokeWidth;shader.uniforms.traceProgress.value=visual.traceProgress;const angle=visual.traceProgress*Math.PI*2;shader.uniforms.traceEnd.value.set(Math.sin(angle),-Math.cos(angle));}
   const exposure=item.exposure;shader.uniforms.motionCount.value=exposure?.length??0;shader.uniforms.cameraCount.value=item.cameraExposure?exposure.length:0;shader.uniforms.cameraConicCount.value=0;
-  const box=exposure?.some(s=>s.visual)?exposureBounds(exposure):b;
-  shader.uniforms.clipInsideBox.value=[[box.x,box.y],[box.x+box.width,box.y],[box.x+box.width,box.y+box.height],[box.x,box.y+box.height]].every(([x,y])=>insideBox(pointInSpace({x,y},item.clip.plane,item.clip.origin)))?1:0;
+  shader.uniforms.cameraDepthClipped.value=0;
   if(item.cameraExposure){
-   const projection=cameraProjection(item.clip,exposure,b);projection.inverse.forEach((m,i)=>shader.uniforms.cameraInverse.value[i].set(...m));const box=projection.bounds;shader.uniforms.cameraBounds.value.set(box.x,box.y,box.width,box.height);
+   const projection=cameraProjection(item.clip,exposure,b);projection.inverse.forEach((m,i)=>shader.uniforms.cameraInverse.value[i].set(...m));const box=projection.bounds;shader.uniforms.cameraBounds.value.set(box.x,box.y,box.width,box.height);shader.uniforms.cameraDepthClipped.value=projection.depthClipped?1:0;
    const circle=visual&&(!visual.shape||visual.shape==='circle'),ring=visual?.shape==='ring',completeTrace=visual?.shape==='trace-circle'&&visual.traceProgress>=1;
    // Keep every camera sample. Static circles can be tested directly in screen
    // space instead of dividing back into the source plane at every pixel.
-   if((circle||ring||completeTrace)&&shader.uniforms.clipInsideBox.value===1&&exposure.every(s=>s.time===time&&s.visual===visual)){
+   if((circle||ring||completeTrace)&&!projection.depthClipped&&exposure.every(s=>s.time===time&&s.visual===visual)){
     const conics=projection.inverse.map(m=>cameraCircleConic(m,visual.x,visual.y));
     if(conics.every(Boolean)){
      const radius=visual.size/2,stroke=completeTrace?visual.strokeWidth:(item.clip.ringWidth??DEFAULT_RING_WIDTH),outer=radius+(completeTrace?stroke/2:0),inner=circle||visual.traceFill?0:Math.max(0,radius-(completeTrace?stroke/2:stroke));
@@ -217,7 +215,7 @@ export class VolumePaintingRenderer extends WebGLPaintingRenderer {
    else{this.paintMask(item,clip.mode==='line'?1:Math.min(t,clip.duration),null,t);add(item,t,opacity,null);}
    if(clip.trace&&!clip.trace.pending){
     const alpha=opacity*(clip.opacity??1),head=traceHead(clip,t),space=head&&pointInSpace(head,clip.plane,clip.origin);
-    if(space&&insideBox(space)){const point=projectSpace(space,this.view);if(Number.isFinite(point.x)&&Number.isFinite(point.y))markers.push({x:point.x,y:point.y,alpha});}
+    const point=space&&projectVisibleSpace(space,this.view);if(point)markers.push({...point,alpha});
     intersectionEntries.push({clip,visual:null,time:t,alpha});
    }
   }

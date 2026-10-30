@@ -2,7 +2,7 @@ import { cameraConfig, cameraPose, centered, mergeCamera, CameraSampler } from '
 import { setupCameraControls } from './camera-controls.js';
 import { setupMidiPanel } from './midi-panel.js';
 import { setupMidiIndicators } from './midi-indicators.js';
-import { BOX_SPEC, workingPlane, drawingPoint, drawingPointOnPlane, pointInSpace, insideBox, projectSpace, boxEdges } from './space.js';
+import { BOX_SPEC, workingPlane, drawingPoint, drawingPointOnPlane, pointInSpace, projectSpace, boxEdges } from './space.js';
 import { setupOrientationCube } from './orientation-cube.js';
 import { LineSchedule, FIXED_LINE_WIDTH, finishFirstCycle } from './line-tool.js';
 import { setupColorPanel } from './color-panel.js';
@@ -98,7 +98,7 @@ document.querySelector('#app').innerHTML = `
       </aside>
       <div class="workspace">
       <div class="canvas-pair">
-        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="3D box painting canvas with Full HD viewport" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">3840 × 3480 × 3480 · 3D</span><span class="canvas-state">View 1920 × 1080</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
+        <article class="canvas-panel active" data-panel="0"><div class="canvas-frame"><canvas id="canvas-0" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}" aria-label="3D painting canvas with Full HD viewport" tabindex="0"></canvas><span class="brush-cursor" aria-hidden="true"></span><div class="canvas-empty" aria-hidden="true"><span class="empty-cross">+</span><span>A blank canvas. Endless possibilities.</span><small>Draw with Apple Pencil or your mouse</small></div></div><div class="canvas-footer"><span class="canvas-dimensions">3840 × 3480 × 3480 · Guide</span><span class="canvas-state">View 1920 × 1080</span><span class="pointer-position" id="pointer-position">X — &nbsp; Y —</span></div></article>
       </div>
         <div class="loop-controls">
           <span class="section-label">LOOP</span>
@@ -726,7 +726,7 @@ function drawPoint(pointValue) {
   dirty = true;
 }
 function samplePoint(next) {
-  if (!insideBox(pointInSpace(next,stroke.plane))) return;
+  if (![next.x,next.y].every(Number.isFinite)) return;
   if (['rect', 'rect-ring'].includes(stroke.shape)) next = { ...next, angle: stroke.angle, heading: 0 };
   drawPoint(next);
   stroke.last = next;
@@ -746,7 +746,7 @@ function syncViewPresentation(view) {
   const key=JSON.stringify(view);if(key===viewPresentationKey)return;
   viewPresentationKey=key;orientation.update(view);
   const worldScale=(view.distance??CAMERA_DISTANCE)/CAMERA_DISTANCE/view.scale;
-  $('.canvas-state').textContent=`View ${Math.round(Math.min(BOX_SPEC.width,VIEWPORT_WIDTH*worldScale))} × ${Math.round(Math.min(BOX_SPEC.height,VIEWPORT_HEIGHT*worldScale))}`;
+  $('.canvas-state').textContent=`View ${Math.round(VIEWPORT_WIDTH*worldScale)} × ${Math.round(VIEWPORT_HEIGHT*worldScale)}`;
   paintingBoundary.innerHTML=boxEdges(view).map(([a,b])=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#444" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
 }
 function syncViewUI() {
@@ -787,7 +787,7 @@ function startStroke(event, canvas, index) {
     if (navigating) finishView();
   }
   const inputView = effectiveView(), startPoint = point(event, canvas, inputView);
-  if (!insideBox(pointInSpace(startPoint, workingPlane(inputView)))) return false;
+  if (![startPoint.x,startPoint.y].every(Number.isFinite)) return false;
   event.preventDefault(); selectCanvas(index); capturePointer(canvas, event.pointerId);
   const now = performance.now(), wasPlaying = clock.playing; clock.play(now); playbackUI(); liveRevision++;
   stroke = { id: `${liveSession}-${liveRevision}`, pointerId: event.pointerId, pointerType: event.pointerType, pointerStartedAt: event.timeStamp, wasPlaying, canvas, targets: state.sync ? [0] : [index], color: state.color, opacity: state.opacity, tool: state.mode, mode: 'move', shape: state.mode === 'line' ? 'ring' : state.shape, plane: workingPlane(inputView), ringWidth: state.ringWidth, effects: { ...state.effects }, angle: state.angle, followDirection: false, sizeRange: { min: state.minSize, max: state.maxSize }, traceEnabled: state.traceMotion && state.mode !== 'line', traceDurationMs: state.traceDurationMs, last: startPoint, started: now, start: clock.phase(now), samples: [] };

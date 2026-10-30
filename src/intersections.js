@@ -1,4 +1,4 @@
-import { BOX_SPEC, pointInSpace, projectSpace, insideBox, clipPolygonToBox } from './space.js';
+import { pointInSpace, projectVisibleSpace } from './space.js';
 import { VIEWPORT_WIDTH as VW, VIEWPORT_HEIGHT as VH } from './canvas.js';
 import { traceSamplesAt, traceIsFilled, traceFillPolygons } from './trace-motion.js';
 
@@ -95,7 +95,6 @@ function prepareFace(face) {
     for (const point of points) { min = Math.min(min, point[axis]); max = Math.max(max, point[axis]); }
     return [min, max];
   });
-  face.withinBox = face.bounds.every(([min, max], axis) => min >= -[BOX_SPEC.width, BOX_SPEC.height, BOX_SPEC.depth][axis] / 2 && max <= [BOX_SPEC.width, BOX_SPEC.height, BOX_SPEC.depth][axis] / 2);
   return face;
 }
 
@@ -294,19 +293,6 @@ function intersectIntervals(a, b) {
   return mergeIntervals(intersections);
 }
 
-function boxLineInterval(point, direction) {
-  let low = -Infinity, high = Infinity;
-  for (let axis = 0; axis < 3; axis++) {
-    const half = [BOX_SPEC.width, BOX_SPEC.height, BOX_SPEC.depth][axis] / 2;
-    if (Math.abs(direction[axis]) < GEOMETRY_EPSILON) { if (Math.abs(point[axis]) > half) return null; continue; }
-    let a = (-half - point[axis]) / direction[axis], b = (half - point[axis]) / direction[axis];
-    if (a > b) [a, b] = [b, a];
-    low = Math.max(low, a); high = Math.min(high, b);
-    if (low > high) return null;
-  }
-  return [low, high];
-}
-
 function clipHalfPlane(polygon, a, b, orientation) {
   const result = [], ex = b[0] - a[0], ey = b[1] - a[1];
   for (let i = 0; i < polygon.length; i++) {
@@ -361,8 +347,7 @@ function coplanarOverlapPoint(a, b, stats) {
       if (!overlap.length) continue;
       let pieces = [overlap];
       for (const hole of holes) pieces = pieces.flatMap(polygon => subtractHole(polygon, hole));
-      for (let polygon of pieces) {
-        if (!a.withinBox || !b.withinBox) polygon = clipPolygonToBox(polygon.map(a.toWorld)).map(a.toLocal);
+      for (const polygon of pieces) {
         if (!polygon.length) continue;
         const area = Math.abs(polygonArea(polygon));
         if (area <= bestArea) continue;
@@ -372,7 +357,7 @@ function coplanarOverlapPoint(a, b, stats) {
         if (holes.length) candidates.push(...polygon);
         for (const candidate of candidates) {
           const world = a.toWorld(candidate);
-          if (!insideBox(world) || a.holes.length && !a.contains(world) || b.holes.length && !b.contains(world)) continue;
+          if (a.holes.length && !a.contains(world) || b.holes.length && !b.contains(world)) continue;
           best = world; bestArea = area; break;
         }
       }
@@ -390,9 +375,8 @@ function planeIntersection(a, b) {
 }
 
 function makeMarker(world, alpha, pair, view) {
-  if (!insideBox(world)) return null;
-  const point = projectSpace(world, view);
-  if (![point.x, point.y].every(Number.isFinite) || point.x < 0 || point.x > VW || point.y < 0 || point.y > VH) return null;
+  const point = projectVisibleSpace(world, view);
+  if (!point || point.x < 0 || point.x > VW || point.y < 0 || point.y > VH) return null;
   return { x: point.x, y: point.y, world, alpha, pair };
 }
 
@@ -407,15 +391,8 @@ function worldIntersections(a, b, stats) {
     const world = coplanarOverlapPoint(a, b, stats);
     return world ? [world] : [];
   }
-  const box = boxLineInterval(relation.point, relation.direction);
-  if (!box) return [];
   const intervals = intersectIntervals(faceIntervals(a, relation.point, relation.direction), faceIntervals(b, relation.point, relation.direction));
-  const points = [];
-  for (const [start, end] of intervals) {
-    const low = Math.max(start, box[0]), high = Math.min(end, box[1]);
-    if (high >= low - PLANE_EPSILON) points.push(add3(relation.point, mul3(relation.direction, (low + high) / 2)));
-  }
-  return points;
+  return intervals.map(([start,end]) => add3(relation.point, mul3(relation.direction, (start + end) / 2)));
 }
 
 export class IntersectionDetector {
@@ -493,9 +470,9 @@ export class IntersectionPulseTracker {
       const age = Math.max(0, phase - track.started);
       if (!total || age >= total) continue;
       const alpha = age < fadeInMs ? age / Math.max(1, fadeInMs) : age < fadeInMs + holdMs ? 1 : (total - age) / Math.max(1, fadeOutMs);
-      const point = track.world && view ? projectSpace(track.world, view) : track;
+      const point = track.world && view ? projectVisibleSpace(track.world, view) : track;
       const visibleAlpha = track.alpha * alpha;
-      if (visibleAlpha >= 0.5 && Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= VW && point.y >= 0 && point.y <= VH) result.push({ x: point.x, y: point.y, alpha: visibleAlpha, pair: track.pair });
+      if (visibleAlpha >= 0.5 && point && Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= VW && point.y >= 0 && point.y <= VH) result.push({ x: point.x, y: point.y, alpha: visibleAlpha, pair: track.pair });
     }
     return result;
   }

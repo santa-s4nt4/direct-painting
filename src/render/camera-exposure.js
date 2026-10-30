@@ -1,8 +1,8 @@
 import { FRAME_MS } from '../timing.js';
 import { layerEffects } from '../effects.js';
 import { gestureOpacity } from '../loop.js';
-import { planeHomography,pointInSpace,clipPolygonToBox,projectSpace } from '../space.js';
-import { invertHomography } from '../view.js';
+import { planeHomography,projectPlanePolygon } from '../space.js';
+import { invertHomography, CAMERA_DISTANCE } from '../view.js';
 import { visualBounds } from './motion-blur.js';
 export function cameraExposure(clip,time,visual,sample,views,{live=false}={}) {
  const fx=layerEffects(clip),moving=clip.mode==='move'&&fx.motionBlur;
@@ -13,14 +13,17 @@ export function cameraExposure(clip,time,visual,sample,views,{live=false}={}) {
  });
 }
 export function cameraProjection(clip,exposure,fallbackBounds) {
- const inverse=exposure.map(s=>{const m=invertHomography(planeHomography(clip.plane,clip.origin,s.view));return m.every(Number.isFinite)?m:Array(9).fill(0);});
- const points=[];
+ const inverse=[],points=[];let depthClipped=false;
  for(const sample of exposure){
   const b=sample.visual?visualBounds(sample.visual):fallbackBounds;
-  const polygon=clipPolygonToBox([[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(([x,y])=>pointInSpace({x,y},clip.plane,clip.origin)));
-  points.push(...polygon.map(p=>projectSpace(p,sample.view)).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+  const matrix=planeHomography(clip.plane,clip.origin,sample.view),m=invertHomography(matrix);
+  inverse.push(m.every(Number.isFinite)?m:Array(9).fill(0));
+  const projected=projectBounds(clip,b,sample.view,matrix);points.push(...projected.points);depthClipped||=projected.depthClipped;
  }
- return {inverse,bounds:screenBounds(points)};
+ // For the uncommon near/far crossing, homogeneous w becomes 1/cameraDepth.
+ // This lets the shader reject hidden samples without another world transform.
+ if(depthClipped)inverse.forEach((m,i)=>{const distance=exposure[i].view.distance??CAMERA_DISTANCE;for(let k=0;k<9;k++)m[k]/=distance;});
+ return {inverse,bounds:screenBounds(points),depthClipped};
 }
 function screenBounds(points) {
  if(!points.length)return {x:0,y:0,width:0,height:0};
@@ -28,9 +31,10 @@ function screenBounds(points) {
  return {x,y,width:Math.max(0,right-x),height:Math.max(0,bottom-y)};
 }
 export function projectedBounds(clip,bounds,view) {
- const {x,y,width,height}=bounds;
- const polygon=clipPolygonToBox([[x,y],[x+width,y],[x+width,y+height],[x,y+height]].map(([x,y])=>pointInSpace({x,y},clip.plane,clip.origin)));
- return screenBounds(polygon.map(p=>projectSpace(p,view)).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+ return screenBounds(projectBounds(clip,bounds,view).points);
+}
+function projectBounds(clip,{x,y,width,height},view,matrix) {
+ return projectPlanePolygon([{x,y},{x:x+width,y},{x:x+width,y:y+height},{x,y:y+height}],clip.plane,clip.origin,view,matrix);
 }
 
 // A projected circle is a conic. Center screen coordinates before squaring to
